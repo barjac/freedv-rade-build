@@ -1,0 +1,120 @@
+#!/bin/bash
+# This script tries to install the pre-release v2.00 from github on various linux distributions
+
+# Name of base dir to use in home
+builddir=freedv-rade
+
+# Check we are not root
+((UID)) || { echo "You must NOT run $0 as root - aborting!"; exit 0; }
+
+# Who are we
+me=$(whoami)
+
+# Check we have space
+(( $(df -hBG --output=avail /home |tr -d '\n'|tr -s ' '|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo "You will need more than 3GB of free disk space in $HOME"; exit 1; }
+
+# Check we have internet and DNS
+ping -c3 google.com > /dev/null || { echo "Failed to find internet connection or DNS"; exit 1; }
+
+# Find out where we are
+. /etc/os-release
+echo -e "\nHello $me, you seem to be using $PRETTY_NAME\n"
+
+# Install some system deps
+case $ID in
+    mageia)
+    echo "Enter the root password to install some initially needed dependencies"
+    su -c "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
+           libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel" \
+           || { echo "Deps install failed - try again later"; exit 1; }
+    ;;
+    fedora)
+    echo "Enter the root password to install some initially needed dependencies"
+    sudo su -c "dnf groupinstall \"Development Tools\""
+    sudo su -c "dnf install git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
+                hamlib-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel" \
+           || { echo "Deps install failed - try again later"; exit 1; }
+    ;;
+    ubuntu)
+    echo "Enter the root password to install some initially needed dependencies"
+    su -c "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
+           libgsm1-dev libsndfile1-dev cmake module-assistant pulseaudio-dev build-essential"  \
+           || { echo "Deps install failed - try again later"; exit 1; }
+    ;;
+    debian)
+    echo "Enter the root password to install some initially needed dependencies"
+    su -c "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
+           libgsm1-dev libsndfile1-dev cmake module-assistant build-essential" \
+           || { echo "Deps install failed - try again later"; exit 1; }
+    ;;
+    *)
+    echo "Sorry we don't have packaging information for $PRETTY_NAME"
+    echo "Please give us details so it can be added to this script."
+    exit 0
+    ;;
+esac
+
+# Create a base working directory in home
+mkdir -p $builddir || { echo "mkdir $builddir failed"; exit 1; }
+
+# Move into base dir
+cd $builddir || { echo "cd to $builddir failed"; exit 1; }
+
+# Delete freedv-gui directory
+rm -rf freedv-gui || { echo "Error: removing old freedv-gui dir"; exit 1; }
+
+# Get the latest freedv sources from github
+echo Cloning freedv github repository...
+git clone https://github.com/drowe67/freedv-gui.git || { echo "git clone failed"; exit 1; }
+
+# Move into source code directory
+cd freedv-gui || { echo "cd to freedv-gui failed"; exit 1; }
+
+# Change to the RADE branch
+git checkout v2.0-dev || { echo "checkout v2.0 failed"; exit 1; }
+
+# Create a python virtual environment 
+python3 -m venv rade-venv || { echo "create venv failed"; exit 1; }
+
+# Activate it
+. ./rade-venv/bin/activate || { echo "activate venv failed"; exit 1; }
+
+# Install some python dependencies using pip
+pip3 install torch torchaudio --index-url https://download.pytorch.org/whl/cpu || { echo "torch pip install failed"; exit 1; } 
+pip3 install matplotlib || { echo "matplotlib pip install failed"; exit 1; }
+
+# Run the freedv build script
+./build_linux.sh || { echo "Build failed for some reason, check for errors above and run again later if a download failed"; exit 1; }
+
+# Create run script in user's home
+cd
+cat > freedv-start <<EOF
+#!/bin/bash
+# Start script for freedv rade version
+# Specify a config file to use (optional) default is ~/.freedv
+# e.g. freedv-start -f myfreedv.conf
+####################################
+cd /home/\$USER/$builddir/freedv-gui
+. ./rade-venv/bin/activate
+cd build_linux
+if ! [[ -h model19_check3 ]]; then
+    ln -s \$(pwd)/rade_src/model19_check3 model19_check3
+fi
+PYTHONPATH="\$(pwd)/rade_src:\$PYTHONPATH" src/freedv \$1 \$2
+EOF
+
+# Make start script executable
+chmod +x freedv-start || { echo "chmod +x failed"; exit 1; }
+
+# Move back into the build directory
+cd $builddir/freedv-gui/build_linux || { echo "cd $builddir/freedv-gui/build_linux failed"; exit 1; }
+
+# Create symlink 
+ln -s "$(pwd)"/rade_src/model19_check3 model19_check3 || { echo "Failed to create symlink"; exit 1; }
+
+echo -e "\n########### Build is complete \o/ ############\nYou can run it from your home folder using:\n \
+      ./freedv-start [-f configfile]"
+      
+# Return home
+cd
+
