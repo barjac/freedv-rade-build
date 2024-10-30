@@ -24,9 +24,9 @@ It is currently tested in:
    
    Mageia Cauldron (Mageia 10-dev) OK
    
-   Fedora 40                       XX opus configure error [2]
+   Fedora 40                       ??
    
-   Fedora 41                       XX pip fails to get torch* [1]
+   Fedora 41                       ??
    
    Ubuntu                          Not tested yet
 
@@ -37,11 +37,4 @@ Please test in other distros and report the errors encountered.
 Using cached https://download.pytorch.org/whl/cpu/torch-2.5.0%2Bcpu-cp313-cp313-linux_x86_64.whl (174.7 MB)
 ERROR: Could not find a version that satisfies the requirement torchaudio (from versions: none)
 ERROR: No matching distribution found for torchaudio
-
-[2]
-configure.ac:38: error: possibly undefined macro: AM_PROG_LIBTOOL
-      If this token and others are legitimate, please use m4_pattern_allow.
-      See the Autoconf documentation.
-autoreconf: error: /usr/bin/autoconf failed with exit status: 1
-make[2]: *** [CMakeFiles/build_opus.dir/build.make:92: build_opus-prefix/src/build_opus-stamp/build_opus-configure] Error 1
 
