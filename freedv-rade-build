@@ -32,7 +32,7 @@ case $ID in
     echo "Enter the root password to install some initially needed dependencies"
     sudo dnf group install development-tools
     sudo dnf install git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel \
-         alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel \
+         alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel libtool \
            || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     ubuntu)
