@@ -23,6 +23,8 @@ It is currently tested in:
    Mageia 9                        OK
    
    Mageia Cauldron (Mageia 10-dev) OK
+
+   Linux Mint 22                   OK
    
    Fedora 40                       ??
    

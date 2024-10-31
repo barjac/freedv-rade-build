@@ -1,5 +1,5 @@
 #!/bin/bash
-# This script tries to install the pre-release v2.00 from github on various linux distributions
+# This script tries to install the pre-release freedv-v2.00 from github on various linux distributions
 
 # Name of base dir to use in home
 builddir=freedv-rade
@@ -25,7 +25,14 @@ case $ID in
     mageia)
     echo "Enter the root password to install some initially needed dependencies"
     su -c "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
-           libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel" \
+           libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel hamlib-utils" \
+           || { echo "Deps install failed - try again later"; exit 1; }
+    ;;
+    linuxmint)
+    echo "Enter the root password to install some initially needed dependencies"
+    sudo apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
+           libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3.12-venv libpulse-dev autoconf libtool \
+           python3-numpy-dev libhamlib-utils \
            || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     fedora)
@@ -73,16 +80,25 @@ cd freedv-gui || { echo "cd to freedv-gui failed"; exit 1; }
 # Change to the RADE branch
 git checkout v2.0-dev || { echo "checkout v2.0 failed"; exit 1; }
 
-# Create a python virtual environment 
-python3 -m venv rade-venv || { echo "create venv failed"; exit 1; }
+# Create a python virtual environment
+if [[ $ID == "linuxmint" ]]; then
+    python3 -m venv rade-venv --system-site-packages || { echo "create venv failed"; exit 1; }
+else
+    python3 -m venv rade-venv || { echo "create venv failed"; exit 1; }
+fi
 
 # Activate it
 . ./rade-venv/bin/activate || { echo "activate venv failed"; exit 1; }
 
+# Clear cache
+pip cache purge
+
 # Install some python dependencies using pip
 pip3 install torch torchaudio --index-url https://download.pytorch.org/whl/cpu || { echo "torch pip install failed"; exit 1; } 
 pip3 install matplotlib || { echo "matplotlib pip install failed"; exit 1; }
-
+if [[ $ID == "linuxmint" ]]; then
+pip3 install NumPy || { echo "numpy pip install failed"; exit 1; }
+fi
 # Run the freedv build script
 ./build_linux.sh || { echo "Build failed for some reason, check for errors above and run again later if a download failed"; exit 1; }
 
@@ -94,6 +110,7 @@ cat > freedv-start <<EOF
 # Specify a config file to use (optional) default is ~/.freedv
 # e.g. freedv-start -f myfreedv.conf
 ####################################
+
 cd /home/\$USER/$builddir/freedv-gui
 . ./rade-venv/bin/activate
 cd build_linux
