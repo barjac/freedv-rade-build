@@ -19,24 +19,21 @@ build_linux.sh is then run to continue with the download and building of more de
 On completion of the build a start script is written to the user's home folder called freedv-start which is then made executable ready for use.
 './freedv-start' or optionally './freedv-start -f yourfreedv.conf' should start freedv v2.0-dev.
 
+The start script includes code to start and stop hamlib rigctld but this needs editing and enabling in the script to suit user's radio etc.
+
 It is currently tested in:
+
    Mageia 9                        OK
    
    Mageia Cauldron (Mageia 10-dev) OK
 
    Linux Mint 22                   OK
    
-   Fedora 40                       ??
-   
-   Fedora 41                       ??
+   Fedora 41                       OK
    
    Ubuntu                          Not tested yet
 
 
 Please test in other distros and report the errors encountered.
 
-[1]
-Using cached https://download.pytorch.org/whl/cpu/torch-2.5.0%2Bcpu-cp313-cp313-linux_x86_64.whl (174.7 MB)
-ERROR: Could not find a version that satisfies the requirement torchaudio (from versions: none)
-ERROR: No matching distribution found for torchaudio
 
