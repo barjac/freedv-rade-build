@@ -1,4 +1,5 @@
-This script is intended to automate the install of the new RADE development versions of freedv-gui in modern Linux distibutions.
+
+This script is intended to automate the install of the new RADE development versions of freedv-gui-2.0-dev in modern Linux distibutions.
 
 It initially checks which Linux distribution is in use, that disk space is adequate, whether internet with working DNS is available and that the script is being run as a regular user.
 
@@ -24,16 +25,14 @@ The start script includes code to start and stop hamlib rigctld but this needs e
 It is currently tested in:
 
    Mageia 9                        OK
-   
-   Mageia Cauldron (Mageia 10-dev) OK
+
+   Mageia 10 (-dev)                OK
 
    Linux Mint 22                   OK
-   
+
    Fedora 41                       OK
-   
-   Ubuntu                          Not tested yet
 
+   Ubuntu 24.04 LTS                OK
 
-Please test in other distros and report the errors encountered.
 
 
