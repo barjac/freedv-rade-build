@@ -1,5 +1,8 @@
+ # freedv-rade-build
 
 This script is intended to automate the install of the new RADE development versions of freedv-gui-2.0-dev in modern Linux distibutions.
+
+It is currently tested in **Mageia, LinuxMint, Fedora** and **Ubuntu**
 
 It initially checks which Linux distribution is in use, that disk space is adequate, whether internet with working DNS is available and that the script is being run as a regular user.
 
@@ -34,5 +37,21 @@ It is currently tested in:
 
    Ubuntu 24.04 LTS                OK
 
+## Using the script
 
+   N.B. Always **copy/paste** commands from here excluding the surrounding ' ' to avoid typos!
 
+    1. Install the 'git' package using your package manager.
+
+    2. Go to a terminal emulator on you machine and type: 'cd' followed by the ENTER key.
+
+    3. Type: 'git clone https://github.com/barjac/freedv-rade-build' then ENTER
+
+    4. Type: 'chmod +x freedv-rade-build'
+
+    5. Type: 'freedv-rade-build/freedv-rade-build'
+
+    Now put the kettle on it will take a while!
+
+    On completion you should see a message to that effect and instructions on how to launch the program.
+    
