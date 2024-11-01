@@ -128,6 +128,10 @@ if ! [[ -h model19_check3 ]]; then
     ln -s \$(pwd)/rade_src/model19_check3 model19_check3
 fi
 PYTHONPATH="\$(pwd)/rade_src:\$PYTHONPATH" src/freedv \$1 \$2
+
+# Uncomment to stop rigctld when freedv stops
+#pkill rigctld
+
 EOF
 
 # Make start script executable
@@ -145,5 +149,3 @@ echo -e "\n########### Build is complete \o/ ############\nYou can run it from y
 # Return home
 cd
 
-# Uncomment
-#pkill rigctld
