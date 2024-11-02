@@ -46,7 +46,7 @@ It is currently tested in x86_64 installations of the following:
 
     3. Type: 'git clone https://github.com/barjac/freedv-rade-build' then ENTER
 
-    4. Type: 'chmod +x freedv-rade-build'
+    4. Type: 'chmod +x freedv-rade-build/freedv-rade-build'
 
     5. Type: 'freedv-rade-build/freedv-rade-build'
 
