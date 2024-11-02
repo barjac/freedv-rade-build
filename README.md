@@ -1,6 +1,6 @@
  # freedv-rade-build
 
-This script is intended to automate the install of the new RADE development versions of freedv-gui-2.0-dev in modern Linux distibutions.
+This script is intended to automate installation of the new RADE development versions of freedv-gui-2.0-dev in modern Linux distibutions.
 
 It is currently tested in **Mageia, LinuxMint, Fedora** and **Ubuntu**
 
@@ -25,17 +25,16 @@ On completion of the build a start script is written to the user's home folder c
 
 The start script includes code to start and stop hamlib rigctld but this needs editing and enabling in the script to suit user's radio etc.
 
-It is currently tested in:
-
-   Mageia 9                        OK
-
-   Mageia 10 (-dev)                OK
-
-   Linux Mint 22                   OK
-
-   Fedora 41                       OK
-
-   Ubuntu 24.04 LTS                OK
+It is currently tested in x86_64 installations of the following:
+  
+  |Distribution      |Status | Notes | 
+  |:---              | :----: | :--- |
+  |Mageia 9          |OK    | Current stable|
+  |Mageia 10 (-dev)  |OK    |               |
+  |Linux Mint 22     |OK    |               |
+  |Fedora 41         |OK    | Full release  |
+  |Ubuntu 24.04 LTS  |OK    |               |
+  |Debian  |WIP|Untested|
 
 ## Using the script
 
@@ -51,7 +50,21 @@ It is currently tested in:
 
     5. Type: 'freedv-rade-build/freedv-rade-build'
 
-    Now put the kettle on it will take a while!
+Now put the kettle on it will take a while!
 
-    On completion you should see a message to that effect and instructions on how to launch the program.
+On completion you should see a message to that effect and instructions on how to launch the program.
+
+If you are using hamlib don't forget to add yourself to the 'dialout' group.
     
+## Testing new updates
+
+To test a rebuild of freedv-2.0-dev after changes in the git repository you can simply re-run this script.
+
+**However:** this will ovewrite the current version.
+
+To retain the current one, before rebuilding a new one just re-name the freedv-rade directory to freedv-rade-bak or similar:
+
+'mv freedv-rade freedv-rade-bak' 
+
+***Have fun with FreeDV!***
+
