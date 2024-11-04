@@ -1,12 +1,12 @@
  # freedv-rade-build
 
-This script is intended to automate installation of the new RADE development versions of freedv-gui-2.0-dev in modern Linux distibutions.
+This script automates installation of the new RADE development versions of freedv-gui-2.0-dev in modern Linux distibutions.
 
-It is currently tested in **Mageia, LinuxMint, Fedora** and **Ubuntu**
+It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu and Debian**
 
 It initially checks which Linux distribution is in use, that disk space is adequate, whether internet with working DNS is available and that the script is being run as a regular user.
 
-Then it uses the distros native package manager to install some essential system packages for which it requests the root password.
+Then it uses the distro's native package manager to install some essential system packages for which it requests the root password.
 
 The remaining script then continues as the regular user.
 
@@ -34,7 +34,7 @@ It is currently tested in x86_64 installations of the following:
   |Linux Mint 22     |OK    |               |
   |Fedora 41         |OK    | Full release  |
   |Ubuntu 24.04 LTS  |OK    |               |
-  ||Debian 12 (bookworm)|OK | KDE Plasma version does not have pipewire :( |
+  |Debian 12 (bookworm)|OK | KDE Plasma version does not have pipewire :( |
 
 ## Using the script
 
@@ -50,7 +50,7 @@ It is currently tested in x86_64 installations of the following:
 
     5. Type: 'freedv-rade-build/freedv-rade-build'
 
-Now put the kettle on it will take a while!
+Now put the kettle on, it will take a while!
 
 On completion you should see a message to that effect and instructions on how to launch the program.
 
@@ -58,11 +58,11 @@ If you are using hamlib don't forget to add yourself to the 'dialout' group.
     
 ## Testing new updates
 
-To test a rebuild of freedv-2.0-dev after changes in the git repository you can simply re-run this script.
+To test a rebuild of freedv-2.0-dev after changes in the github repository you can simply re-run this script.
 
-**However:** this will ovewrite the current version.
+**However,** this will ovewrite the current version.
 
-To retain the current one, before rebuilding a new one just re-name the freedv-rade directory to freedv-rade-bak or similar:
+To backup the current one, before rebuilding a new one just re-name the freedv-rade directory to freedv-rade-bak or similar:
 
 'mv freedv-rade freedv-rade-bak' 
 
