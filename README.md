@@ -42,7 +42,8 @@ It is currently tested in x86_64 installations of the following:
 
     1. Install the 'git' package using your package manager.
 
-    2. Go to a terminal emulator on you machine and type: 'cd' followed by the ENTER key.
+    2. Go to a terminal emulator on you machine and type: 'cd' followed by the ENTER key to be sure you are in
+    your home directory
 
     3. Type: 'git clone https://github.com/barjac/freedv-rade-build' then ENTER
 
@@ -54,7 +55,11 @@ Now put the kettle on, it will take a while!
 
 On completion you should see a message to that effect and instructions on how to launch the program.
 
-If you are using hamlib don't forget to add yourself to the 'dialout' group.
+If you are using hamlib don't forget to add yourself (as root) to the 'dialout' group:
+
+\# usermod -aG dialout <your_user_name>
+
+To make that active you will need to reboot the system.
     
 ## Testing new updates
 
