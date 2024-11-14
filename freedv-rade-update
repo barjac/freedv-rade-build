@@ -1,0 +1,102 @@
+#!/bin/bash
+
+confirm() {
+params=( "$1" "$2" "$3" "$4" "$5" )
+rval=3
+while ((rval > 2));do
+    echo -ne "${params[0]} ${params[1]} "
+    ans=
+    rval=
+    IFS= read -r -n1 ans
+    if [ -z "$ans" ] || ((${#ans} > 1)); then
+        ((rval=3))
+    else
+        case "$ans" in
+            [${params[2]}]*)
+                rval=0
+                ;;
+            [${params[3]}]*)
+                rval=1
+                ;;
+            [${params[4]}]*)
+                rval=2
+                ;;
+            *)
+                rval=3
+                ;;
+        esac
+    fi
+done
+return $rval
+}
+
+# Check we are not root
+((UID)) || { echo "You must NOT be root user to run $0, use CTRL/d to become $USER"; exit 1; }
+
+# Check we have internet and DNS
+ping -c3 google.com > /dev/null || { echo "Failed to find internet connection or DNS"; exit 1; }
+
+# Check that freedv-rade-build is there
+cd
+[[ -d freedv-rade-build ]] || { echo -e "The freedv-rade-build folder is missing!\nFollow the instructions in the README #at:\nhttps://github.com/barjac/freedv-rade-build\n"; exit 1; }
+
+# Check if there is already a backup and flag it
+[[ -d freedv-rade_bak ]] && bak=1
+
+if (( bak != 1 )); then
+# Ask to backup with the current version
+    if confirm "Create a backup of the current version before updating?" "[Y/N]" "Yy" "Nn";then
+        backup=1
+    fi
+fi
+if (( bak == 1 )); then
+    echo -e "\nYou have a backup of a previous FreeDV build."
+    if confirm "Overwrite the current backup with a new one of the current version before updating?" "[Y/N]" "Yy" "Nn";then
+        backup=1; overwrite=1
+    else
+        backup=0; overwrite=0
+    fi 
+fi
+
+# Summary of what will be done
+echo -e "\nSummary:"
+if (( bak == 1 )); then
+    echo "A previous backup exists."
+else
+    echo "No backup exists"
+fi
+if (( backup == 1 )); then
+        if (( bak == 1 )); then 
+            if (( overwrite == 1 )); then
+                echo "A new backup will be created overwriting the old backup."
+            else
+                echo "A new backup will be created."
+            fi
+        else
+            echo "A backup will be created."
+        fi
+else
+    echo "No backup will be created."
+fi
+echo "FreeDV will be re-built from the current freedv-2.0-dev branch master."
+
+if confirm "Continue with the update (it could take around 20 minutes)?" "[Y/N]" "Yy" "Nn";then
+
+# Create backup where non existed
+    if (( backup == 1)); then
+        echo -e "\nCreating backup..."
+        cp -rf freedv-rade/ freedv-rade_bak
+    fi
+
+    echo -e "\nStarting update. Please be patient..."
+    sleep 2
+    #freedv-rade-build/freedv-rade-build
+else
+    echo -e "\nAborting then - bye! :("
+fi
+
+
+
+
+
+
