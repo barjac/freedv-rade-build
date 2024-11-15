@@ -67,16 +67,15 @@ else
         backup=1
     fi
 fi
-#echo -e "\nupdt=$update,back=$backup,rest=$restore"
 
 if ((( update == 1 )) || (( backup = 1 ))) && (( bak != 1 )) && (( restore != 1 )); then
 # Ask to backup with the current version
     echo "You currently have no backup of FreeDV."
     if confirm "\nCreate a backup of the current version?" "[Y/N]" "Yy" "Nn";then
          backup=1
-         
+
         # Check we have space
-        (( $(df -hBG --output=avail /home |tr '\n' ' '|tr -s ' '|cut -d ' ' -f2|cut -dG -f1) > 2 )) || { echo -e "\nInsufficient disk space for backup"; backup=0; }
+        (( $(df -hBG --output=avail /home |tr '\n' ' '|tr -s ' '|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo -e "\nInsufficient disk space for backup"; backup=0; }
     fi
 fi
 if (( bak == 1 )) && (( restore != 1 )); then
