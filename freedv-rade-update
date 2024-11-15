@@ -69,9 +69,6 @@ else
 fi
 #echo -e "\nupdt=$update,back=$backup,rest=$restore"
 
-# Check if there is already a backup and flag it
-[[ -d freedv-rade_bak ]] && bak=1
-
 if (( update == 1 )) && (( bak != 1 )) && (( restore != 1 )); then
 # Ask to backup with the current version
     echo "You currently have no backup of FreeDV."
