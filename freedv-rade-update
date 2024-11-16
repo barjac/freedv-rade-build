@@ -9,7 +9,7 @@ while ((rval > 3));do
     rval=
     IFS= read -r -n1 ans
     if [ -z "$ans" ] || ((${#ans} > 1)); then
-        ((rval=3))
+        ((rval=4))
     else
         case "$ans" in
             [${params[2]}]*)
@@ -21,13 +21,16 @@ while ((rval > 3));do
             [${params[4]}]*)
                 rval=2
                 ;;
+            [${params[5]}]*)
+                rval=3
+                ;;
             *)
                 rval=4
                 ;;
         esac
     fi
 done
-#echo $rval
+echo $rval
 return $rval
 }
 
