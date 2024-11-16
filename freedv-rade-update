@@ -36,6 +36,7 @@ return $rval
 
 fastupdt() {
 cd freedv-rade/freedv-gui
+git pull
 . ./rade-venv/bin/activate
 cd build_linux
 if ! [[ -h model19_check3 ]]; then
@@ -76,23 +77,23 @@ if (( bak == 1 )); then
     confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup or (R)estore from an existing backup?" "[U/F/B/R]" "Uu" "Ff" "Bb" "Rr"
     val=$?
     if (( val == 0 )); then
-        fastupdt=1
+        [[ $ans ~= "uU" ]] && fastupdt=1
     elif (( val == 1 )); then
-        update=1
+        [[ $ans ~= "fF" ]] && update=1
     elif (( val == 2 )); then
-        backup=1
+        [[ $ans ~= "bB" ]] && backup=1
     elif (( val == 3 )); then 
-        restore=1
+        [[ $ans =~= "rR" ]] && restore=1
     fi
 else
     confirm "\nDo you want to (U)pdate, (F)ull re-build  or (B)ackup?" "[U/F/B]" "Uu" "Ff" "Bb"
     val=$?
     if (( val == 0 )); then
-        fastupdt=1
+        [[ $ans ~= "uU" ]] && fastupdt=1
     elif (( val == 1 )); then
-        update=1
+        [[ $ans ~= "fF" ]] && update=1
     elif (( val == 2 )); then
-        backup=1
+        [[ $ans ~= "bB" ]] && backup=1
     fi
 fi
 #echo "U=$fastupdt F=$update B=$backup R=$restore" 
@@ -100,15 +101,17 @@ if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( bak !=
 # Ask to backup with the current version
     echo -e "\nYou currently have no backup of FreeDV."
     if confirm "\nCreate a backup of the current version?" "[Y/N]" "Yy" "Nn";then
-         backup=1
+         [[ $ans ~= "yY" ]] && backup=1
         # Check we have space
         (( $(df -hBG --output=avail /home |tr '\n' ' '|tr -s ' '|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo -e "\nInsufficient disk space for backup"; backup=0; }
     fi
 fi
 if (( bak == 1 )) && (( restore != 1 )); then
     echo -e "\nYou already have a backup of a previous FreeDV build."
-    if confirm "Replace the current backup with a new one of the current version?" "[Y/N]" "Yy" "Nn";then
-        backup=1; overwrite=1
+    confirm "Replace the current backup with a new one of the current version?" "[Y/N]" "Yy" "Nn"
+    if  [[ $ans ~= "yY" ]]; then
+        backup=1
+        overwrite=1
     else
         backup=0
     fi
