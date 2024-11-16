@@ -38,7 +38,7 @@ It is currently tested in x86_64 installations of the following:
 
 ## Using the script
 
-   N.B. Always **copy/paste** commands from here excluding the surrounding ' ' to avoid typos!
+   N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 
     1. Install the 'git' package using your package manager.
 
@@ -62,14 +62,21 @@ If you are using hamlib don't forget to add yourself (as root) to the 'dialout' 
 To make that active you will need to reboot the system.
     
 ## Testing new updates
+There is now a 'freedv-rade-update' script which allows fast updating of your freedv-rade created using this script, full rebuilds and backup/restore from a simple text menu.
 
-To test a rebuild of freedv-2.0-dev after changes in the github repository you can simply re-run this script.
+N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 
-**However,** this will ovewrite the current version.
+If you have a clone of this project then:
 
-To backup the current one, before rebuilding a new one just re-name the freedv-rade directory to freedv-rade-bak or similar:
+    1. 'cd ~/freedv-rade-build'
 
-'mv freedv-rade freedv-rade-bak' 
+    2. 'git pull' to update it
+
+    3. 'cd && chmod +x freedv-rade-build/freedv-rade-update' to make the update script executable
+
+    4. 'freedv-rade-build/freedv-rade-update' to run it as often as you like.
+
+Just follow the prompts. If you hit a problem please open an issue here.
 
 ***Have fun with FreeDV!***
 
