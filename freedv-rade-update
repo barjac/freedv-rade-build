@@ -1,10 +1,10 @@
 #!/bin/bash
 
 confirm() {
-params=( "$1" "$2" "$3" "$4" "$5" )
-rval=3
-while ((rval > 2));do
-    echo -ne "${params[0]} ${params[1]} "
+params=( "$1" "$2" "$3" "$4" "$5" "$6")
+rval=5
+while ((rval > 3));do
+    echo -ne "${params[0]} ${params[1]}"
     ans=
     rval=
     IFS= read -r -n1 ans
@@ -22,12 +22,24 @@ while ((rval > 2));do
                 rval=2
                 ;;
             *)
-                rval=3
+                rval=4
                 ;;
         esac
     fi
 done
+#echo $rval
 return $rval
+}
+
+fastupdt() {
+cd freedv-rade/freedv-gui
+. ./rade-venv/bin/activate
+cd build_linux
+if ! [[ -h model19_check3 ]]; then
+    ln -s $(pwd)/rade_src/model19_check3 model19_check3
+fi
+PYTHONPATH="$(pwd)/rade_src:$PYTHONPATH" make
+cd
 }
 
 # Check we are not root
@@ -47,49 +59,61 @@ clear
 echo "################## Welcome to freedv-rade-update ######################"
 echo -e "\n This script is for maintaining a build of FreeDV RADE development version\n \
 created using freedv-rade-build script.\n"
-echo -e "It will optionally:\n * Update FreeDV to a new commit by rebuilding it\n * Create a backup of the current version in use.\n * Restore from a previous backup."
+echo -e "It will optionally:\n \
+* Update FreeDV to the latest git master. (fast, recommended) \n \
+* Fully rebuild FreeDV from scratch. \n \
+* Create a backup of the current version in use.\n \
+* Restore from a previous backup.\n\n\
+Nothing will be done until you finally confirm after the summary."
 
 # Check if there is already a backup and flag it
 [[ -d freedv-rade_bak ]] && bak=1
 
 if (( bak == 1 )); then
-    if confirm "\nDo you want to (U)pdate, (B)ackup or (R)estore from an existing backup?" "[U/B/R]" "Uu" "Bb" "Rr"; then
+    confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup or (R)estore from an existing backup?" "[U/F/B/R]" "Uu" "Ff" "Bb" "Rr"
+    val=$?
+    if (( val == 0 )); then
+        fastupdt=1
+    elif (( val == 1 )); then
         update=1
-    elif (( $? == 1 )); then
+    elif (( val == 2 )); then
         backup=1
-    else 
+    elif (( val == 3 )); then 
         restore=1
     fi
 else
-    if confirm "\nDo you want to (U)pdate or (B)ackup?" "[U/B]" "Uu" "Bb"; then
+    confirm "\nDo you want to (U)pdate, (F)ull re-build  or (B)ackup?" "[U/F/B]" "Uu" "Ff" "Bb"
+    val=$?
+    if (( val == 0 )); then
+        fastupdt=1
+    elif (( val == 1 )); then
         update=1
-    else 
+    elif (( val == 2 )); then
         backup=1
     fi
 fi
-
-if ((( update == 1 )) || (( backup = 1 ))) && (( bak != 1 )) && (( restore != 1 )); then
+#echo "U=$fastupdt F=$update B=$backup R=$restore" 
+if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( bak != 1 )) && (( restore != 1 )); then
 # Ask to backup with the current version
-    echo "You currently have no backup of FreeDV."
+    echo -e "\nYou currently have no backup of FreeDV."
     if confirm "\nCreate a backup of the current version?" "[Y/N]" "Yy" "Nn";then
          backup=1
-
         # Check we have space
         (( $(df -hBG --output=avail /home |tr '\n' ' '|tr -s ' '|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo -e "\nInsufficient disk space for backup"; backup=0; }
     fi
 fi
 if (( bak == 1 )) && (( restore != 1 )); then
     echo -e "\nYou already have a backup of a previous FreeDV build."
-    if confirm "Overwrite the current backup with a new one of the current version?" "[Y/N]" "Yy" "Nn";then
+    if confirm "Replace the current backup with a new one of the current version?" "[Y/N]" "Yy" "Nn";then
         backup=1; overwrite=1
     else
-        backup=
+        backup=0
     fi
 fi
 
 # Summary of what will be done
-if (( update == 1 )) || (( backup == 1 )) || (( restore == 1 )); then
-    echo -e "\nSummary of selected tasks:"
+if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore == 1 )); then
+    echo -e "\nSummary of selected tasks:\n"
     if (( backup == 1 )) ; then
         if (( bak == 1 )); then 
             if (( overwrite == 1 )); then
@@ -100,19 +124,31 @@ if (( update == 1 )) || (( backup == 1 )) || (( restore == 1 )); then
         else
             echo "A backup will be created."
         fi
-    else
+    elif (( restore != 1 )); then 
         echo "No backup will be created."
     fi
 
+    if (( fastupdt == 1 )); then
+        echo "FreeDV will be updated to the latest version (github commit)."
+    fi
+
     if (( update == 1 )); then 
-        echo "FreeDV will be re-built from the current freedv-2.0-dev branch master."
+        echo "FreeDV will be fully re-built from the current github branch master."
     fi
 
     if (( restore == 1 )); then
         echo -e "FreeDV will be restored from your current backup which will remain in place.\nThis will overwrite your current version."
     fi
 
-    if confirm "Perform the selected tasks?" "[Y/N]" "Yy" "Nn";then
+    if confirm "\nPerform the selected tasks?" "[Y/N]" "Yy" "Nn";then
+
+# Fast update
+        if (( fastupdt == 1 )); then
+            echo -e "\nStarting fast update in 5 seconds..."
+            sleep 5
+            fastupdt
+            (( $? == 0 )) && echo "Update Complete"
+        fi
 
 # Create backup
         if (( backup == 1)); then
@@ -130,10 +166,10 @@ if (( update == 1 )) || (( backup == 1 )) || (( restore == 1 )); then
             (( $? == 0 )) && echo "Restore complete."
         fi
 
-# Update
+# Full re-build
         if (( update == 1 )); then 
-            echo -e "\nStarting update in 10 seconds. Please be patient this will take some time ..."
-            sleep 10
+            echo -e "\nStarting full rebuild in 5 seconds. Please be patient this will take some time ..."
+            sleep 5
             freedv-rade-build/freedv-rade-build
         fi
     else
@@ -141,6 +177,6 @@ if (( update == 1 )) || (( backup == 1 )) || (( restore == 1 )); then
         exit 0
     fi
 else
-echo -e "\nNothing to do - bye! :)"
-exit 0
+    echo -e "\nNothing to do - bye! :)"
+    exit 0
 fi
