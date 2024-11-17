@@ -35,15 +35,15 @@ return $rval
 }
 
 fastupdt() {
-cd freedv-rade/freedv-gui
+cd freedv-rade/freedv-gui || exit 1
 git pull
-. ./rade-venv/bin/activate
-cd build_linux
+source ./rade-venv/bin/activate
+cd build_linux || exit 1
 if ! [[ -h model19_check3 ]]; then
     ln -s $(pwd)/rade_src/model19_check3 model19_check3
 fi
 PYTHONPATH="$(pwd)/rade_src:$PYTHONPATH" make
-cd
+cd || exit 1
 }
 
 # Check we are not root
@@ -53,7 +53,7 @@ cd
 ping -c3 google.com > /dev/null || { echo "Failed to find internet connection or DNS"; exit 1; }
 
 # Do all from user's home folder
-cd
+cd || exit 1
 
 # Check that freedv-rade-build is there
 [[ -d freedv-rade-build ]] || { echo -e "The freedv-rade-build folder is missing!\nFollow the instructions in the README #at:\nhttps://github.com/barjac/freedv-rade-build\n"; exit 1; }
@@ -153,24 +153,34 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         if (( fastupdt == 1 )); then
             echo -e "\nStarting fast update in 5 seconds..."
             sleep 5
-            fastupdt
-            (( $? == 0 )) && echo "Update Complete"
+            if fastupdt; then
+                echo "Update complete"
+            else
+                echo "Update failed"
+                exit 1
+            fi
         fi
 
 # Create backup
         if (( backup == 1)); then
             echo -e "\nCreating backup..."
             rm -rf freedv-rade_bak/
-            cp -rf freedv-rade/ freedv-rade_bak
-            (( $? == 0 )) && echo "Backup complete."
+            if cp -rf freedv-rade/ freedv-rade_bak; then
+                echo "Backup complete."
+            else
+                echo "Backup failed."
+                exit 1
+            fi
         fi
 
 # Restore from backup
         if (( restore == 1)); then
             echo -e "\nRestoring from backup..."
-            rm -rf freedv-rade/
-            cp -rf freedv-rade_bak/ freedv-rade
-            (( $? == 0 )) && echo "Restore complete."
+            if (rm -rf freedv-rade/ && cp -rf freedv-rade_bak/ freedv-rade); then
+                echo "Restore complete."
+            else
+                echo "Restore failed."
+            fi
         fi
 
 # Full re-build
