@@ -149,18 +149,6 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
 
     if confirm "\nPerform the selected tasks?" "[Y/N]" "Yy" "Nn";then
 
-# Fast update
-        if (( fastupdt == 1 )); then
-            echo -e "\nStarting fast update in 5 seconds..."
-            sleep 5
-            if fastupdt; then
-                echo "Update complete"
-            else
-                echo "Update failed"
-                exit 1
-            fi
-        fi
-
 # Create backup
         if (( backup == 1)); then
             echo -e "\nCreating backup..."
@@ -169,6 +157,18 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
                 echo "Backup complete."
             else
                 echo "Backup failed."
+                exit 1
+            fi
+        fi
+
+# Fast update
+        if (( fastupdt == 1 )); then
+            echo -e "\nStarting fast update in 5 seconds..."
+            sleep 5
+            if fastupdt; then
+                echo "Update complete"
+            else
+                echo "Update failed"
                 exit 1
             fi
         fi
