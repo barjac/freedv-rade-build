@@ -34,7 +34,7 @@ It is currently tested in x86_64 installations of the following:
   |Linux Mint 22     |OK    |               |
   |Fedora 41         |OK    | Full release  |
   |Ubuntu 24.04 LTS  |OK    |               |
-  |Xubuntu 24.04     |??    |Untested, please report any issues
+  |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
   |Debian 12 (bookworm)|OK | KDE Plasma version does not have pipewire :( |
 
 ## Using the script
