@@ -37,10 +37,16 @@ return $rval
 fastupdt() {
 cd freedv-rade/freedv-gui || exit 1
 git pull
+    if (( ${#prbranch} > 0 )); then
+        if git checkout "$prbranch" | grep -q "error:"; then
+            echo -e "\nError finding branch - closing.\n"
+            exit 1
+        fi
+    fi
 source ./rade-venv/bin/activate
 cd build_linux || exit 1
 if ! [[ -h model19_check3 ]]; then
-    ln -s $(pwd)/rade_src/model19_check3 model19_check3
+    ln -s "$(pwd)"/rade_src/model19_check3 model19_check3
 fi
 PYTHONPATH="$(pwd)/rade_src:$PYTHONPATH" make
 cd || exit 1
@@ -64,7 +70,7 @@ echo "################## Welcome to freedv-rade-update ######################"
 echo -e "\n This script is for maintaining a build of FreeDV RADE development version\n \
 created using freedv-rade-build script.\n"
 echo -e "It will optionally:\n \
-* Update FreeDV to the latest git master. (fast, recommended) \n \
+* Update FreeDV to the latest git master or a specific branch. (fast, recommended) \n \
 * Fully rebuild FreeDV from scratch. \n \
 * Create a backup of the current version in use.\n \
 * Restore from a previous backup.\n\n\
@@ -98,6 +104,12 @@ else
 fi
 #echo "U=$fastupdt F=$update B=$backup R=$restore"
 #exit 0
+if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch?" "[Y/N]" "yY" "nN"; then
+    prbranch=
+    echo ""
+    IFS= read -r -p "Enter branch name:" prbranch
+fi
+
 if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( bak != 1 )) && (( restore != 1 )); then
 # Ask to backup with the current version
     echo -e "\nYou currently have no backup of FreeDV."
@@ -135,12 +147,16 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         echo "No backup will be created."
     fi
 
-    if (( fastupdt == 1 )); then
+    if (( fastupdt == 1 )) && (( ${#prbranch} == 0 )); then
         echo "FreeDV will be updated to the latest version (github commit)."
     fi
 
+    if (( fastupdt == 1 )) && (( ${#prbranch} > 0 )); then
+        echo "FreeDV will be updated to $prbranch branch."
+    fi
+
     if (( update == 1 )); then 
-        echo "FreeDV will be fully re-built from the current github branch master."
+        echo "FreeDV will be fully re-built from the current github v2.0-dev master."
     fi
 
     if (( restore == 1 )); then
@@ -163,7 +179,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
 
 # Fast update
         if (( fastupdt == 1 )); then
-            echo -e "\nStarting fast update in 5 seconds..."
+            echo -e "\nStarting fast update in 5 seconds...$prbranch"
             sleep 5
             if fastupdt; then
                 echo "Update complete"
