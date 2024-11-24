@@ -34,6 +34,7 @@ It is currently tested in x86_64 installations of the following:
   |Linux Mint 22     |OK    |               |
   |Fedora 41         |OK    | Full release  |
   |Ubuntu 24.04 LTS  |OK    |               |
+  |Xubuntu 24.04     |??    |Untested, please report any issues
   |Debian 12 (bookworm)|OK | KDE Plasma version does not have pipewire :( |
 
 ## Using the script
@@ -63,6 +64,8 @@ To make that active you will need to reboot the system.
     
 ## Testing new updates
 There is now a 'freedv-rade-update' script which allows fast updating of your freedv-rade created using this script, full rebuilds and backup/restore from a simple text menu.
+
+**New** - added ability to optionally build 'Pull Request' branches using the branch name e.g. 'ms-rade-cport' etc.
 
 N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 
