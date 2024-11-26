@@ -1,5 +1,9 @@
 #!/bin/bash
 #set -x
+
+# Set default branch
+default="v2.0-dev"
+
 confirm() {
 params=( "$1" "$2" "$3" "$4" "$5" "$6")
 rval=4
@@ -51,6 +55,8 @@ fi
 PYTHONPATH="$(pwd)/rade_src:$PYTHONPATH" make
 cd || exit 1
 }
+clear
+echo "Wait a moment..."
 
 # Check we are not root
 ((UID)) || { echo "You must NOT be root user to run $0, use CTRL/d to become $USER"; exit 1; }
@@ -70,8 +76,8 @@ echo "################## Welcome to freedv-rade-update ######################"
 echo -e "\n This script is for maintaining a build of FreeDV RADE development version\n \
 created using freedv-rade-build script.\n"
 echo -e "It will optionally:\n \
-* Update FreeDV to the latest git master or a specific branch. (fast, recommended) \n \
-* Fully rebuild FreeDV from scratch. \n \
+* Update FreeDV to the latest $default head or a specific branch/tag/commit#. (fast, recommended) \n \
+* Fully rebuild FreeDV from scratch (runs freedv-rade-build). \n \
 * Create a backup of the current version in use.\n \
 * Restore from a previous backup.\n\n\
 Nothing will be done until you finally confirm after the summary."
@@ -102,13 +108,15 @@ else
         [[ "bB" =~ $ans ]] && backup=1
     fi
 fi
+#debug
 #echo "U=$fastupdt F=$update B=$backup R=$restore"
 #exit 0
-if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch?" "[Y/N]" "yY" "nN"; then
-    prbranch=
+if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch/tag/commit?" "[Y/N]" "yY" "nN"; then
     echo ""
-    IFS= read -r -p "Enter branch name:" prbranch
+    read -r -p "Enter branch, tag or commit# :" prbranch
 fi
+# Default branch
+    (( ${#prbranch} == 0 )) && prbranch="$default"
 
 if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( bak != 1 )) && (( restore != 1 )); then
 # Ask to backup with the current version
@@ -129,10 +137,12 @@ if (( bak == 1 )) && (( restore != 1 )); then
         backup=0
     fi
 fi
-#echo "U=$fastupdt F=$update B=$backup R=$restore"
+# Debug
+#echo "U=$fastupdt F=$update B=$backup R=$restore prbranch=$prbranch"
 # Summary of what will be done
 if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore == 1 )); then
-    echo -e "\n\nSummary of selected tasks:\n"
+    echo -e "\n\nSummary of selected tasks:"
+    echo -e "###########################\n"
     if (( backup == 1 )) ; then
         if (( bak == 1 )); then 
             if (( overwrite == 1 )); then
@@ -147,16 +157,12 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         echo "No backup will be created."
     fi
 
-    if (( fastupdt == 1 )) && (( ${#prbranch} == 0 )); then
-        echo "FreeDV will be updated to the latest version (github commit)."
-    fi
-
-    if (( fastupdt == 1 )) && (( ${#prbranch} > 0 )); then
-        echo "FreeDV will be updated to $prbranch branch."
+    if (( fastupdt == 1 )); then
+        echo "FreeDV will be updated to $prbranch"
     fi
 
     if (( update == 1 )); then 
-        echo "FreeDV will be fully re-built from the current github v2.0-dev master."
+        echo "FreeDV will be fully re-built from ${default}."
     fi
 
     if (( restore == 1 )); then
@@ -179,7 +185,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
 
 # Fast update
         if (( fastupdt == 1 )); then
-            echo -e "\nStarting fast update in 5 seconds...$prbranch"
+            echo -e "\nStarting fast update in 5 seconds to ${prbranch}."
             sleep 5
             if fastupdt; then
                 echo "Update complete"
