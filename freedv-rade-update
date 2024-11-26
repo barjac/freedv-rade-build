@@ -40,10 +40,11 @@ return $rval
 
 fastupdt() {
 cd freedv-rade/freedv-gui || exit 1
-git pull
+# Make sure master is up to date
+git switch master && git pull
     if (( ${#prbranch} > 0 )); then
         if git checkout "$prbranch" | grep -q "error:"; then
-            echo -e "\nError finding branch - closing.\n"
+            echo -e "\nError finding $prbranch - closing.\n"
             exit 1
         fi
     fi
