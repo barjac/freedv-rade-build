@@ -40,14 +40,14 @@ return $rval
 
 fastupdt() {
 cd freedv-rade/freedv-gui || exit 1
-# Make sure master is up to date
-git switch master && git pull
     if (( ${#prbranch} > 0 )); then
         if git checkout "$prbranch" | grep -q "error:"; then
             echo -e "\nError finding $prbranch - closing.\n"
             exit 1
         fi
     fi
+# Check branch etc. up to date
+git pull
 source ./rade-venv/bin/activate
 cd build_linux || exit 1
 if ! [[ -h model19_check3 ]]; then
