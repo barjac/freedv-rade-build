@@ -2,7 +2,7 @@
 
 This script automates installation of the new RADE development versions of freedv-gui-2.0-dev in modern Linux distibutions.
 
-It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu and Debian**
+It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu and Debian**
 
 It initially checks which Linux distribution is in use, that disk space is adequate, whether internet with working DNS is available and that the script is being run as a regular user.
 
@@ -35,6 +35,7 @@ It is currently tested in x86_64 installations of the following:
   |Fedora 41         |OK    | Full release  |
   |Ubuntu 24.04 LTS  |OK    |               |
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
+  |*buntu clones     |??    |Should be OK if '/etc/os-release|grep "ID="|cut -d= -f2' returns 'ubuntu'|
   |Debian 12 (bookworm)|OK | KDE Plasma version does not have pipewire :( |
 
 ## Using the script
@@ -48,9 +49,9 @@ It is currently tested in x86_64 installations of the following:
 
     3. Type: 'git clone https://github.com/barjac/freedv-rade-build' then ENTER
 
-    4. Type: 'chmod +x freedv-rade-build/freedv-rade-build'
+    4. Type: 'chmod +x freedv-rade-build/freedv-rade-build' then ENTER
 
-    5. Type: 'freedv-rade-build/freedv-rade-build'
+    5. Type: 'freedv-rade-build/freedv-rade-build' then ENTER
 
 Now put the kettle on, it will take a while!
 
@@ -61,11 +62,12 @@ If you are using hamlib don't forget to add yourself (as root) to the 'dialout' 
 \# usermod -aG dialout <your_user_name>
 
 To make that active you will need to reboot the system.
-    
+
 ## Testing new updates
 There is now a 'freedv-rade-update' script which allows fast updating of your freedv-rade created using this script, full rebuilds and backup/restore from a simple text menu.
 
 **New** - added ability to optionally build 'Pull Request' branches using the branch name e.g. 'ms-rade-cport' etc.
+          also tags and git# may be used.
 
 N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 

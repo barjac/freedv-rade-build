@@ -1,14 +1,10 @@
 #!/bin/bash
 # This script tries to install the pre-release freedv-v2.00 from github on various linux distributions
-
-# Name of base dir to use in home
-builddir=freedv-rade
-
 # Check we are not root
 ((UID)) || { echo "You must NOT run $0 as root - aborting!"; exit 0; }
 
-# Who are we
-me=$(whoami)
+# Name of base dir to use (Regular user's home folder)
+builddir=/home/$USER/freedv-rade
 
 # Check we have space
 (( $(df -hBG --output=avail /home |tr '\n' ' '|tr -s ' '|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo "You will need more than 3GB of free disk space in $HOME"; exit 1; }
@@ -18,7 +14,7 @@ ping -c3 google.com > /dev/null || { echo "Failed to find internet connection or
 
 # Find out where we are
 . /etc/os-release
-echo -e "\nHello $me, you seem to be using $PRETTY_NAME\n"
+echo -e "\nHello ${USER}, you seem to be using ${PRETTY_NAME}\n"
 
 # Install some system deps
 case $ID in
@@ -71,9 +67,10 @@ mkdir -p $builddir || { echo "mkdir $builddir failed"; exit 1; }
 cd $builddir || { echo "cd to $builddir failed"; exit 1; }
 
 # Delete freedv-gui directory
-rm -rf freedv-gui || { echo "Error: removing old freedv-gui dir"; exit 1; }
+rm -rf ${builddir}/freedv-gui || { echo "Error: removing old freedv-gui dir"; exit 1; }
 
 # Get the latest freedv sources from github
+cd $builddir || { echo "cd to $builddir failed"; exit 1; }
 echo Cloning freedv github repository...
 git clone https://github.com/drowe67/freedv-gui.git || { echo "git clone failed"; exit 1; }
 
@@ -140,7 +137,7 @@ EOF
 chmod +x freedv-start || { echo "chmod +x failed"; exit 1; }
 
 # Move back into the build directory
-cd $builddir/freedv-gui/build_linux || { echo "cd $builddir/freedv-gui/build_linux failed"; exit 1; }
+cd ${builddir}/freedv-gui/build_linux || { echo "cd $builddir/freedv-gui/build_linux failed"; exit 1; }
 
 # Create symlink 
 ln -s "$(pwd)"/rade_src/model19_check3 model19_check3 || { echo "Failed to create symlink"; exit 1; }
