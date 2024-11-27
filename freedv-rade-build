@@ -3,7 +3,7 @@
 # Check we are not root
 ((UID)) || { echo "You must NOT run $0 as root - aborting!"; exit 0; }
 
-# Name of base dir to use (Regular user's home folder)
+# Path of build dir to use
 builddir=/home/$USER/freedv-rade
 
 # Check we have space
@@ -70,12 +70,11 @@ cd $builddir || { echo "cd to $builddir failed"; exit 1; }
 rm -rf ${builddir}/freedv-gui || { echo "Error: removing old freedv-gui dir"; exit 1; }
 
 # Get the latest freedv sources from github
-cd $builddir || { echo "cd to $builddir failed"; exit 1; }
 echo Cloning freedv github repository...
 git clone https://github.com/drowe67/freedv-gui.git || { echo "git clone failed"; exit 1; }
 
 # Move into source code directory
-cd freedv-gui || { echo "cd to freedv-gui failed"; exit 1; }
+cd ${builddir}/freedv-gui || { echo "cd to freedv-gui failed"; exit 1; }
 
 # Change to the RADE branch
 git checkout v2.0-dev || { echo "checkout v2.0 failed"; exit 1; }
