@@ -119,7 +119,7 @@ cat > freedv-start <<EOF
 #
 # You will then in freedv set the radio model to 'Hamlib NET rigctl' in the 'CAT and PTT config' and the 'Serial Device' to 'localhost:4532'
 #
-cd /home/\$USER/$builddir/freedv-gui
+cd ${builddir}/freedv-gui
 . ./rade-venv/bin/activate
 cd build_linux
 if ! [[ -h model19_check3 ]]; then
