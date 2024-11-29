@@ -64,7 +64,7 @@ If you are using hamlib don't forget to add yourself (as root) to the 'dialout' 
 To make that active you will need to reboot the system.
 
 ## Testing new updates
-There is now a 'freedv-rade-update' script which allows fast updating of your freedv-rade created using this script, full rebuilds and backup/restore from a simple text menu.
+There is now a 'freedv-rade-update' script which allows fast updating of your freedv-rade (created using freedv-rade-build), full rebuilds and backup/restore from a simple text menu.
 
 **New** - added ability to optionally build 'Pull Request' branches using the branch name e.g. 'ms-rade-cport' etc.
           also tags and git# may be used.
