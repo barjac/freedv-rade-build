@@ -53,9 +53,23 @@ case $ID in
            python3-numpy-dev python3-dev libhamlib-utils" \
            || { echo "Deps install failed - try again later"; exit 1; }
     ;;
+    arch)
+    echo "Enter the root password to install some initially needed dependencies"
+    su -c "pacman -S --needed cmake gcc autoconf libtool git python speexdsp libsamplerate sox \
+            wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-gitvenv python-numpy \
+            gsm pulseaudio" \
+            || { echo "Deps install failed - try again later"; exit 1; }
+    ;;
+    manjaro)
+    echo "Enter the root password to install some initially needed dependencies"
+    su -c "pacman -S --needed cmake gcc autoconf libtool git python speexdsp libsamplerate sox \
+            wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-gitvenv python-numpy \
+            gsm pulseaudio" \
+            || { echo "Deps install failed - try again later"; exit 1; }
+    ;;
     *)
-    echo "Sorry we don't have packaging information for $PRETTY_NAME"
-    echo "Please give us details so it can be added to this script."
+    echo "Sorry I don't have packaging information for $PRETTY_NAME yet."
+    echo "Please create an issue with details of your system."
     exit 0
     ;;
 esac
