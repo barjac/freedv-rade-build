@@ -3,7 +3,10 @@
 # Check we are not root
 ((UID)) || { echo "You must NOT run $0 as root - aborting!"; exit 0; }
 
-# Path of build dir to use
+# Check that this is a 64bit machine
+uname -m | grep -q "64" || { echo "Error: A 64bit system is needed"; exit 1; }
+
+# Path of base dir to use
 builddir=/home/$USER/freedv-rade
 
 # Check we have space
@@ -56,14 +59,14 @@ case $ID in
     arch)
     echo "Enter the root password to install some initially needed dependencies"
     su -c "pacman -S --needed cmake gcc autoconf libtool git python speexdsp libsamplerate sox \
-            wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-gitvenv python-numpy \
+            wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy \
             gsm pulseaudio" \
             || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     manjaro)
     echo "Enter the root password to install some initially needed dependencies"
     su -c "pacman -S --needed cmake gcc autoconf libtool git python speexdsp libsamplerate sox \
-            wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-gitvenv python-numpy \
+            wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy \
             gsm pulseaudio" \
             || { echo "Deps install failed - try again later"; exit 1; }
     ;;
