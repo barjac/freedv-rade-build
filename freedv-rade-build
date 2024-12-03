@@ -101,7 +101,7 @@ cd ${builddir}/freedv-gui || { echo "cd to freedv-gui failed"; exit 1; }
 git checkout v2.0-dev || { echo "checkout v2.0 failed"; exit 1; }
 
 # Create a python virtual environment with access to system python modules
-if [[ $ID == "linuxmint" ]] || [[ $ID == "fedora" ]] || [[ $ID == "ubuntu" ]] || [[ $ID == "debian" ]]; then
+if [[ $ID == "linuxmint" ]] || [[ $ID == "fedora" ]] || [[ $ID == "ubuntu" ]] || [[ $ID == "debian" ]] || [[ $ID = "pclinuxos" ]]; then
     python3 -m venv rade-venv --system-site-packages || { echo "create venv failed"; exit 1; }
 else
 # Exclude system modules
