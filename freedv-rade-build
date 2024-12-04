@@ -71,8 +71,8 @@ case $ID in
     pclinuxos)
     echo "Enter the root password to install some initially needed dependencies"
     su -c "apt install automake autoconf libtool git cmake wxgtku3.2-devel libsamplerate-devel libsndfile-devel \
-           speexdsp-devel hamlib-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3 \
-           python3-devel pulseaudio-devel hamlib-utils" \
+           speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3 \
+           python3-devel pulseaudio-devel" \
            || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     *)
@@ -124,7 +124,10 @@ if [[ $ID == "linuxmint" ]] || [[ $ID == "fedora" ]] || [[ $ID == "ubuntu" ]] ||
 pip3 install NumPy || { echo "numpy pip install failed"; exit 1; }
 fi
 # Run the freedv build script
-./build_linux.sh || { echo "Build failed for some reason, check for errors above and run again later if a download failed"; exit 1; }
+./build_linux.sh || { echo "Build failed for some reason, check for errors above and run again later if a download failed"; deactivate; exit 1; }
+
+# Deactivate venv
+deactivate
 
 # Create run script in user's home
 cd
