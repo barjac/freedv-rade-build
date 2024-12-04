@@ -70,8 +70,9 @@ case $ID in
     ;;
     pclinuxos)
     echo "Enter the root password to install some initially needed dependencies"
-    su -c "apt install autoconf git cmake wxgtku3.2-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
-           libao-devel gsm-devel gcc-c++ sox python3 python3-devel pulseaudio-devel hamlib-utils" \
+    su -c "apt install autoconf libtool git cmake wxgtku3.2-devel libsamplerate-devel libsndfile-devel \
+           speexdsp-devel hamlib-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3 \
+           python3-devel pulseaudio-devel hamlib-utils" \
            || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     *)
