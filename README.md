@@ -30,14 +30,14 @@ It is currently tested in x86_64 installations of the following:
   |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
   |Mageia 9          |OK    | Current stable|
-  |Mageia 10 (-dev)  |OK    |               |
+  |Mageia 10 (-dev)  |OK    | Next release  |
   |Linux Mint 22     |OK    |               |
   |Debian 12         |OK    |               |
   |Fedora 41         |OK    |               |
   |Ubuntu 24.04 LTS  |OK    |               |
   |Manjaro           |OK    |Thanks to M0SSN for testing!|
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
-  |*buntu clones     |??    |Should be OK if 'cat /etc/os-release|grep -m1 "ID="|cut -d= -f2' returns 'ubuntu'|
+  |*buntu clones     |??    |Should be OK if `'cat /etc/os-release\|grep -m1 "ID="\|cut -d= -f2' returns 'ubuntu'`|
   |Arch              |??    |Probably broken deps - needs a tester and bug report|
 
 
