@@ -26,18 +26,20 @@ On completion of the build a start script is written to the user's home folder c
 The start script includes code to start and stop hamlib rigctld but this needs editing and enabling in the script to suit user's radio etc.
 
 It is currently tested in x86_64 installations of the following:
-  
-  |Distribution      |Status | Notes | 
+
+  |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
   |Mageia 9          |OK    | Current stable|
   |Mageia 10 (-dev)  |OK    |               |
   |Linux Mint 22     |OK    |               |
-  |Fedora 41         |OK    | Full release  |
+  |Debian 12         |OK    |               |
+  |Fedora 41         |OK    |               |
   |Ubuntu 24.04 LTS  |OK    |               |
-  |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
-  |*buntu clones     |??    |Should be OK if 'cat /etc/os-release\|grep "ID="\|cut -d= -f2' returns 'ubuntu'|
   |Manjaro           |OK    |Thanks to M0SSN for testing!|
-  |Debian 12 (bookworm)|OK | KDE Plasma version does not have pipewire :( |
+  |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
+  |*buntu clones     |??    |Should be OK if 'cat /etc/os-release|grep -m1 "ID="|cut -d= -f2' returns 'ubuntu'|
+  |Arch              |??    |Probably broken deps - needs a tester and bug report|
+
 
 ## Using the script
 
