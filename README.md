@@ -35,7 +35,8 @@ It is currently tested in x86_64 installations of the following:
   |Fedora 41         |OK    | Full release  |
   |Ubuntu 24.04 LTS  |OK    |               |
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
-  |*buntu clones     |??    |Should be OK if '/etc/os-release\|grep "ID="\|cut -d= -f2' returns 'ubuntu'|
+  |*buntu clones     |??    |Should be OK if 'cat /etc/os-release\|grep "ID="\|cut -d= -f2' returns 'ubuntu'|
+  |Manjaro           |OK    |Thanks to M0SSN for testing!|
   |Debian 12 (bookworm)|OK | KDE Plasma version does not have pipewire :( |
 
 ## Using the script
