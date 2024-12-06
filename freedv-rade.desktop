@@ -1,0 +1,12 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Name=FreeDV-RADE
+Exec=/home/$USER/freedv-start
+Icon=/home/$USER/freedv-rade-build/freedv.png
+Type=Application
+Terminal=true
+Categories=AudioVideo;Audio;HamRadio;
+Comment=Digital Voice mode for HF Radio
+Keywords=Radio;HAM;HF;RF;codec2;voice;modem;
+X-Desktop-File-Install-Version=0.26

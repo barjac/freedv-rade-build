@@ -166,9 +166,13 @@ cd ${builddir}/freedv-gui/build_linux || { echo "cd $builddir/freedv-gui/build_l
 # Create symlink 
 ln -s "$(pwd)"/rade_src/model19_check3 model19_check3 || { echo "Failed to create symlink"; exit 1; }
 
+# Symlink FreeDV-RADE desktop file to desktop
+ln -sf /home/$USER/freedv-rade-build/freedv-rade.desktop /home/$USER/Desktop/freedv-rade.desktop
+
 echo -e "\n########### Build is complete \o/ ############\nYou can run it from your home folder using:\n \
-      ./freedv-start [-f configfile]"
+      ./freedv-start [-f configfile] OR Use the new icon link on your desktop"
 
 # Return home
 cd
+
 
