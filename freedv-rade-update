@@ -61,7 +61,6 @@ sleep 2
 exit 0
 }
 
-
 # Main routine ###################
 clear
 echo "Wait a moment..."
@@ -97,37 +96,37 @@ echo -e "It will optionally:\n \
 if (( bak == 1 )); then
     confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup (R)estore from an existing backup or (Q)uit?" "[U/F/B/R/Q]" "Uu" "Ff" "Bb" "Rr" "Qq"
         case $rval in
-        0)
-        fastupdt=1
-        ;;
-        1)
-        update=1
-        ;;
-        2) 
-        backup=1
-        ;;
-        3)
-        restore=1
-        ;;
-        4)
-        bye
-        ;;
+            0)
+            fastupdt=1
+            ;;
+            1)
+            update=1
+            ;;
+            2)
+            backup=1
+            ;;
+            3)
+            restore=1
+            ;;
+            4)
+            bye
+            ;;
         esac
 else
         confirm "\nDo you want to (U)pdate, (F)ull re-build  (B)ackup or (Q)uit?" "[U/F/B/Q]" "Uu" "Ff" "Bb" "qQ"
         case $rval in
-        0)
-        fastupdt=1
-        ;;
-        1)
-        update=1
-        ;;
-        2) 
-        backup=1
-        ;;
-        3)
-        { echo -e "\nClosing..."; sleep 2; exit 0; }
-        ;;
+            0)
+            fastupdt=1
+            ;;
+            1)
+            update=1
+            ;;
+            2)
+            backup=1
+            ;;
+            3)
+            bye
+            ;;
         esac
 fi
 
