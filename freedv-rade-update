@@ -6,8 +6,8 @@ default="v2.0-dev"
 
 confirm() {
 params=( "$@" )
-rval=4
-while [ $rval -gt 3 ];do
+rval=5
+while (( $rval > 4 )); do
     echo -ne "${params[0]} ${params[1]} "
     ans=
     rval=
@@ -25,8 +25,11 @@ while [ $rval -gt 3 ];do
             [${params[5]}])
                 rval=3
                 ;;
-            *)
+            [${params[6]}])
                 rval=4
+                ;;
+            *)
+                rval=5
                 ;;
         esac
 done
@@ -51,6 +54,15 @@ fi
 PYTHONPATH="$(pwd)/rade_src:$PYTHONPATH" make
 cd || exit 1
 }
+
+bye() {
+echo -e "\nClosing - Bye! :)"
+sleep 2
+exit 0
+}
+
+
+# Main routine ###################
 clear
 echo "Wait a moment..."
 
@@ -72,37 +84,53 @@ echo "################## Welcome to freedv-rade-update ######################"
 echo -e "\n This script is for maintaining a build of FreeDV RADE development version\n \
 created using freedv-rade-build script.\n"
 echo -e "It will optionally:\n \
-* Update FreeDV to the latest $default head or a specific branch/tag/commit#. (fast, recommended) \n \
+* Update FreeDV to the latest $default or a specific branch/tag/commit#. (fast, recommended) \n \
 * Fully rebuild FreeDV from scratch (runs freedv-rade-build). \n \
 * Create a backup of the current version in use.\n \
-* Restore from a previous backup.\n\n\
-Nothing will be done until you finally confirm after the summary."
+* Restore from a previous backup.\n \
+* Quit the program.\n\n\
+************** Nothing will be done until you finally confirm after the summary *************"
 
 # Check if there is already a backup and flag it
 [[ -d freedv-rade_bak ]] && bak=1
 
 if (( bak == 1 )); then
-    if confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup or (R)estore from an existing backup?" "[U/F/B/R]" "Uu" "Ff" "Bb" "Rr"; then
+    confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup (R)estore from an existing backup or (Q)uit?" "[U/F/B/R/Q]" "Uu" "Ff" "Bb" "Rr" "Qq"
+        case $rval in
+        0)
         fastupdt=1
-    elif (( rval == 1 )); then
+        ;;
+        1)
         update=1
-    elif (( rval == 2 )); then 
+        ;;
+        2) 
         backup=1
-    elif (( rval == 3 )); then
+        ;;
+        3)
         restore=1
-    fi
+        ;;
+        4)
+        bye
+        ;;
+        esac
 else
-    if confirm "\nDo you want to (U)pdate, (F)ull re-build  or (B)ackup?" "[U/F/B]" "Uu" "Ff" "Bb"; then
+        confirm "\nDo you want to (U)pdate, (F)ull re-build  (B)ackup or (Q)uit?" "[U/F/B/Q]" "Uu" "Ff" "Bb" "qQ"
+        case $rval in
+        0)
         fastupdt=1
-    elif (( rval == 1 )); then
+        ;;
+        1)
         update=1
-    elif (( rval == 2 )); then 
+        ;;
+        2) 
         backup=1
-    fi
+        ;;
+        3)
+        { echo -e "\nClosing..."; sleep 2; exit 0; }
+        ;;
+        esac
 fi
-#debug
-#echo "U=$fastupdt F=$update B=$backup R=$restore"
-#exit 0
+
 if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch/tag/commit?" "[Y/N]" "yY" "nN"; then
     echo ""
     read -r -p "Enter branch, tag or commit# :" prbranch
@@ -153,7 +181,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     fi
 
     if (( update == 1 )); then 
-        echo "FreeDV will be fully re-built from ${default}."
+        echo "FreeDV will be fully re-built from latest ${default}."
     fi
 
     if (( restore == 1 )); then
@@ -203,10 +231,8 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
             freedv-rade-build/freedv-rade-build
         fi
     else
-        echo -e "\nAborting then - bye! :("
-        exit 0
+        bye
     fi
 else
-    echo -e "\nNothing to do - bye! :)"
-    exit 0
+    bye
 fi
