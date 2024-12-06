@@ -5,37 +5,32 @@
 default="v2.0-dev"
 
 confirm() {
-params=( "$1" "$2" "$3" "$4" "$5" "$6")
+params=( "$@" )
 rval=4
-while ((rval > 3));do
-    echo -ne "${params[0]} ${params[1]}"
+while [ $rval -gt 3 ];do
+    echo -ne "${params[0]} ${params[1]} "
     ans=
     rval=
-    IFS= read -r -n1 ans
-    if [ -z "$ans" ] || ((${#ans} > 1)); then
-        ((rval=4))
-    else
+    read -r ans
         case "$ans" in
-            [${params[2]}]*)
+            [${params[2]}])
                 rval=0
                 ;;
-            [${params[3]}]*)
+            [${params[3]}])
                 rval=1
                 ;;
-            [${params[4]}]*)
+	        [${params[4]}])
                 rval=2
                 ;;
-            [${params[5]}]*)
+            [${params[5]}])
                 rval=3
                 ;;
             *)
                 rval=4
                 ;;
         esac
-    fi
 done
-#echo $rval
-return $rval
+    return $rval
 }
 
 fastupdt() {
@@ -87,26 +82,22 @@ Nothing will be done until you finally confirm after the summary."
 [[ -d freedv-rade_bak ]] && bak=1
 
 if (( bak == 1 )); then
-    confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup or (R)estore from an existing backup?" "[U/F/B/R]" "Uu" "Ff" "Bb" "Rr"
-    val=$?
-    if (( val == 0 )); then
-        [[ "uU" =~ $ans ]] && fastupdt=1
-    elif (( val == 1 )); then
-        [[ "fF" =~ $ans ]] && update=1
-    elif (( val == 2 )); then
-        [[ "bB" =~ $ans ]] && backup=1
-    elif (( val == 3 )); then 
-        [[ "rR" =~ $ans ]] && restore=1
+    if confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup or (R)estore from an existing backup?" "[U/F/B/R]" "Uu" "Ff" "Bb" "Rr"; then
+        fastupdt=1
+    elif (( rval == 1 )); then
+        update=1
+    elif (( rval == 2 )); then 
+        backup=1
+    elif (( rval == 3 )); then
+        restore=1
     fi
 else
-    confirm "\nDo you want to (U)pdate, (F)ull re-build  or (B)ackup?" "[U/F/B]" "Uu" "Ff" "Bb"
-    val=$?
-    if (( val == 0 )); then
-        [[ "uU" =~ $ans ]] && fastupdt=1
-    elif (( val == 1 )); then
-        [[ "fF" =~ $ans ]] && update=1
-    elif (( val == 2 )); then
-        [[ "bB" =~ $ans ]] && backup=1
+    if confirm "\nDo you want to (U)pdate, (F)ull re-build  or (B)ackup?" "[U/F/B]" "Uu" "Ff" "Bb"; then
+        fastupdt=1
+    elif (( rval == 1 )); then
+        update=1
+    elif (( rval == 2 )); then 
+        backup=1
     fi
 fi
 #debug
@@ -123,15 +114,14 @@ if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( bak !=
 # Ask to backup with the current version
     echo -e "\nYou currently have no backup of FreeDV."
     if confirm "\nCreate a backup of the current version?" "[Y/N]" "Yy" "Nn";then
-         [[ "yY" =~ $ans ]] && backup=1
+         backup=1
         # Check we have space
         (( $(df -hBG --output=avail /home |tr '\n' ' '|tr -s ' '|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo -e "\nInsufficient disk space for backup"; backup=0; }
     fi
 fi
 if (( bak == 1 )) && (( restore != 1 )); then
     echo -e "\nYou already have a backup of a previous FreeDV build."
-    confirm "Replace the current backup with a new one of the current version?" "[Y/N]" "Yy" "Nn"
-    if  [[ "yY" =~ $ans ]]; then
+    if confirm "Replace the current backup with a new one of the current version?" "[Y/N]" "Yy" "Nn"; then
         backup=1
         overwrite=1
     else
