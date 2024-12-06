@@ -2,9 +2,9 @@
 
 This script automates installation of the new RADE development versions of freedv-gui-2.0-dev in modern Linux distibutions.
 
-It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu and Debian**
+It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Manjaro and Debian**
 
-It initially checks which Linux distribution is in use, that disk space is adequate, whether internet with working DNS is available and that the script is being run as a regular user.
+It initially checks which Linux distribution is in use, that it is 64 bit, that disk space is adequate, whether internet with working DNS is available and that the script is being run as a regular user.
 
 Then it uses the distro's native package manager to install some essential system packages for which it requests the root password.
 
@@ -38,7 +38,7 @@ It is currently tested in x86_64 installations of the following:
   |Manjaro           |OK    |Thanks to M0SSN for testing!|
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
   |*buntu clones     |??    |Should be OK if `'cat /etc/os-release\|grep -m1 "ID="\|cut -d= -f2' returns 'ubuntu'`|
-  |Arch              |??    |Probably broken deps - needs a tester and bug report|
+  |Arch              |??    |Probably broken deps - needs a tester and bug report - anyone? :) |
 
 
 ## Using the script
