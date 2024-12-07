@@ -166,9 +166,24 @@ cd ${builddir}/freedv-gui/build_linux || { echo "cd $builddir/freedv-gui/build_l
 # Create symlink 
 ln -s "$(pwd)"/rade_src/model19_check3 model19_check3 || { echo "Failed to create symlink"; exit 1; }
 
-echo -e "\n########### Build is complete \o/ ############\nYou can run it from your home folder using:\n \
-      ./freedv-start [-f configfile]"
+cd ~/Desktop || exit
 
-# Return home
+cat > freedv-rade.desktop <<EOF
+[Desktop Entry]
+Version=1.0
+Name=FreeDV-RADE
+Exec=/home/$USER/freedv-start
+Icon=/home/$USER/freedv-rade-build/freedv.png
+Type=Application
+Terminal=true
+Categories=AudioVideo;Audio;HamRadio;
+Comment=Digital Voice mode for HF Radio
+Keywords=Radio;HAM;HF;RF;codec2;voice;modem;
+X-Desktop-File-Install-Version=0.26
+
+EOF
+
 cd
+echo -e "\n########### Build is complete \o/ ############\nYou can run it from your home folder using:\n \
+      ./freedv-start [-f configfile]  OR  use the desktop icon."
 
