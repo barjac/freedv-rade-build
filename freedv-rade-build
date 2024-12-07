@@ -169,7 +169,7 @@ ln -s "$(pwd)"/rade_src/model19_check3 model19_check3 || { echo "Failed to creat
 cd
 # Create .desktop file only if missing (don't overwrite existing)
 if ! [[ -f ~/Desktop/freedv-rade.desktop ]]; then
-cat > freedv-rade.desktop <<EOF
+cat > ~/Desktop/freedv-rade.desktop <<EOF
 [Desktop Entry]
 Version=1.0
 Name=FreeDV-RADE
