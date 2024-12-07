@@ -23,9 +23,11 @@ build_linux.sh is then run to continue with the download and building of more de
 On completion of the build a start script is written to the user's home folder called freedv-start which is then made executable ready for use.
 './freedv-start' or optionally './freedv-start -f yourfreedv.conf' should start freedv v2.0-dev.
 
-The start script includes code to start and stop hamlib rigctld but this needs editing and enabling in the script to suit user's radio etc.
+The 'freedv-start' script already includes code to start and stop hamlib rigctld, this needs editing to suit the user's radio. See notes in the script.
 
-It is currently tested in x86_64 installations of the following:
+A desktop file to start FreeDV is added to the user's ~/Desktop folder. This calls the 'freedv-start' script so changes there e.g. rigctld settings will still work. 
+
+freedv-rade-build has been tested in x86_64 installations of the following:
 
   |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
@@ -40,6 +42,9 @@ It is currently tested in x86_64 installations of the following:
   |*buntu clones     |??    |Should be OK if `'cat /etc/os-release\|grep -m1 "ID="\|cut -d= -f2' returns 'ubuntu'`|
   |Arch              |??    |Probably broken deps - needs a tester and bug report - anyone? :) |
 
+## News
+
+- 7 December 2024 Added a desktop icon to start FreeDV from the desktop
 
 ## Using the script
 
@@ -60,21 +65,20 @@ Now put the kettle on, it will take a while!
 
 On completion you should see a message to that effect and instructions on how to launch the program.
 
-If you are using hamlib don't forget to add yourself (as root) to the 'dialout' group:
+If you are using hamlib don't forget to add yourself (as root) to the 'dialout' group (or in Arch based distros like Manjaro) the 'uucp' group:
 
 \# usermod -aG dialout <your_user_name>
+
+\# usermod -aG uucp <your_user_name>
 
 To make that active you will need to reboot the system.
 
 ## Testing new updates
 There is now a 'freedv-rade-update' script which allows fast updating of your freedv-rade (created using freedv-rade-build), full rebuilds and backup/restore from a simple text menu.
 
-**New** - added ability to optionally build 'Pull Request' branches using the branch name e.g. 'ms-rade-cport' etc.
-          also tags and git# may be used.
-
 N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 
-If you have a clone of this project then:
+If you have a clone of freedv-rade-build then:
 
     1. 'cd ~/freedv-rade-build'
 
