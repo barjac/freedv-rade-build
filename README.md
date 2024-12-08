@@ -27,6 +27,7 @@ The 'freedv-start' script already includes code to start and stop hamlib rigctld
 
 A desktop file to start FreeDV is added to the user's ~/Desktop folder. This calls the 'freedv-start' script so changes there e.g. rigctld settings will still work. 
 
+
 freedv-rade-build has been tested in x86_64 installations of the following:
 
   |**Distribution**      |**Status** | **Notes** | 
@@ -45,6 +46,9 @@ freedv-rade-build has been tested in x86_64 installations of the following:
 ## News
 
 - 7 December 2024 Added a desktop icon to start FreeDV from the desktop
+
+- 8 December 2024 mk-start and mk-desktop scripts may be used stand alone to create 'freedv-start' or install
+'freedv-rade.desktop' files respectively, without running freedv-rade-build.
 
 ## Using the script
 

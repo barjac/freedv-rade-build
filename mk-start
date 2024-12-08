@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Check we are not root
+((UID)) || { echo "You must NOT run $0 as root - aborting!"; exit 0; }
+builddir=/home/$USER/freedv-rade
+# Create run script in user's home
+cd
+cat > freedv-start <<EOF
+#!/bin/bash
+# Start script for freedv rade version
+# Specify a config file to use (optional) default is ~/.freedv
+# e.g. freedv-start -f myfreedv.conf
+####################################
+# Edit and uncomment (remove #) the 'rigcltd...' line below with your radio code (-m) and USB port (-r) to start rigctld at freedv launch.
+# Mine below is for the TS-450S, yours will be different probably without the --set-conf..... part - but leave the '&' at the end of that line.
+# You can look up your rig code number using 'rigctl -l' in a terminal.
+# Uncomment the next line to use Hamlib NET rigctl.
+#rigctld -m 2003 -r /dev/ttyUSB0 -T 0.0.0.0 -t 4532 --set-conf=serial_handshake=None &
+#
+# You will then in freedv set the radio model to 'Hamlib NET rigctl' in the 'CAT and PTT config' and the 'Serial Device' to 'localhost:4532'
+# Other computers wishing to communicate with the radio will be able to use <IP of this machine>:4532. You will need port 4532/tcp open in
+# this  machine's firewall if active.
+####################################
+# Function to kill all rigctld processes
+killrigctld() {
+parr=\$(ps aux|grep [r]igctld|tr -s ' '|cut -d ' ' -f2)
+for p in \${parr[@]};do
+    kill -9 \$p
+done
+}
+
+cd ${builddir}/freedv-gui
+. ./rade-venv/bin/activate
+cd build_linux
+if ! [[ -h model19_check3 ]]; then
+    ln -s \$(pwd)/rade_src/model19_check3 model19_check3
+fi
+PYTHONPATH="\$(pwd)/rade_src:\$PYTHONPATH" src/freedv \$1 \$2
+deactivate
+
+# Uncomment the next line to totally kill rigctld on closing freedv.
+#killrigctld
+
+EOF
+
+# Make start script executable
+chmod +x freedv-start || { echo "chmod +x failed"; exit 1; }
