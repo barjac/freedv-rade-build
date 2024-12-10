@@ -9,17 +9,17 @@ if ! [[ -f ~/Desktop/freedv-rade-update.desktop ]]; then
 cat > ~/Desktop/freedv-rade-update.desktop <<EOF
 [Desktop Entry]
 Version=1.0
-Name=FreeDV-RADE-Update
-Exec=~/freedv-rade-build/freedv-rade-update
-Icon=~/freedv-rade-build/freedv.png
+Name=Update-RADE
+Exec=/home/$USER/freedv-rade-build/freedv-rade-update
+Icon=/home/$USER/freedv-rade-build/freedv.png
 Type=Application
 Terminal=true
 Categories=AudioVideo;Audio;HamRadio;
-Comment=Digital Voice mode for HF Radio
+Comment=Update RADE
 Keywords=Radio;HAM;HF;RF;codec2;voice;modem;
 X-Desktop-File-Install-Version=0.26
 
 EOF
 
-chmod +x Desktop/freedv-rade-update.desktop
+chmod +x ~/Desktop/freedv-rade-update.desktop
 fi
