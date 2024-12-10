@@ -147,7 +147,7 @@ fi
 # Default branch
     (( ${#prbranch} == 0 )) && prbranch="$default"
 
-if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( bak != 1 )) && (( restore != 1 )); then
+if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )); then
 # Ask to backup with the current version
     echo -e "\nYou currently have no backup of FreeDV."
     if confirm "\nCreate a backup of the current version?" "[Y/N]" "Yy" "Nn";then
@@ -156,7 +156,7 @@ if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( bak !=
         (( $(df -hBG --output=avail /home |tr '\n' ' '|tr -s ' '|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo -e "\nInsufficient disk space for backup"; backup=0; }
     fi
 fi
-if (( bak == 1 )) && (( restore != 1 )); then
+if (( bak == 1 )) && (( restore != 1 )) && (( desktop != 1 )); then
     echo -e "\nYou already have a backup of a previous FreeDV build."
     if confirm "Replace the current backup with a new one of the current version?" "[Y/N]" "Yy" "Nn"; then
         backup=1
@@ -166,9 +166,9 @@ if (( bak == 1 )) && (( restore != 1 )); then
     fi
 fi
 # Debug
-#echo "U=$fastupdt F=$update B=$backup R=$restore prbranch=$prbranch"
+echo "U=$fastupdt F=$update B=$backup R=$restore D=$desktop prbranch=$prbranch"
 # Summary of what will be done
-if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore == 1 )); then
+if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore == 1 )) || (( desktop == 1 )); then
     echo -e "\n\nSummary of selected tasks:"
     echo -e "###########################\n"
     if (( backup == 1 )) ; then
@@ -198,11 +198,11 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     fi
 
     if (( desktop == 1 )); then
-        echo -e "A new FreeDV-RADE desktop file (Icon) will be added to your desktop unless\n
-                 a file named 'Freedv-RADE.desktop already exists (maybe re-name it?)."
+        echo -e "A new FreeDV-RADE desktop file (Icon) will be added to your desktop unless \
+a file named 'Freedv-RADE.desktop already exists (maybe re-name it?)."
     fi
 
-    if confirm "\nPerform the selected tasks?" "[Y/N]" "Yy" "Nn";then
+    if confirm "\nPerform the selected tasks?" "[Y/N]" "Yy" "Nn"; then
 
 # Create backup
         if (( backup == 1)); then
@@ -243,6 +243,10 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
             echo -e "\nStarting full rebuild in 5 seconds. Please be patient this will take some time ..."
             sleep 5
             freedv-rade-build/freedv-rade-build
+        fi
+# Desktop file
+        if (( desktop == 1 )); then
+            freedv-rade-build/mk-desktop
         fi
     else
         bye
