@@ -27,6 +27,13 @@ The 'freedv-start' script already includes code to start and stop hamlib rigctld
 
 A desktop file to start FreeDV is added to the user's ~/Desktop folder. This calls the 'freedv-start' script so changes there e.g. rigctld settings will still work. 
 
+**Important** If you start rigctld from 'freedv-start' and run two instances of FreeDV-RADE at the same time, e.g. a second one to monitor an SDR,  then you must use
+ two differently named start scripts.
+
+Copy the original under a new name for the SDR instance without rigctld enabled and use the original for your TX/RX with rigctld activated.
+
+If you want a second desktop file for the SDR instance then you can edit the original to point at the new start script and then create a new main one using the 'Update-RADE' script.
+
 
 freedv-rade-build has been tested in x86_64 installations of the following:
 
@@ -49,6 +56,8 @@ freedv-rade-build has been tested in x86_64 installations of the following:
 
 - 8 December 2024 mk-start and mk-desktop scripts may be used stand alone to create 'freedv-start' or install
 'freedv-rade.desktop' files respectively, without running freedv-rade-build.
+
+- 10 December 2024 Icon added to desktop for Update-FreeDV by full build.
 
 ## Using the script
 
@@ -78,7 +87,13 @@ If you are using hamlib don't forget to add yourself (as root) to the 'dialout' 
 To make that active you will need to reboot the system.
 
 ## Testing new updates
-There is now a 'freedv-rade-update' script which allows fast updating of your freedv-rade (created using freedv-rade-build), full rebuilds and backup/restore from a simple text menu.
+There is a 'freedv-rade-update' script which allows fast updating of your freedv-rade (created using freedv-rade-build), full rebuilds, backup/restore and new desktop file creation from a simple text menu.
+This can now be run from the Update-FreeDV desktop icon.
+
+**NOTE* As this install of FreeDV-RADE is not under your system's package management control, a system update (especially in 'Rolling release' distros) could break FreeDV-RADE. If this happens then you will need
+to run the FreeDV update script and use the 'Full rebuild' option. This will not destroy any settings you have made or
+re-create any default start scripts or desktop files.
+
 
 N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 
@@ -90,7 +105,8 @@ If you have a clone of freedv-rade-build then:
 
     3. 'cd && chmod +x freedv-rade-build/freedv-rade-update' to make the update script executable
 
-    4. 'freedv-rade-build/freedv-rade-update' to run it as often as you like.
+    4. 'freedv-rade-build/freedv-rade-update' to run it as often as you like
+        OR use the new Update-RADE desktop icon to run it.
 
 Just follow the prompts. If you hit a problem please open an issue here.
 
