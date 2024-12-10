@@ -6,8 +6,8 @@ default="v2.0-dev"
 
 confirm() {
 params=( "$@" )
-rval=5
-while (( $rval > 4 )); do
+rval=6
+while (( $rval > 5 )); do
     echo -ne "${params[0]} ${params[1]} "
     ans=
     rval=
@@ -28,8 +28,11 @@ while (( $rval > 4 )); do
             [${params[6]}])
                 rval=4
                 ;;
-            *)
+            [${params[7]}])
                 rval=5
+                ;;
+            *)
+                rval=6
                 ;;
         esac
 done
@@ -87,6 +90,7 @@ echo -e "It will optionally:\n \
 * Fully rebuild FreeDV from scratch (runs freedv-rade-build). \n \
 * Create a backup of the current version in use.\n \
 * Restore from a previous backup.\n \
+* Create a new FreeDV-RADE desktop file \
 * Quit the program.\n\n\
 ************** Nothing will be done until you finally confirm after the summary *************"
 
@@ -94,7 +98,7 @@ echo -e "It will optionally:\n \
 [[ -d freedv-rade_bak ]] && bak=1
 
 if (( bak == 1 )); then
-    confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup (R)estore from an existing backup or (Q)uit?" "[U/F/B/R/Q]" "Uu" "Ff" "Bb" "Rr" "Qq"
+    confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup, (R)estore from backup, Create (D)esktop launcher or (Q)uit?" "[U/F/B/R/D/Q]" "Uu" "Ff" "Bb" "Rr" "Dd" "Qq"
         case $rval in
             0)
             fastupdt=1
@@ -109,11 +113,14 @@ if (( bak == 1 )); then
             restore=1
             ;;
             4)
+            desktop=1
+            ;;
+            5)
             bye
             ;;
         esac
 else
-        confirm "\nDo you want to (U)pdate, (F)ull re-build  (B)ackup or (Q)uit?" "[U/F/B/Q]" "Uu" "Ff" "Bb" "qQ"
+        confirm "\nDo you want to (U)pdate, (F)ull re-build,  (B)ackup, create (D)esktop launcher or (Q)uit?" "[U/F/B/D/Q]" "Uu" "Ff" "Bb" "Dd" "qQ"
         case $rval in
             0)
             fastupdt=1
@@ -125,6 +132,9 @@ else
             backup=1
             ;;
             3)
+            desktop=1
+            ;;
+            4)
             bye
             ;;
         esac
@@ -185,6 +195,11 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
 
     if (( restore == 1 )); then
         echo -e "FreeDV will be restored from your current backup which will remain in place.\nThis will overwrite your current version."
+    fi
+
+    if (( desktop == 1 )); then
+        echo -e "A new FreeDV-RADE desktop file (Icon) will be added to your desktop unless\n
+                 a file named 'Freedv-RADE.desktop already exists (maybe re-name it?)."
     fi
 
     if confirm "\nPerform the selected tasks?" "[Y/N]" "Yy" "Nn";then
