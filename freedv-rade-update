@@ -181,7 +181,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         else
             echo "A backup will be created."
         fi
-    elif (( restore != 1 )); then 
+    elif (( restore != 1 )) || (( desktop == 1 )); then 
         echo "No backup will be created."
     fi
 
