@@ -166,7 +166,7 @@ if (( bak == 1 )) && (( restore != 1 )) && (( desktop != 1 )); then
     fi
 fi
 # Debug
-echo "U=$fastupdt F=$update B=$backup R=$restore D=$desktop prbranch=$prbranch"
+#echo "U=$fastupdt F=$update B=$backup R=$restore D=$desktop prbranch=$prbranch"
 # Summary of what will be done
 if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore == 1 )) || (( desktop == 1 )); then
     echo -e "\n\nSummary of selected tasks:"
@@ -181,8 +181,6 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         else
             echo "A backup will be created."
         fi
-    elif (( restore != 1 )) || (( desktop == 1 )); then 
-        echo "No backup will be created."
     fi
 
     if (( fastupdt == 1 )); then
@@ -198,7 +196,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     fi
 
     if (( desktop == 1 )); then
-        echo -e "A new FreeDV-RADE desktop file (Icon) will be added to your desktop unless \
+        echo -e "A new FreeDV-RADE desktop file (Icon) will be added to your desktop unless\n
 a file named 'Freedv-RADE.desktop already exists (maybe re-name it?)."
     fi
 
@@ -218,7 +216,7 @@ a file named 'Freedv-RADE.desktop already exists (maybe re-name it?)."
 
 # Fast update
         if (( fastupdt == 1 )); then
-            echo -e "\nStarting fast update in 5 seconds to ${prbranch}."
+            echo -e "\nStarting fast update in 5 seconds to latest ${prbranch}."
             sleep 5
             if fastupdt; then
                 echo "Update complete"
