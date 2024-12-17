@@ -90,7 +90,7 @@ echo -e "It will optionally:\n \
 * Fully rebuild FreeDV from scratch (runs freedv-rade-build). \n \
 * Create a backup of the current version in use.\n \
 * Restore from a previous backup.\n \
-* Create a new FreeDV-RADE desktop file \
+* Create a new FreeDV-RADE desktop file.\n \
 * Quit the program.\n\n\
 ************** Nothing will be done until you finally confirm after the summary *************"
 
