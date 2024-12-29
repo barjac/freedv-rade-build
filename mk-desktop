@@ -21,9 +21,7 @@ X-Desktop-File-Install-Version=0.26
 
 EOF
 
-    chmod +x Desktop/freedv-rade.desktop
-
-    { echo -e "\nDesktop file created!"; exit 0; }
-else
-    { echo -e "\nDesktop file already exists!"; exit 1; } 
+	if [[ -f ~/Desktop/freedv-rade.desktop ]]; then
+    	chmod +x Desktop/freedv-rade.desktop || echo "WARNING: failed to chmod desktop file"
+	fi
 fi

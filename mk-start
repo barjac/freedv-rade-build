@@ -6,9 +6,9 @@ builddir=/home/$USER/freedv-rade
 
 cd
 # Create start script in user's home if not present
-if ! [[ -f freedv-start ]]; then
+if ! [[ -f ~/freedv-start ]]; then
 
-cat > freedv-start <<EOF
+cat > ~/freedv-start <<EOF
 #!/bin/bash
 # Start script for freedv rade version
 # Specify a config file to use (optional) default is ~/.freedv
@@ -49,8 +49,7 @@ deactivate
 EOF
 
 # Make start script executable
-chmod +x freedv-start || { echo "chmod +x failed"; exit 1; }
-
-else
-    return 1
+	if [[ -f ~/freedv-start ]]; then
+		chmod +x ~/freedv-start || echo "WARNING: chmod +x freedv-start failed"
+	fi
 fi
