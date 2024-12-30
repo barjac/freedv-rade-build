@@ -41,12 +41,12 @@ done
 
 fastupdt() {
 cd freedv-rade/freedv-gui || exit 1
-    if (( ${#prbranch} > 0 )); then
-        if git checkout "$prbranch" | grep -q "error:"; then
-            echo -e "\nError finding $prbranch - closing.\n"
-            exit 1
-        fi
-    fi
+#    if (( ${#prbranch} > 0 )); then
+#        if git checkout "$prbranch" | grep -q "error:"; then
+#            echo -e "\nError finding $prbranch - closing.\n"
+#            exit 1
+#        fi
+#    fi
 # Check branch etc. up to date
 git pull
 source ./rade-venv/bin/activate
@@ -86,7 +86,7 @@ echo "################## Welcome to freedv-rade-update ######################"
 echo -e "\n This script is for maintaining a build of FreeDV RADE development version\n \
 created using freedv-rade-build script.\n"
 echo -e "It will optionally:\n \
-* Update FreeDV to the latest $default or a specific branch/tag/commit#. (fast, recommended) \n \
+* Update FreeDV to the latest $default. (fast, recommended) \n \
 * Fully rebuild FreeDV from scratch (runs freedv-rade-build). \n \
 * Create a backup of the current version in use.\n \
 * Restore from a previous backup.\n \
@@ -140,12 +140,12 @@ else
         esac
 fi
 
-if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch/tag/commit?" "[Y/N]" "yY" "nN"; then
-    echo ""
-    read -r -p "Enter branch, tag or commit# :" prbranch
-fi
+#if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch/tag/commit?" "[Y/N]" "yY" "nN"; then
+#    echo ""
+#    read -r -p "Enter branch, tag or commit# :" prbranch
+#fi
 # Default branch
-    (( ${#prbranch} == 0 )) && prbranch="$default"
+#    (( ${#prbranch} == 0 )) && prbranch="$default"
 
 if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )); then
 # Ask to backup with the current version
@@ -184,11 +184,11 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     fi
 
     if (( fastupdt == 1 )); then
-        echo "FreeDV will be updated to $prbranch"
+        echo "FreeDV will be updated to $default"
     fi
 
     if (( update == 1 )); then 
-        echo "FreeDV will be fully re-built from latest ${default}."
+        echo "FreeDV will be fully re-built from latest $default"
     fi
 
     if (( restore == 1 )); then
@@ -216,7 +216,7 @@ a file named 'Freedv-RADE.desktop already exists (maybe re-name it?)."
 
 # Fast update
         if (( fastupdt == 1 )); then
-            echo -e "\nStarting fast update in 5 seconds to latest ${prbranch}."
+            echo -e "\nStarting fast update in 5 seconds to latest ${default}."
             sleep 5
             if fastupdt; then
                 echo "Update complete"
