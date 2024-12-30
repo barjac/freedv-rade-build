@@ -41,12 +41,14 @@ done
 
 fastupdt() {
 cd freedv-rade/freedv-gui || exit 1
-#    if (( ${#prbranch} > 0 )); then
-#        if git checkout "$prbranch" | grep -q "error:"; then
-#            echo -e "\nError finding $prbranch - closing.\n"
-#            exit 1
-#        fi
-#    fi
+git switch main || { echo "ERROR: switching to main"; exit 1; }
+git pull
+    if (( ${#prbranch} > 0 )); then
+        if git switch "$prbranch" | grep -q "error:"; then
+            echo -e "\nError finding $prbranch - closing.\n"
+            exit 1
+        fi
+    fi
 # Check branch etc. up to date
 git pull
 source ./rade-venv/bin/activate
@@ -69,16 +71,16 @@ clear
 echo "Wait a moment..."
 
 # Check we are not root
-((UID)) || { echo "You must NOT be root user to run $0, use CTRL/d to become $USER"; exit 1; }
+((UID)) || { echo "ERROR: You must NOT be root user to run $0, use CTRL/d to become $USER"; exit 1; }
 
 # Check we have internet and DNS
-ping -c3 google.com > /dev/null || { echo "Failed to find internet connection or DNS"; exit 1; }
+ping -c3 google.com > /dev/null || { echo "ERROR: Failed to find internet connection or DNS"; exit 1; }
 
 # Do all from user's home folder
 cd || exit 1
 
 # Check that freedv-rade-build is there
-[[ -d freedv-rade-build ]] || { echo -e "The freedv-rade-build folder is missing!\nFollow the instructions in the README #at:\nhttps://github.com/barjac/freedv-rade-build\n"; exit 1; }
+[[ -d freedv-rade-build ]] || { echo -e "ERROR: The freedv-rade-build folder is missing!\nFollow the instructions in the README #at:\nhttps://github.com/barjac/freedv-rade-build\n"; exit 1; }
 
 # Preamble
 clear
@@ -86,7 +88,7 @@ echo "################## Welcome to freedv-rade-update ######################"
 echo -e "\n This script is for maintaining a build of FreeDV RADE development version\n \
 created using freedv-rade-build script.\n"
 echo -e "It will optionally:\n \
-* Update FreeDV to the latest $default. (fast, recommended) \n \
+* Update FreeDV to the latest $default or a specified branch (fast, recommended) \n \
 * Fully rebuild FreeDV from scratch (runs freedv-rade-build). \n \
 * Create a backup of the current version in use.\n \
 * Restore from a previous backup.\n \
@@ -140,12 +142,12 @@ else
         esac
 fi
 
-#if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch/tag/commit?" "[Y/N]" "yY" "nN"; then
-#    echo ""
-#    read -r -p "Enter branch, tag or commit# :" prbranch
-#fi
+if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch?" "[Y/N]" "yY" "nN"; then
+    echo ""
+    read -r -p "Enter branch, tag or commit# :" prbranch
+fi
 # Default branch
-#    (( ${#prbranch} == 0 )) && prbranch="$default"
+    (( ${#prbranch} == 0 )) && prbranch="$default"
 
 if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )); then
 # Ask to backup with the current version
@@ -184,7 +186,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     fi
 
     if (( fastupdt == 1 )); then
-        echo "FreeDV will be updated to $default"
+        echo "FreeDV will be updated to $prbranch"
     fi
 
     if (( update == 1 )); then 
@@ -216,7 +218,7 @@ a file named 'Freedv-RADE.desktop already exists (maybe re-name it?)."
 
 # Fast update
         if (( fastupdt == 1 )); then
-            echo -e "\nStarting fast update in 5 seconds to latest ${default}."
+            echo -e "\nStarting fast update in 5 seconds to latest ${prbranch}."
             sleep 5
             if fastupdt; then
                 echo "Update complete"
