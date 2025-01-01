@@ -41,7 +41,7 @@ done
 
 fastupdt() {
 cd freedv-rade/freedv-gui || exit 1
-git switch main || { echo "ERROR: switching to main"; exit 1; }
+git switch master || { echo "ERROR: switching to main"; exit 1; }
 git pull
     if (( ${#prbranch} > 0 )); then
         if git switch "$prbranch" | grep -q "error:"; then
