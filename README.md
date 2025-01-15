@@ -4,6 +4,9 @@ This script automates installation of the new RADE development versions of freed
 
 It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Manjaro and Debian**
 
+## What it does
+If you are not interested in how this all works and just want to use it then skip to the 'Using the Script' section below.
+
 It initially checks which Linux distribution is in use, that it is 64 bit, that disk space is adequate, whether internet with working DNS is available and that the script is being run as a regular user.
 
 Then it uses the distro's native package manager to install some essential system packages for which it requests the root password.
