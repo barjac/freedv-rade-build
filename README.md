@@ -20,7 +20,8 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Manjaro 
 ## What it does
 If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below.
 
-It initially checks which Linux distribution is in use, that it is 64 bit, that disk space is adequate, whether internet with working DNS is available and that the script is being run as a regular user.
+It initially checks which Linux distribution is in use, that it is 64 bit, that disk space is adequate, whether internet with working DNS is
+available and that the script is being run as a regular user.
 
 Then it uses the distro's native package manager to install some essential system packages for which it requests the root password.
 
@@ -43,7 +44,7 @@ The 'freedv-start' script already includes code to start and stop hamlib rigctld
 
 A desktop file to start FreeDV is added to the user's ~/Desktop folder. This calls the 'freedv-start' script so changes there e.g. rigctld settings will still work. 
 
-**Important** If you start rigctld from 'freedv-start' and wnat to run two instances of FreeDV-RADE at the same time, e.g. a second one to monitor an SDR,  then you
+**Important** If you start rigctld from 'freedv-start' and want to run two instances of FreeDV-RADE at the same time, e.g. a second one to monitor an SDR,  then you
  must use two differently named start scripts.
 
 Copy the original under a new name for the SDR instance without rigctld enabled and use the original for your TX/RX with rigctld activated.
