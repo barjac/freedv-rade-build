@@ -4,8 +4,21 @@ This script automates installation of the new RADE development versions of freed
 
 It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Manjaro and Debian**
 
+  |**Distribution**      |**Status** | **Notes** | 
+  |:---              | :----: | :--- |
+  |Mageia 9          |OK    | Current stable|
+  |Mageia 10 (-dev)  |OK    | Next release  |
+  |Linux Mint 22     |OK    |               |
+  |Debian 12         |OK    |               |
+  |Fedora 41         |OK    |               |
+  |Ubuntu 24.04 LTS  |OK    |               |
+  |Manjaro           |OK    |Thanks to M0SSN for testing!|
+  |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
+  |*buntu clones     |??    |Should be OK if `'cat /etc/os-release\|grep -m1 "ID="\|cut -d= -f2' returns 'ubuntu'`|
+  |Arch              |??    |Probably broken deps - needs a tester and bug report - anyone? :) |
+  
 ## What it does
-If you are not interested in how this all works and just want to use it then skip to the 'Using the Script' section below.
+If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below.
 
 It initially checks which Linux distribution is in use, that it is 64 bit, that disk space is adequate, whether internet with working DNS is available and that the script is being run as a regular user.
 
@@ -30,28 +43,12 @@ The 'freedv-start' script already includes code to start and stop hamlib rigctld
 
 A desktop file to start FreeDV is added to the user's ~/Desktop folder. This calls the 'freedv-start' script so changes there e.g. rigctld settings will still work. 
 
-**Important** If you start rigctld from 'freedv-start' and run two instances of FreeDV-RADE at the same time, e.g. a second one to monitor an SDR,  then you must use
- two differently named start scripts.
+**Important** If you start rigctld from 'freedv-start' and wnat to run two instances of FreeDV-RADE at the same time, e.g. a second one to monitor an SDR,  then you
+ must use two differently named start scripts.
 
 Copy the original under a new name for the SDR instance without rigctld enabled and use the original for your TX/RX with rigctld activated.
 
 If you want a second desktop file for the SDR instance then you can edit the original to point at the new start script and then create a new main one using the 'Update-RADE' script.
-
-
-freedv-rade-build has been tested in x86_64 installations of the following:
-
-  |**Distribution**      |**Status** | **Notes** | 
-  |:---              | :----: | :--- |
-  |Mageia 9          |OK    | Current stable|
-  |Mageia 10 (-dev)  |OK    | Next release  |
-  |Linux Mint 22     |OK    |               |
-  |Debian 12         |OK    |               |
-  |Fedora 41         |OK    |               |
-  |Ubuntu 24.04 LTS  |OK    |               |
-  |Manjaro           |OK    |Thanks to M0SSN for testing!|
-  |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
-  |*buntu clones     |??    |Should be OK if `'cat /etc/os-release\|grep -m1 "ID="\|cut -d= -f2' returns 'ubuntu'`|
-  |Arch              |??    |Probably broken deps - needs a tester and bug report - anyone? :) |
 
 ## News
 
@@ -68,8 +65,8 @@ freedv-rade-build has been tested in x86_64 installations of the following:
 
     1. Install the 'git' package using your package manager.
 
-    2. Go to a terminal emulator on you machine and type: 'cd' followed by the ENTER key to be sure you are in
-    your home directory
+    2. Go to a terminal emulator on you machine and type: 'cd' followed by the 
+    ENTER key to be sure you are in your home directory
 
     3. Type: 'git clone https://github.com/barjac/freedv-rade-build' then ENTER
 
@@ -91,16 +88,14 @@ To make that active you will need to reboot the system.
 
 ## Testing new updates
 There is a 'freedv-rade-update' script which allows fast updating of your freedv-rade (created using freedv-rade-build), full rebuilds, backup/restore and new desktop file creation from a simple text menu.
-This can now be run from the Update-FreeDV desktop icon.
+This can now be run from the Update-FreeDV desktop icon, which for recent installs will already be installed.
 
-**NOTE* As this install of FreeDV-RADE is not under your system's package management control, a system update (especially in 'Rolling release' distros) could break FreeDV-RADE. If this happens then you will need
-to run the FreeDV update script and use the 'Full rebuild' option. This will not destroy any settings you have made or
-re-create any default start scripts or desktop files.
-
+**NOTE* As this install of FreeDV-RADE is not under your system's package management control, a system update (especially in 'Rolling release' distros)
+could break FreeDV-RADE. If this happens then you will need to run the FreeDV update script and use the 'Full rebuild' option. This will not destroy any settings you have made or re-create any default start scripts or desktop files.
 
 N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 
-If you have a clone of freedv-rade-build then:
+If you have an early clone of freedv-rade-build then you can update it as follows:
 
     1. 'cd ~/freedv-rade-build'
 
@@ -109,7 +104,7 @@ If you have a clone of freedv-rade-build then:
     3. 'cd && chmod +x freedv-rade-build/freedv-rade-update' to make the update script executable
 
     4. 'freedv-rade-build/freedv-rade-update' to run it as often as you like
-        OR use the new Update-RADE desktop icon to run it.
+        OR use it the new Update-RADE desktop icon to run it.
 
 Just follow the prompts. If you hit a problem please open an issue here.
 
