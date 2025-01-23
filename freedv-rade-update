@@ -3,6 +3,8 @@
 
 # Set default branch
 default="v2.0-dev"
+prbranch=""
+pname=""
 
 confirm() {
 params=( "$@" )
@@ -12,6 +14,9 @@ while (( $rval > 5 )); do
     ans=
     rval=
     read -r ans
+    # Get first option if ans is empty
+    ans=${ans:-$(echo ${params[1]} | cut -b 2)}
+    echo $ans
         case "$ans" in
             [${params[2]}])
                 rval=0
@@ -41,7 +46,7 @@ done
 
 fastupdt() {
 cd freedv-rade/freedv-gui || exit 1
-git switch master || { echo "ERROR: switching to main"; exit 1; }
+git switch master || { echo "ERROR: switching to master"; exit 1; }
 git pull
     if (( ${#prbranch} > 0 )); then
         if git switch "$prbranch" | grep -q "error:"; then
@@ -51,6 +56,16 @@ git pull
     fi
 # Check branch etc. up to date
 git pull
+
+# Apply a patch if there is one
+if (( ${#pname} > 0 )); then
+    if ! patch -p1 < ../../freedv-rade-build/$pname; then
+    echo $(pwd)
+        echo "Patch failed to apply.  pwd= $(pwd)"
+        exit 1
+    fi
+fi
+
 source ./rade-venv/bin/activate
 cd build_linux || exit 1
 if ! [[ -h model19_check3 ]]; then
@@ -94,7 +109,9 @@ echo -e "It will optionally:\n \
 * Restore from a previous backup.\n \
 * Create a new FreeDV-RADE desktop file.\n \
 * Quit the program.\n\n\
-************** Nothing will be done until you finally confirm after the summary *************"
+************** Nothing will be done until you finally confirm after the summary *************
+
+TIP: Hitting ENTER without typing will automatically select the first option to questions."
 
 # Check if there is already a backup and flag it
 [[ -d freedv-rade_bak ]] && bak=1
@@ -142,17 +159,26 @@ else
         esac
 fi
 
-if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch?" "[Y/N]" "yY" "nN"; then
+if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch?" "[N/y]" "yY" "nN"; then
     echo ""
-    read -r -p "Enter branch, tag or commit# :" prbranch
+    read -r -p "Enter branch name:" prbranch
 fi
-# Default branch
+# Use default branch if non entered
     (( ${#prbranch} == 0 )) && prbranch="$default"
+
+if (( fastupdt == 1 )) && confirm "\n\nAdd a patch?" "[N/y]" "yY" "nN"; then
+    echo -e  "\n NOTE: Patch file must be in /home/$USER/freedv-rade/build/ folder"
+    read -r -p "Enter the patch name:" pname
+fi
+
+# Check patch exists
+#(( ${#pname} == 0 )) || [[ -z ../../freedv-rade-build/$pname ]] && { echo "ERROR: Non existant or invalid patch name"; exit 1 }
+
 
 if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )); then
 # Ask to backup with the current version
-    echo -e "\nYou currently have no backup of FreeDV."
-    if confirm "\nCreate a backup of the current version?" "[Y/N]" "Yy" "Nn";then
+    echo -e "\nYou currently have no backup of FreeDV-RADE."
+    if confirm "\nCreate a backup of the current version?" "[N/y]" "Yy" "Nn"; then
          backup=1
         # Check we have space
         (( $(df -hBG --output=avail /home |tr '\n' ' '|tr -s ' '|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo -e "\nInsufficient disk space for backup"; backup=0; }
@@ -160,7 +186,7 @@ if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( deskto
 fi
 if (( bak == 1 )) && (( restore != 1 )) && (( desktop != 1 )); then
     echo -e "\nYou already have a backup of a previous FreeDV build."
-    if confirm "Replace the current backup with a new one of the current version?" "[Y/N]" "Yy" "Nn"; then
+    if confirm "Replace the current backup with a new one of the current version?" "[N/y]" "Yy" "Nn"; then
         backup=1
         overwrite=1
     else
@@ -198,11 +224,11 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     fi
 
     if (( desktop == 1 )); then
-        echo -e "A new FreeDV-RADE desktop file (Icon) will be added to your desktop unless\n
-a file named 'Freedv-RADE.desktop already exists (maybe re-name it?)."
+        echo -e "A new FreeDV-RADE desktop file (Icon) will be added to your desktop unless\n \
+ a file named 'Freedv-RADE.desktop already exists (maybe re-name it?)."
     fi
 
-    if confirm "\nPerform the selected tasks?" "[Y/N]" "Yy" "Nn"; then
+    if confirm "\nPerform the selected tasks?" "[Y/n]" "Yy" "Nn"; then
 
 # Create backup
         if (( backup == 1)); then
