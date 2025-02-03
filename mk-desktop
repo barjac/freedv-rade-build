@@ -22,6 +22,6 @@ X-Desktop-File-Install-Version=0.26
 EOF
 
 	if [[ -f ~/Desktop/freedv-rade.desktop ]]; then
-    	chmod +x Desktop/freedv-rade.desktop || echo "WARNING: failed to chmod desktop file"
+    	chmod +x ~/Desktop/freedv-rade.desktop || echo "WARNING: failed to chmod desktop file"
 	fi
 fi
