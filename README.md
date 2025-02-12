@@ -58,7 +58,7 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 - 8 December 2024 mk-start and mk-desktop scripts may be used stand alone to create 'freedv-start' or install
 'freedv-rade.desktop' files respectively, without running freedv-rade-build.
 
-- 10 December 2024 Icon added to desktop for Update-FreeDV by full build.
+- 10 December 2024 Icon added to desktop for Update-FreeDV during a full build.
 
 ## Using the script
 
@@ -105,7 +105,7 @@ If you have an early clone of freedv-rade-build then you can update it as follow
     3. 'cd && chmod +x freedv-rade-build/freedv-rade-update' to make the update script executable
 
     4. 'freedv-rade-build/freedv-rade-update' to run it as often as you like
-        OR use it the new Update-RADE desktop icon to run it.
+        OR use the Update-RADE desktop icon to run it.
 
 Just follow the prompts. If you hit a problem please open an issue here.
 
