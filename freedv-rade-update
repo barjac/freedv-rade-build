@@ -68,7 +68,7 @@ fi
 
 # Use a specific commit
 if (( ${#cname} > 0 )); then
-	if ! git checkout --detached $cname; then
+	if ! git checkout --detach $cname; then
 		echo "ERROR: Can't find that git#"
 		exit 1
 	fi
@@ -224,7 +224,16 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     fi
 
     if (( fastupdt == 1 )); then
-        echo "FreeDV will be updated to $prbranch"
+		updt_str=" curent $prbranch"
+
+    	if (( ${#pname} > 0 )); then
+    	    updt_str="$updt_str patched with $pname"
+	    fi
+	    if (( ${#cname} >0 )); then
+	        updt_str="$updt_str at commit $cname"
+    		
+        echo "FreeDV will be updated to $updt_str"
+        fi
     fi
 
     if (( update == 1 )); then 
