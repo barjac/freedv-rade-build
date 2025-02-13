@@ -66,6 +66,14 @@ if (( ${#pname} > 0 )); then
     fi
 fi
 
+# Use a specific commit
+if (( ${#cname} > 0 )); then
+	if ! git checkout --detached $cname; then
+		echo "ERROR: Can't find that git#"
+		exit 1
+	fi
+fi
+
 source ./rade-venv/bin/activate
 cd build_linux || exit 1
 if ! [[ -h model19_check3 ]]; then
@@ -169,6 +177,10 @@ fi
 if (( fastupdt == 1 )) && confirm "\n\nAdd a patch?" "[N/y]" "yY" "nN"; then
     echo -e  "\n NOTE: Patch file must be in /home/$USER/freedv-rade/build/ folder"
     read -r -p "Enter the patch name:" pname
+fi
+
+if (( fastupdt == 1 )) && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
+    read -r -p "Enter the commit git#:" cname
 fi
 
 # Check patch exists
