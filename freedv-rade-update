@@ -9,7 +9,7 @@ pname=""
 confirm() {
 params=( "$@" )
 rval=6
-while (( $rval > 5 )); do
+while (( $rval > 6 )); do
     echo -ne "${params[0]} ${params[1]} "
     ans=
     rval=
@@ -36,8 +36,11 @@ while (( $rval > 5 )); do
             [${params[7]}])
                 rval=5
                 ;;
-            *)
+            [${params[8]}])
                 rval=6
+                ;;
+            *)
+                rval=7
                 ;;
         esac
 done
@@ -115,6 +118,7 @@ echo -e "It will optionally:\n \
 * Fully rebuild FreeDV from scratch (runs freedv-rade-build). \n \
 * Create a backup of the current version in use.\n \
 * Restore from a previous backup.\n \
+* Switch backup with current \
 * Create a new FreeDV-RADE desktop file.\n \
 * Quit the program.\n\n\
 ************** Nothing will be done until you finally confirm after the summary *************
@@ -125,7 +129,7 @@ TIP: Hitting ENTER without typing will automatically select the first option to 
 [[ -d freedv-rade_bak ]] && bak=1
 
 if (( bak == 1 )); then
-    confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup, (R)estore from backup, Create (D)esktop launcher or (Q)uit?" "[U/F/B/R/D/Q]" "Uu" "Ff" "Bb" "Rr" "Dd" "Qq"
+    confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup, (R)estore from backup, (S)witch backup/current, Create (D)esktop launcher or (Q)uit?" "[U/F/B/R/D/Q]" "Uu" "Ff" "Bb" "Rr" "Dd" "Qq"
         case $rval in
             0)
             fastupdt=1
@@ -139,10 +143,13 @@ if (( bak == 1 )); then
             3)
             restore=1
             ;;
-            4)
+            5)
             desktop=1
             ;;
-            5)
+            6)
+            switch=1
+            ;;
+            7)
             bye
             ;;
         esac
@@ -276,7 +283,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         fi
 
 # Restore from backup
-        if (( restore == 1)); then
+        if (( restore == 1 )); then
             echo -e "\nRestoring from backup..."
             if (rm -rf freedv-rade/ && cp -rf freedv-rade_bak/ freedv-rade); then
                 echo "Restore complete."
@@ -284,6 +291,14 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
                 echo "Restore failed."
             fi
         fi
+        
+# Switch backup with current
+		if (( switch == 1 )); then
+			echo -e "\nSwitching backup with current"
+			mv freedv-rade freedv-rade_tmp || { echo "Failed to move freedv-rade to freedv-rade_tmp"; exit 1; }
+			mv freedv-rade_bak freedv-rade || { echo "Failed to move freedv-rade_bak to freedv-rade"; exit 1; }
+			mv freedv-rade_tmp freedv-rade_bak ||{ echo "Failed to move freedv-rade_tmp to freedv-rade_bak"; exit 1; }
+		fi
 
 # Full re-build
         if (( update == 1 )); then 
