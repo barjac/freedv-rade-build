@@ -254,8 +254,8 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     fi
 
     if (( switch == 1 )); then
-    	echo -e "The current version will be switched with the one in backup and vice versa"
-	fi
+        echo -e "The current version will be switched with the one in backup and vice versa"
+    fi
 
     if (( desktop == 1 )); then
         echo -e "A new FreeDV-RADE desktop file (Icon) will be added to your desktop unless\n \
