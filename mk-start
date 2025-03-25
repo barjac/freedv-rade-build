@@ -2,7 +2,11 @@
 
 # Check we are not root
 ((UID)) || { echo "You must NOT run $0 as root - aborting!"; exit 0; }
-builddir=/home/$USER/freedv-rade
+if (( ${#1} > 0 )); then
+    builddir=$1
+else
+    builddir=/home/${USER}/freedv-rade
+fi
 
 cd
 # Create start script in user's home if not present

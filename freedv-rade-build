@@ -6,11 +6,18 @@
 # Check that this is a 64bit machine
 uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
 
-# Path of base dir to use
-builddir=/home/$USER/freedv-rade
+# Get path of base dir to use, defaults to /home/$USER
+if cat /home/${USER}/.freedv-rade-build.cfg |grep -v '^[#]'|grep -q "basedir="; then
+	basedir=$(cat /home/${USER}/.freedv-rade-build.cfg|grep -v '^[#]'|grep 'basedir='|cut -d= -f2)
+else
+	basedir=/home/$USER
+fi
+
+# Set default build dir name
+builddir=freedv-rade
 
 # Check we have space
-(( $(df -hBG --output=avail /home |tr '\n' ' '|tr -s ' '|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo "ERROR: You will need more than 3GB of free disk space in $HOME"; exit 1; }
+(( $(df -hBG --output=avail $basedir |tr '\n' ' '|tr -s ' '|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo "ERROR: You will need more than 3GB of free disk space in $baseddir"; exit 1; }
 
 # Check we have internet and DNS
 ping -c3 google.com > /dev/null || { echo "ERROR: Failed to find internet connection or DNS"; exit 1; }
@@ -18,6 +25,7 @@ ping -c3 google.com > /dev/null || { echo "ERROR: Failed to find internet connec
 # Find out where we are
 . /etc/os-release
 echo -e "\nHello ${USER}, you seem to be using ${PRETTY_NAME}\n"
+echo -e "Installation will be made into ${basedir}/${builddir}\n"
 
 # Install some system deps
 case $ID in
@@ -82,21 +90,21 @@ case $ID in
     ;;
 esac
 
-# Create a base working directory in home
-mkdir -p $builddir || { echo "ERROR: mkdir $builddir failed"; exit 1; }
+# Create a build directory
+mkdir -p ${basedir}/${builddir} || { echo "ERROR: mkdir ${basedir}/${builddir} failed"; exit 1; }
 
-# Move into base dir
-cd $builddir || { echo "ERROR: cd to $builddir failed"; exit 1; }
+# Move into build dir
+cd ${basedir}/${builddir} || { echo "ERROR: cd to ${basedir}/${builddir} failed"; exit 1; }
 
 # Delete freedv-gui directory
-rm -rf ${builddir}/freedv-gui || { echo "ERROR: removing old freedv-gui dir"; exit 1; }
+rm -rf ${basedir}/${builddir}/freedv-gui || { echo "ERROR: removing old freedv-gui dir"; exit 1; }
 
 # Get the latest freedv sources from github
 echo Cloning freedv github repository...
 git clone https://github.com/drowe67/freedv-gui.git || { echo "ERROR: git clone failed"; exit 1; }
 
 # Move into source code directory
-cd ${builddir}/freedv-gui || { echo "ERROR: cd to freedv-gui failed"; exit 1; }
+cd ${basedir}/${builddir}/freedv-gui || { echo "ERROR: cd to freedv-gui failed"; exit 1; }
 
 # Change to the RADE branch
 git switch v2.0-dev || { echo "ERROR: switch to v2.0-dev branch failed"; exit 1; }
@@ -127,10 +135,10 @@ if [[ $ID == "mageia" ]] || [[ $ID == "linuxmint" ]] || [[ $ID == "fedora" ]] ||
 pip3 install NumPy || { echo "ERROR: numpy pip install failed"; exit 1; }
 fi
 # Run the freedv build script
-./build_linux.sh || { echo "ERROR: Build failed for some reason, check for errors above and run again later if a download failed"; deactivate; exit 1; }
+./build_linux.sh || { echo "ERROR: Build failed for some reason, check for errors above and run again later."; deactivate; exit 1; }
 
-# Move back into the build directory
-cd ${builddir}/freedv-gui/build_linux || { echo "ERROR: cd $builddir/freedv-gui/build_linux failed"; exit 1; }
+# Move back into build_linux
+cd ${basedir}/${builddir}/freedv-gui/build_linux || { echo "ERROR: cd ${basedir}/${builddir}/freedv-gui/build_linux failed"; exit 1; }
 
 # Create symlink 
 ln -s "$(pwd)"/rade_src/model19_check3 model19_check3 || { echo "Failed to create symlink"; exit 1; }
@@ -139,7 +147,7 @@ ln -s "$(pwd)"/rade_src/model19_check3 model19_check3 || { echo "Failed to creat
 deactivate || echo "WARNING:Issue deactivating venv"
 
 # Make start script
-~/freedv-rade-build/mk-start || echo "WARNING: freedv-start script was not created (maybe exists?)"
+~/freedv-rade-build/mk-start ${basedir}/${builddir} || echo "WARNING: freedv-start script was not created (maybe exists?)"
 
 # Make destop file
 ~/freedv-rade-build/mk-desktop || echo "WARNING: freedv desktop file was not created (maybe exists?)"
