@@ -199,7 +199,7 @@ if (( fastupdt == 1 )) && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"
 fi
 
 # Check patch exists
-(( ${#pname} > 0 )) && [[ -z /home/$USER/freedv-rade-build/$pname ]] && { echo "ERROR: Non existant or invalid patch name"; exit 1 }
+(( ${#pname} > 0 )) && [[ -z /home/$USER/freedv-rade-build/$pname ]] && { echo "ERROR: Non existant or invalid patch name"; exit 1; }
 
 
 if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )) && (( switch != 1 )); then
