@@ -13,6 +13,9 @@ else
 	basedir=/home/$USER
 fi
 
+touch ${basedir}/test > /dev/null 2>&1 || { echo -e "Target folder $basedir is not writeable by $USER\n check permissions on this directory\n"; exit 1; }
+rm -f ${basedir}/test
+
 # Set default build dir name
 builddir=freedv-rade
 
