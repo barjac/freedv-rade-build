@@ -8,8 +8,8 @@ pname=""
 cname=""
 
 # Get path of base dir in use, defaults to /home/$USER
-if cat /home/${USER}/.freedv-rade-build.cfg |grep -v '^[#]'|grep -q "basedir="; then
-    basedir=$(cat /home/${USER}/.freedv-rade-build.cfg|grep -v '^[#]'|grep 'basedir='|cut -d= -f2)
+if cat /home/${USER}/freedv-rade-build/freedv-rade-build.cfg |grep -v '^[#]'|grep -q "basedir="; then
+    basedir=$(cat /home/${USER}/freedv-rade-build/freedv-rade-build.cfg|grep -v '^[#]'|grep 'basedir='|cut -d= -f2)
 else
     basedir=/home/$USER
 fi
@@ -326,7 +326,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         if (( desktop == 1 )); then
             freedv-rade-build/mk-desktop
         fi
-    else
+
         bye
     fi
 else

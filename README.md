@@ -23,11 +23,16 @@ If you are not interested in how this all works and just want to use it then ski
 It initially checks which Linux distribution is in use, that it is 64 bit, that disk space is adequate, whether internet with working DNS is
 available and that the script is being run as a regular user.
 
+It now also checks for a freedv-rade-build.cfg file which may be used to set a specific build directory outside the user's home folder.
+This change has been made in response to Issue#3, however unless you have a specific need to use this feature then just ignore it,
+especially if you are not a regular Linux user.
+More help on this is in ~/freedv-rade-build/freedv-rade-anywhere.txt
+
 Then it uses the distro's native package manager to install some essential system packages for which it requests the root password.
 
 The remaining script then continues as the regular user.
 
-A working directory called freedv-rade is created in the user's home directory which is used to hold the complete installation.
+A working directory called freedv-rade is created in the user's home folder (or alternative 'base' folder) which is used to hold the complete installation.
 
 The freedv-gui sources are cloned from github and (at present) the v2.0-dev branch is checked out.
 
@@ -40,14 +45,14 @@ build_linux.sh is then run to continue with the download and building of more de
 On completion of the build a start script is written to the user's home folder called freedv-start which is then made executable ready for use.
 './freedv-start' or optionally './freedv-start -f yourfreedv.conf' should start freedv v2.0-dev.
 
-The 'freedv-start' script already includes code to start and stop hamlib rigctld, this needs editing to suit the user's radio. See notes in the script.
+The 'freedv-start' script already includes code (commented out by default) to start and stop hamlib rigctld, this needs editing to suit the user's radio. See notes in the script.
 
 A desktop file to start FreeDV is added to the user's ~/Desktop folder. This calls the 'freedv-start' script so changes there e.g. rigctld settings will still work. 
 
 **Important** If you start rigctld from 'freedv-start' and want to run two instances of FreeDV-RADE at the same time, e.g. a second one to monitor an SDR,  then you
  must use two differently named start scripts.
 
-Copy the original under a new name for the SDR instance without rigctld enabled and use the original for your TX/RX with rigctld activated.
+Copy the original under a new name for the SDR instance without rigctld enabled and use the original for your TX/RX instance with rigctld activated.
 
 If you want a second desktop file for the SDR instance then you can edit the original to point at the new start script and then create a new main one using the 'Update-RADE' script.
 
@@ -59,6 +64,8 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 'freedv-rade.desktop' files respectively, without running freedv-rade-build.
 
 - 10 December 2024 Icon added to desktop for Update-FreeDV during a full build.
+
+- 28 March 2025 Added option to use a build folder anywhere, not only in the user's home.
 
 ## Using the script
 
@@ -75,23 +82,27 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 
     5. Type: 'freedv-rade-build/freedv-rade-build' then ENTER
 
+    6. Enter the root password when prompted to install some system files then ENTER
+
 Now put the kettle on, it will take a while!
 
 On completion you should see a message to that effect and instructions on how to launch the program.
 
-If you are using hamlib don't forget to add yourself (as root) to the 'dialout' group (or in Arch based distros like Manjaro) the 'uucp' group:
+If you are using hamlib don't forget to add yourself (as root) to the 'dialout' group:
 
 \# usermod -aG dialout <your_user_name>
+
+Or in Arch based distros like Manjaro the 'uucp' group:
 
 \# usermod -aG uucp <your_user_name>
 
 To make that active you will need to reboot the system.
 
 ## Testing new updates
-There is a 'freedv-rade-update' script which allows fast updating of your freedv-rade (created using freedv-rade-build), full rebuilds, backup/restore and new desktop file creation from a simple text menu.
+There is a 'freedv-rade-update' script which allows updating of your freedv-rade (created using freedv-rade-build), full rebuilds, backup/restore and new desktop file creation from a simple text menu.
 This can now be run from the Update-FreeDV desktop icon, which for recent installs will already be installed.
 
-**NOTE* As this install of FreeDV-RADE is not under your system's package management control, a system update (especially in 'Rolling release' distros)
+**NOTE* As this install of FreeDV-RADE is not under your system's package management control, a system update (especially in a 'Rolling release' distros)
 could break FreeDV-RADE. If this happens then you will need to run the FreeDV update script and use the 'Full rebuild' option. This will not destroy any settings you have made or re-create any default start scripts or desktop files.
 
 N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!

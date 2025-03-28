@@ -1,0 +1,36 @@
+
+### How to use a different 'base' directory for your instalation of freedv-rade-build ###
+
+##########################################################################################
+
+ The installed rade system creates around ~1.9GB of files in your user's home folder and 
+ double this if you make a backup, this is not a problem if you have plenty of space, but
+ if you are short on disk space then you can arrange for the main FreeDV installed system
+ to be anywhere you like.
+
+ This does involve some knowledge of Linux permissions, disk partitions and the directory
+ structure though and unless you have a pressing reason to do this it is highly recommended
+ to use the default settings which place everything under your home folder.
+
+##########################################################################################
+
+
+ 1. Create a new folder called e.g. 'rade' on a partition that has plenty of space available
+    OR create a new partition of around 5GB and create a mount point for this partition.
+    
+ 2. Make sure that the new folder is read/write enabled for your regular user.
+    The freedv-rade-build script will halt with a warning if it cannot write to the base folder.
+
+ 3. As your user run the following command in a terminal using your own
+  'full/path/to/your/base/folder' :
+
+    'echo "basedir=full/path/to/your/base/folder" > /home/$USER/.freedv-rade-build.cfg'
+    
+    NOTE copy/paste everything between the '' into your terminal and then edit the folder
+    path and name in the command, before hitting ENTER. You should see no response unless
+    an error occured.
+
+ 4. Now follow the normal instructions for using freedv-rade-build (freedv-rade-build.md)
+    and the space used in your home folder will be minimal.
+    
+    Enjoy FreeDV!
