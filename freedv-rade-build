@@ -6,11 +6,16 @@
 # Check that this is a 64bit machine
 uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
 
-# Get path of base dir to use, defaults to /home/$USER
-if cat /home/${USER}/freedv-rade-build/freedv-rade-build.cfg|grep -v '^[#]'|grep -q "basedir="; then
-	basedir=$(cat /home/${USER}/freedv-rade-build/freedv-rade-build.cfg|grep -v '^[#]'|grep 'basedir='|cut -d= -f2)
+# Get/set path of base dir to use, defaults to /home/$USER
+if [[ -f /home/${USER}/.freedv-rade-build.cfg ]]; then
+    if cat /home/${USER}/.freedv-rade-build.cfg|grep -v '^[#]'|grep -q "basedir="; then
+        basedir=$(cat /home/${USER}/.freedv-rade-build.cfg|grep -v '^[#]'|grep 'basedir='|cut -d= -f2)
+    else
+        basedir=/home/$USER
+    fi
 else
-	basedir=/home/$USER
+    echo "basedir=/home/$USER" > /home/${USER}/.freedv-rade-build.cfg
+    basedir=/home/$USER
 fi
 
 # Check permissions on target dir
