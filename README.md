@@ -103,7 +103,7 @@ To make that active you will need to reboot the system.
 There is a 'freedv-rade-update' script which allows updating of your freedv-rade (created using freedv-rade-build), full rebuilds, backup/restore and new desktop file creation from a simple text menu.
 This can now be run from the Update-FreeDV desktop icon, which for recent installs will already be installed.
 
-**NOTE* As this install of FreeDV-RADE is not under your system's package management control, a system update (especially in a 'Rolling release' distros)
+**NOTE* As this install of FreeDV-RADE is not under your system's package management control, a system update (especially in a 'Rolling release' distro)
 could break FreeDV-RADE. If this happens then you will need to run the FreeDV update script and use the 'Full rebuild' option. This will not destroy any settings you have made or re-create any default start scripts or desktop files.
 
 N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
