@@ -14,6 +14,7 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Manjaro 
   |Ubuntu 24.04 LTS  |OK    |               |
   |Manjaro           |OK    |Thanks to M0SSN for testing!|
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
+  |Kubuntu Oracular (Dev)|OK |Thanks to sblandford for testing!|
   |*buntu clones     |??    |Should be OK if `'cat /etc/os-release\|grep -m1 "ID="\|cut -d= -f2' returns 'ubuntu'`|
   |Arch              |??    |Probably broken deps - needs a tester and bug report - anyone? :) |
   
