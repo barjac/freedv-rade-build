@@ -2,7 +2,7 @@
 
 This script automates installation of the new RADE development versions of freedv-gui-2.0-dev in modern Linux distibutions.
 
-It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Manjaro and Debian**
+It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro and Debian**
 
   |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
