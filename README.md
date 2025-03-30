@@ -24,7 +24,7 @@ If you are not interested in how this all works and just want to use it then ski
 It initially checks which Linux distribution is in use, that it is 64 bit, that disk space is adequate, whether internet with working DNS is
 available and that the script is being run as a regular user.
 
-It now also checks for a freedv-rade-build.cfg file which may be used to set a specific build directory outside the user's home folder.
+It now also checks for a .freedv-rade-build.cfg file which may be used to set a specific build directory outside the user's home folder.
 This change has been made in response to Issue#3, however unless you have a specific need to use this feature then just ignore it,
 especially if you are not a regular Linux user.
 More help on this is in ~/freedv-rade-build/freedv-rade-anywhere.txt
