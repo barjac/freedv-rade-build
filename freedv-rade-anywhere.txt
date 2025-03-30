@@ -22,7 +22,7 @@
     The freedv-rade-build script will halt with a warning if it cannot write to the base folder.
 
  3. As your user run the following command in a terminal using your own
-  'full/path/to/your/base/folder' :
+    'full/path/to/your/base/folder' :
 
     'echo "basedir=full/path/to/your/base/folder" > /home/$USER/.freedv-rade-build.cfg'
     
