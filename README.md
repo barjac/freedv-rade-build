@@ -74,8 +74,8 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 
     1. Install the 'git' package using your package manager.
 
-    2. Go to a terminal emulator on you machine and type: 'cd' followed by the 
-    ENTER key to be sure you are in your home directory
+    2. Go to a terminal emulator on your machine and type: 'cd' followed by the 
+    ENTER key to be sure you are in your home directory.
 
     3. Type: 'git clone https://github.com/barjac/freedv-rade-build' then ENTER
 
