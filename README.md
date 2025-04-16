@@ -2,13 +2,14 @@
 
 This script automates installation of the new RADE development versions of freedv-gui-2.0-dev in modern Linux distibutions.
 
-It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro and Debian**
+It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro OpenSUSE Tumbleweed and Debian**
 
   |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
   |Mageia 9          |OK    | Current stable|
   |Mageia 10 (-dev)  |OK    | Next release  |
   |Linux Mint 22     |OK    |               |
+  |OpenSUSE Tumbleweed|OK    |               |
   |Debian 12         |OK    |               |
   |Fedora 41         |OK    |               |
   |Ubuntu 24.04 LTS  |OK    |               |
@@ -72,7 +73,7 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 
    N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 
-    1. Install the 'git' package using your package manager.
+    1. Install the 'git' package using your package manager (git-core in SUSE).
 
     2. Go to a terminal emulator on your machine and type: 'cd' followed by the 
     ENTER key to be sure you are in your home directory.
