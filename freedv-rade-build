@@ -48,7 +48,7 @@ case $ID in
     echo "Enter the root password to install some initially needed dependencies"
     sudo zypper --non-interactive in --no-recommends cmake patch automake autoconf libtool wxGTK3-devel libsamplerate-devel \
             libsndfile-devel speexdsp-devel alsa-lib-devel libao-devel libgsm-devel gcc-c++ sox python3-virtualenv \
-            pulseaudio-devel python3 python3-devel python3 \
+            pulseaudio-devel python3 python3-devel hamlib hamlib-devel \
             || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     linuxmint)
