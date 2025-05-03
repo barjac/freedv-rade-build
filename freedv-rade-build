@@ -41,21 +41,22 @@ case $ID in
     mageia)
     echo "Enter the root password to install some initially needed dependencies"
     su -c "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
-           libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel" \
+           libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
+           fonts-ttf-google-noto-emoji-color" \
            || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     opensuse-tumbleweed)
     echo "Enter the root password to install some initially needed dependencies"
     sudo zypper --non-interactive in --no-recommends cmake patch automake autoconf libtool wxGTK3-devel libsamplerate-devel \
             libsndfile-devel speexdsp-devel alsa-lib-devel libao-devel libgsm-devel gcc-c++ sox python3-virtualenv \
-            pulseaudio-devel python3 python3-devel hamlib hamlib-devel \
+            pulseaudio-devel python3 python3-devel hamlib hamlib-devel google-noto-coloremoji-fonts \
             || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     linuxmint)
     echo "Enter the root password to install some initially needed dependencies"
     sudo apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
            libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3.12-venv libpulse-dev autoconf libtool \
-           python3-numpy-dev python3 python3-dev libhamlib-utils \
+           python3-numpy-dev python3 python3-dev libhamlib-utils fonts-noto-color-emoji \
            || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     fedora)
@@ -63,21 +64,21 @@ case $ID in
     sudo dnf group install development-tools
     sudo dnf install --setopt=install_weak_deps=False git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
     hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel libtool \
-         python3-torchaudio python3-torch python3-devel \
+         python3-torchaudio python3-torch python3-devel google-noto-emoji-color-fonts \
            || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     ubuntu)
     echo "Enter the root password to install some initially needed dependencies"
     sudo apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
            libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3.12-venv libpulse-dev autoconf libtool \
-           python3-numpy-dev python3 python3-dev libhamlib-utils \
+           python3-numpy-dev python3 python3-dev libhamlib-utils fonts-noto-color-emoji \
            || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     debian)
     echo "Enter the root password to install some initially needed dependencies"
     su -c "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
            libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3.11-venv libpulse-dev autoconf libtool \
-           python3-numpy-dev python3-dev libhamlib-utils" \
+           python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji" \
            || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     arch)
