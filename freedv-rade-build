@@ -84,13 +84,13 @@ case $ID in
     arch)
     echo "Enter the root password to install some initially needed dependencies"
     su -c "pacman -S --needed cmake gcc base-devel autoconf libtool git python speexdsp libsamplerate sox \
-            wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy pulseaudio gsm" \
+            wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy pulseaudio gsm noto-color-emoji-fontconfig" \
             || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     manjaro)
     echo "Enter the root password to install some initially needed dependencies"
     su -c "pacman -S --needed cmake gcc base-devel autoconf libtool git python speexdsp libsamplerate sox \
-            wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy manjaro-pulse gsm" \
+            wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy manjaro-pulse gsm noto-fonts-emoji" \
             || { echo "Deps install failed - try again later"; exit 1; }
     ;;
 #    pclinuxos)  # Hamlib package seems unmaintained here and build from git currently fails.
