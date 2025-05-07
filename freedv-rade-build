@@ -39,11 +39,20 @@ echo -e "Installation will be made into ${basedir}/${builddir}\n"
 # Install some system deps
 case $ID in
     mageia)
+    # Check Mageia version as google emoji fonts package changed name.
+    mgaver=$(cat /etc/mageia-release|cut -d' ' -f3)
     echo "Enter the root password to install some initially needed dependencies"
-    su -c "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
-           libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
-           fonts-ttf-google-noto-emoji-color" \
-           || { echo "Deps install failed - try again later"; exit 1; }
+    if [[ $mgaver -gt "9" ]]; then
+            su -c "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
+            libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
+            fonts-ttf-google-noto-emoji-color" \
+            || { echo "Deps install failed - try again later"; exit 1; }
+    else
+        su -c "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
+            libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
+            google-noto-emoji-color-fonts" \
+            || { echo "Deps install failed - try again later"; exit 1; }
+    fi
     ;;
     opensuse-tumbleweed)
     echo "Enter the root password to install some initially needed dependencies"
