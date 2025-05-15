@@ -41,7 +41,7 @@ case $ID in
     mageia)
     # Check Mageia version as google emoji fonts package changed name.
     echo "Enter the root password to install some initially needed dependencies"
-    if [[ "$VERSION_ID" -ge "9" ]]; then
+    if [[ "$VERSION_ID" -gt "9" ]]; then
             su -c "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
             libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
             fonts-ttf-google-noto-emoji-color" \
@@ -69,13 +69,13 @@ case $ID in
     ;;
     fedora)
     echo "Enter the root password to install some initially needed dependencies"
-        if [[ "$VERSION_ID" => "42" ]]; then
+        if [[ "$VERSION_ID" -ge "42" ]]; then
             sudo dnf5 install @development-tools
             sudo dnf5 install git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
             hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel libtool \
             python3-torchaudio python3-torch python3-devel google-noto-emoji-color-fonts --no-weakdeps \
             || { echo "Deps install failed - try again later"; exit 1; }
-        elif [[ "$VERSION_ID" =< "41" ]]; then
+        elif [[ "$VERSION_ID" -le "41" ]]; then
             sudo dnf group install development-tools
             sudo dnf install --setopt=install_weak_deps=False git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
             hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel libtool \
