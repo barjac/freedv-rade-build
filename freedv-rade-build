@@ -73,7 +73,7 @@ case $ID in
             sudo dnf5 install @development-tools
             sudo dnf5 install git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
             hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel libtool \
-            python3-torchaudio python3-torch python3-devel google-noto-emoji-color-fonts --no-weakdeps \
+            python3-devel google-noto-emoji-color-fonts \
             || { echo "Deps install failed - try again later"; exit 1; }
         elif [[ "$VERSION_ID" -le "41" ]]; then
             sudo dnf group install development-tools
