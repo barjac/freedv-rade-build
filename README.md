@@ -11,7 +11,7 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu,
   |Linux Mint 22     |OK    |               |
   |OpenSUSE Tumbleweed|OK    |               |
   |Debian 12         |OK    |               |
-  |Fedora 41         |OK    |               |
+  |Fedora 40, 41, 42 |OK    |               |
   |Ubuntu 24.04 LTS  |OK    |               |
   |Manjaro           |OK    |Thanks to M0SSN for testing!|
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
