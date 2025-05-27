@@ -57,6 +57,10 @@ done
 
 fastupdt() {
 cd ${basedir}/freedv-rade/freedv-gui || exit 1
+
+# Remove any patched/edited files
+git reset --hard
+
 git switch master || { echo "ERROR: switching to master"; exit 1; }
 git pull
     if (( ${#prbranch} > 0 )); then
@@ -65,8 +69,6 @@ git pull
             exit 1
         fi
     fi
-# Check branch etc. up to date
-git pull
 
 # Apply a patch if there is one
 if (( ${#pname} > 0 )); then
