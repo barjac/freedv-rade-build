@@ -61,7 +61,9 @@ cd ${basedir}/freedv-rade/freedv-gui || exit 1
 # Remove any patched/edited files
 git reset --hard
 
-git switch master || { echo "ERROR: switching to master"; exit 1; }
+git switch $default || { echo "ERROR: switching to $default"; exit 1; }
+#git switch master || { echo "ERROR: switching to master"; exit 1; }
+
 git pull
     if (( ${#prbranch} > 0 )); then
         if git switch "$prbranch" | grep -q "error:"; then
