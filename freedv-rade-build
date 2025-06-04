@@ -1,5 +1,5 @@
 #!/bin/bash
-# This script tries to install the pre-release freedv-v2.00 from github on various linux distributions
+# This script installs freedv RADE from github on various linux distributions
 # Check we are not root
 ((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 0; }
 
@@ -139,8 +139,8 @@ git clone https://github.com/drowe67/freedv-gui.git || { echo "ERROR: git clone 
 # Move into source code directory
 cd ${basedir}/${builddir}/freedv-gui || { echo "ERROR: cd to freedv-gui failed"; exit 1; }
 
-# Change to the RADE branch
-git switch v2.0-dev || { echo "ERROR: switch to v2.0-dev branch failed"; exit 1; }
+# Change to the dev branch when available
+#git switch v2.0.0 || { echo "ERROR: switch to v2.0-dev branch failed"; exit 1; }
 
 # Create a python virtual environment with access to system python modules
 if [[ $ID == "debug" ]] || [[ $ID == "linuxmint" ]] || [[ $ID == "fedora" ]] || [[ $ID == "ubuntu" ]] || [[ $ID == "debian" ]] || [[ $ID = "pclinuxos" ]]; then

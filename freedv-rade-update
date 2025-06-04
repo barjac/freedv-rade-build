@@ -2,7 +2,7 @@
 #set -x
 
 # Set default branch
-default="v2.0-dev"
+default="master"
 prbranch=""
 pname=""
 cname=""
@@ -61,7 +61,7 @@ cd ${basedir}/freedv-rade/freedv-gui || exit 1
 # Remove any patched/edited files
 git reset --hard
 
-git switch master || { echo "ERROR: switching to master"; exit 1; }
+git switch $default || { echo "ERROR: switching to $default"; exit 1; }
 
 git pull
 
@@ -123,7 +123,7 @@ cd || exit 1
 # Preamble
 clear
 echo "################## Welcome to freedv-rade-update ######################"
-echo -e "\n This script is for maintaining a build of FreeDV RADE development version\n \
+echo -e "\n This script is for maintaining a build of FreeDV RADE \n \
 created using freedv-rade-build script.\n"
 echo -e "It will optionally:\n \
 * Update FreeDV to the latest $default or a specified branch (fast, recommended) \n \

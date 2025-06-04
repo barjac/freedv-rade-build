@@ -1,6 +1,6 @@
  # freedv-rade-build
 
-This script automates installation of the new RADE development versions of freedv-gui-2.0-dev in modern Linux distibutions.
+This script automates installation of RADE versions of FreeDV-gui in modern Linux distibutions.
 
 It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro OpenSUSE Tumbleweed and Debian**
 
@@ -25,7 +25,7 @@ If you are not interested in how this all works and just want to use it then ski
 It initially checks which Linux distribution is in use, that it is 64 bit, that disk space is adequate, whether internet with working DNS is
 available and that the script is being run as a regular user.
 
-It now also checks for a .freedv-rade-build.cfg file which may be used to set a specific build directory outside the user's home folder.
+It also checks for a .freedv-rade-build.cfg file which may be used to set a specific build directory outside the user's home folder.
 This change has been made in response to Issue#3, however unless you have a specific need to use this feature then just ignore it,
 especially if you are not a regular Linux user.
 More help on this is in ~/freedv-rade-build/freedv-rade-anywhere.txt
@@ -45,7 +45,7 @@ Several essential python modules are then installed by python pip in the virtual
 build_linux.sh is then run to continue with the download and building of more dependencies and ultimately freedv.
 
 On completion of the build a start script is written to the user's home folder called freedv-start which is then made executable ready for use.
-'./freedv-start' or optionally './freedv-start -f yourfreedv.conf' should start freedv v2.0-dev.
+'./freedv-start' or optionally './freedv-start -f yourfreedv.conf' should start freedv.
 
 The 'freedv-start' script already includes code (commented out by default) to start and stop hamlib rigctld, this needs editing to suit the user's radio. See notes in the script.
 
@@ -68,6 +68,8 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 - 10 December 2024 Icon added to desktop for Update-FreeDV during a full build.
 
 - 28 March 2025 Added option to use a build folder anywhere, not only in the user's home.
+
+- 4 June 2025 Updated for the release of FreeDV-2.0.0 which now uses master branch.
 
 ## Using the script
 
@@ -104,8 +106,8 @@ To make that active you will need to reboot the system.
 There is a 'freedv-rade-update' script which allows updating of your freedv-rade (created using freedv-rade-build), full rebuilds, backup/restore and new desktop file creation from a simple text menu.
 This can now be run from the Update-FreeDV desktop icon, which for recent installs will already be installed.
 
-**NOTE* As this install of FreeDV-RADE is not under your system's package management control, a system update (especially in a 'Rolling release' distro)
-could break FreeDV-RADE. If this happens then you will need to run the FreeDV update script and use the 'Full rebuild' option. This will not destroy any settings you have made or re-create any default start scripts or desktop files.
+**NOTE* As this installation of FreeDV is not under your system's package management control, a system update (especially in a 'Rolling release' distro)
+could break FreeDV. If this happens then you will need to run the FreeDV update script and use the 'Full rebuild' option. This will not destroy any settings you have made or re-create any default start scripts or desktop files.
 
 N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 
