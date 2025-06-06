@@ -85,10 +85,10 @@ case $ID in
     ;;
     ubuntu)
     echo "Enter the root password to install some initially needed dependencies"
-        if [[ "$VERSION_ID" -eq "24.04" ]]; then
+        if [[ "$VERSION_ID" == "24.04" ]]; then
             sudo apt install libwxgtk3.2-dev python3-numpy-dev python3.12-venv || { echo "Deps install failed - try again later"; exit 1; }
-        elif [[ "$VERSION_ID" -eq "22.04" ]]; then
-            sudo apt install libwxgtk3.0-dev python3-numpy python3.10-venv || { echo "Deps install failed - try again later"; exit 1; }
+        elif [[ "$VERSION_ID" == "22.04" ]]; then
+            sudo apt install libwxgtk3.0-gtk3-dev python3-numpy python3.10-venv || { echo "Deps install failed - try again later"; exit 1; }
         fi
             sudo apt install libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
