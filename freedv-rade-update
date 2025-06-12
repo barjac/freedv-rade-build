@@ -212,7 +212,7 @@ if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( deskto
     if confirm "\nCreate a backup of the current version?" "[N/y]" "Yy" "Nn"; then
          backup=1
         # Check we have space
-        (( $(df -hBG --output=avail $basedir |tr '\n' ' '|tr -s ' '|cut -d ' ' -f2|xargs|cut -dG -f1) > 3 )) || { echo -e "\nInsufficient disk space for backup"; backup=0; }
+        (( $(df -hBG --output=avail $basedir |tr '\n' ' '|tr -s ' '|xargs|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo -e "\nInsufficient disk space for backup"; backup=0; }
     fi
 fi
 if (( bak == 1 )) && (( restore != 1 )) && (( desktop != 1 )) && (( switch != 1 )); then
