@@ -105,7 +105,7 @@ case $ID in
     debian)
     echo "Enter the root password to install some initially needed dependencies"
     su -c "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
-           libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3.11-venv libpulse-dev autoconf libtool \
+           libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev autoconf libtool \
            python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji" \
            || { echo "Deps install failed - try again later"; exit 1; }
     ;;
