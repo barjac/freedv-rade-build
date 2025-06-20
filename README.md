@@ -10,7 +10,7 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu,
   |Mageia 10 (-dev)  |OK    | Next release  |
   |Linux Mint 22     |OK    |               |
   |OpenSUSE Tumbleweed|OK    |               |
-  |Debian 12         |OK    |               |
+  |Debian 12 & 13    |OK    |Thanks to Uli DF7SC for testing!
   |Fedora 40, 41, 42 |OK    |               |
   |Ubuntu 24.04 LTS  |OK    |               |
   |Ubuntu 22.04 LTS  |OK    |Thanks to LU3JIJ for testing!               |
