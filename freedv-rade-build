@@ -79,28 +79,26 @@ case $ID in
     echo "Enter the root password to install some initially needed dependencies"
         FC_ID=$(echo $VERSION_ID|cut -d. -f1)
         if (( FC_ID == 42 )); then
-            sudo dnf5 install @development-tools
-            sudo dnf5 install git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
+            sudo dnf5 install--setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
             hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel libtool \
             python3-devel google-noto-emoji-color-fonts \
             || { echo "Deps install failed - try again later"; exit 1; }
         elif (( FC_ID == 41 )); then
-            sudo dnf group install development-tools
-            sudo dnf install --setopt=install_weak_deps=False git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
-            hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel libtool \
-            python3-devel google-noto-emoji-color-fonts \
+            sudo dnf install --setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel \
+            libsndfile-devel speexdsp-devel hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv \
+            pulseaudio-libs-devel libtool python3-devel google-noto-emoji-color-fonts \
             || { echo "Deps install failed - try again later"; exit 1; }
         fi
     ;;
     ubuntu)
     echo "Enter the root password to install some initially needed dependencies"
-        UBUNTU_ID=$(echo $VERSION_ID|tr -d '.')
+        UBUNTU_ID=$(echo $VERSION_ID|cut -d. -f1)
             sudo apt update
-        if (( UBUNTU_ID >= 2404 )); then
+        if (( UBUNTU_ID == 24 )); then
             sudo apt install -y --no-install-recommends libwxgtk3.2-dev python3-numpy-dev python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libao-dev libasound2-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
             python3 python3-dev libhamlib-utils fonts-noto-color-emoji || { echo "Deps install failed - try again later"; exit 1; }
-        else
+        elif (( UBUNTU_ID >= 22 )); then
             sudo apt install -y --no-install-recommends libwxgtk3.0-gtk3-dev python3-numpy python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
             python3 python3-dev libhamlib-utils fonts-noto-color-emoji || { echo "Deps install failed - try again later"; exit 1; }
