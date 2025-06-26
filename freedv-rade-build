@@ -68,12 +68,14 @@ case $ID in
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
             autoconf libtool python3-numpy-dev python3 python3-dev libhamlib-utils fonts-noto-color-emoji \
             || { echo "Deps install failed - try again later"; exit 1; }
-	elif (( MINT_ID == 21 )); then
+    elif (( MINT_ID == 21 )); then
             sudo apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
             autoconf libtool python3-numpy python3 python3-dev libhamlib-utils fonts-noto-color-emoji \
             || { echo "Deps install failed - try again later"; exit 1; }
-	fi
+    else
+        { echo "This Mint version is not yet supported, please create an isuue in github"; exit 1; }
+    fi
     ;;
     fedora)
     echo "Enter the root password to install some initially needed dependencies"
@@ -88,13 +90,16 @@ case $ID in
             libsndfile-devel speexdsp-devel hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv \
             pulseaudio-libs-devel libtool python3-devel google-noto-emoji-color-fonts \
             || { echo "Deps install failed - try again later"; exit 1; }
+
+        else
+            { echo "This Fedora version is not yet supported, please create an isuue in github"; exit 1; }
         fi
     ;;
     ubuntu)
     echo "Enter the root password to install some initially needed dependencies"
         UBUNTU_ID=$(echo $VERSION_ID|cut -d. -f1)
             sudo apt update
-        if (( UBUNTU_ID == 24 )); then
+        if (( UBUNTU_ID >= 24 )); then
             sudo apt install -y --no-install-recommends libwxgtk3.2-dev python3-numpy-dev python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libao-dev libasound2-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
             python3 python3-dev libhamlib-utils fonts-noto-color-emoji || { echo "Deps install failed - try again later"; exit 1; }
@@ -102,6 +107,8 @@ case $ID in
             sudo apt install -y --no-install-recommends libwxgtk3.0-gtk3-dev python3-numpy python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
             python3 python3-dev libhamlib-utils fonts-noto-color-emoji || { echo "Deps install failed - try again later"; exit 1; }
+        else
+            { echo "This Ubuntu version is not yet supported, please create an isuue in github"; exit 1; }
         fi
     ;;
     debian)
@@ -114,7 +121,7 @@ case $ID in
     arch)
     echo "Enter the root password to install some initially needed dependencies"
     sudo pacman -Syu cmake gcc base-devel autoconf libtool git python speexdsp libsamplerate sox \
-            wxgtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy pulseaudio gsm noto-color-emoji-fontconfig \
+    wxgtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy pulseaudio gsm noto-color-emoji-fontconfig \
             || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     manjaro)
@@ -131,8 +138,8 @@ case $ID in
 #           || { echo "Deps install failed - try again later"; exit 1; }
 #    ;;
     *)
-    echo "Sorry I don't have information for $PRETTY_NAME yet."
-    echo "Please create an issue with details of your system."
+    echo "Sorry $PRETTY_NAME is not yet supported."
+    echo "Please create a github issue with details of your system."
     exit 0
     ;;
 esac
@@ -152,9 +159,6 @@ git clone https://github.com/drowe67/freedv-gui.git || { echo "ERROR: git clone 
 
 # Move into source code directory
 cd ${basedir}/${builddir}/freedv-gui || { echo "ERROR: cd to freedv-gui failed"; exit 1; }
-
-# Change to the dev branch when available
-#git switch v2.0.0 || { echo "ERROR: switch to v2.0-dev branch failed"; exit 1; }
 
 # Create a python virtual environment with access to system python modules
 if [[ $ID == "debug" ]] || [[ $ID == "linuxmint" ]] || [[ $ID == "fedora" ]] || [[ $ID == "ubuntu" ]] || [[ $ID == "debian" ]] || [[ $ID = "pclinuxos" ]]; then
