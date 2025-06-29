@@ -73,14 +73,15 @@ run_as_root() {
 case $ID in
     mageia)
     echo "Enter the root password if requested to install some initially needed dependencies"
-    if (( VERSION_ID > 9 )); then
+    MGA_ID=$(echo $VERSION_ID|cut -d. -f1)
+    if (( MGA_ID > 9 )); then
             run_as_root "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
-            libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
+            libao-devel gsm-devel gcc-c++ automake sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
             fonts-ttf-google-noto-emoji-color" \
             || { echo "Deps install failed"; exit 1; }
     else
             run_as_root "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
-            libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
+            libao-devel gsm-devel gcc-c++ automake sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
             google-noto-emoji-color-fonts" \
             || { echo "Deps install failed"; exit 1; }
     fi
