@@ -76,11 +76,13 @@ case $ID in
     if (( VERSION_ID > 9 )); then
             run_as_root "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
             libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
-            fonts-ttf-google-noto-emoji-color"
+            fonts-ttf-google-noto-emoji-color" \
+            || { echo "Deps install failed"; exit 1; }
     else
             run_as_root "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
             libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
-            google-noto-emoji-color-fonts"
+            google-noto-emoji-color-fonts" \
+            || { echo "Deps install failed"; exit 1; }
     fi
     ;;
     opensuse-tumbleweed)
@@ -88,7 +90,7 @@ case $ID in
     sudo zypper --non-interactive in --no-recommends cmake patch automake autoconf libtool wxGTK3-devel libsamplerate-devel \
             libsndfile-devel speexdsp-devel alsa-lib-devel libao-devel libgsm-devel gcc-c++ sox python3-virtualenv \
             pulseaudio-devel python3 python3-devel hamlib hamlib-devel google-noto-coloremoji-fonts \
-            || { echo "Deps install failed - try again later"; exit 1; }
+            || { echo "Deps install failed"; exit 1; }
     ;;
     linuxmint)
     echo "Enter the root password to install some initially needed dependencies"
@@ -97,12 +99,12 @@ case $ID in
             sudo apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
             autoconf libtool python3-numpy-dev python3 python3-dev libhamlib-utils fonts-noto-color-emoji \
-            || { echo "Deps install failed - try again later"; exit 1; }
+            || { echo "Deps install failed"; exit 1; }
     elif (( MINT_ID == 21 )); then
             sudo apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
             autoconf libtool python3-numpy python3 python3-dev libhamlib-utils fonts-noto-color-emoji \
-            || { echo "Deps install failed - try again later"; exit 1; }
+            || { echo "Deps install failed"; exit 1; }
     else
         { echo "This Mint version is not yet supported, please create an isuue in github"; exit 1; }
     fi
@@ -114,12 +116,12 @@ case $ID in
             sudo dnf5 install--setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
             hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel libtool \
             python3-devel google-noto-emoji-color-fonts \
-            || { echo "Deps install failed - try again later"; exit 1; }
+            || { echo "Deps install failed"; exit 1; }
         elif (( FC_ID == 41 )); then
             sudo dnf install --setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel \
             libsndfile-devel speexdsp-devel hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv \
             pulseaudio-libs-devel libtool python3-devel google-noto-emoji-color-fonts \
-            || { echo "Deps install failed - try again later"; exit 1; }
+            || { echo "Deps install failed"; exit 1; }
 
         else
             { echo "This Fedora version is not yet supported, please create an isuue in github"; exit 1; }
@@ -132,11 +134,11 @@ case $ID in
         if (( UBUNTU_ID >= 24 )); then
             sudo apt install -y --no-install-recommends libwxgtk3.2-dev python3-numpy-dev python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libao-dev libasound2-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
-            python3 python3-dev libhamlib-utils fonts-noto-color-emoji || { echo "Deps install failed - try again later"; exit 1; }
+            python3 python3-dev libhamlib-utils fonts-noto-color-emoji || { echo "Deps install failed"; exit 1; }
         elif (( UBUNTU_ID >= 22 )); then
             sudo apt install -y --no-install-recommends libwxgtk3.0-gtk3-dev python3-numpy python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
-            python3 python3-dev libhamlib-utils fonts-noto-color-emoji || { echo "Deps install failed - try again later"; exit 1; }
+            python3 python3-dev libhamlib-utils fonts-noto-color-emoji || { echo "Deps install failed"; exit 1; }
         else
             { echo "This Ubuntu version is not yet supported, please create an isuue in github"; exit 1; }
         fi
@@ -147,11 +149,13 @@ case $ID in
         if (( DEBIAN_ID == 12 )); then
             run_as_root "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev autoconf libtool \
-                python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji"
+                python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji" \
+                || { echo "Deps install failed"; exit 1; }
         elif (( DEBIAN_ID == 11 )); then
             run_as_root "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev autoconf libtool \
-                python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji"
+                python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji" \
+                || { echo "Deps install failed"; exit 1; }
         else
             { echo "This Debian version is not yet supported, please create an isuue in github"; exit 1; }
 
@@ -161,13 +165,13 @@ case $ID in
     echo "Enter the root password to install some initially needed dependencies"
     sudo pacman -Syu cmake gcc base-devel autoconf libtool git python speexdsp libsamplerate sox \
     wxgtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy pulseaudio gsm noto-color-emoji-fontconfig \
-            || { echo "Deps install failed - try again later"; exit 1; }
+            || { echo "Deps install failed"; exit 1; }
     ;;
     manjaro)
     echo "Enter the root password to install some initially needed dependencies"
     su -c "pacman -S --needed cmake gcc base-devel autoconf libtool git python speexdsp libsamplerate sox \
             wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy manjaro-pulse gsm noto-fonts-emoji" \
-            || { echo "Deps install failed - try again later"; exit 1; }
+            || { echo "Deps install failed"; exit 1; }
     ;;
 #    pclinuxos)  # Hamlib package seems unmaintained here and build from git currently fails.
 #    echo "Enter the root password to install some initially needed dependencies"
