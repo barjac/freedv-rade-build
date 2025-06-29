@@ -149,12 +149,12 @@ case $ID in
         if (( DEBIAN_ID == 12 )); then
             run_as_root "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev autoconf libtool \
-                python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji" \
+                python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji automake" \
                 || { echo "Deps install failed"; exit 1; }
         elif (( DEBIAN_ID == 11 )); then
             run_as_root "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev autoconf libtool \
-                python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji" \
+                python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji automake" \
                 || { echo "Deps install failed"; exit 1; }
         else
             { echo "This Debian version is not yet supported, please create an isuue in github"; exit 1; }
