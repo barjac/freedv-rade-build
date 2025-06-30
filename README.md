@@ -8,17 +8,15 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu,
   |:---              | :----: | :--- |
   |Mageia 9          |OK    | Current stable|
   |Mageia 10 (-dev)  |OK    | Next release  |
-  |Linux Mint 22     |OK    |               |
+  |Linux Mint 21 & 22|OK    |               |
   |OpenSUSE Tumbleweed|OK    |               |
   |Debian 12 & 13    |OK    |Thanks to Uli DF7SC for testing!
   |Fedora 40, 41, 42 |OK    |               |
-  |Ubuntu 24.04 LTS  |OK    |               |
-  |Ubuntu 22.04 LTS  |OK    |Thanks to LU3JIJ for testing!               |
+  |Ubuntu 22/24/25.04 LTS  |OK    |Thanks to LU3JIJ for testing!               |
   |Manjaro           |OK    |Thanks to M0SSN for testing!|
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
   |Kubuntu Oracular (Dev)|OK |Thanks to sblandford for testing!|
-  |*buntu clones     |??    |Should be OK if `'cat /etc/os-release\|grep -m1 "ID="\|cut -d= -f2' returns 'ubuntu'`|
-  |Arch              |??    |Probably broken deps - needs a tester and bug report - anyone? :) |
+  |Arch              |??    |Should be OK now - needs a tester and bug report - anyone? :)|
   
 ## What it does
 If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below.
