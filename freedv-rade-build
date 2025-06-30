@@ -1,7 +1,17 @@
 #!/bin/bash
 # This script installs freedv RADE from github on various linux distributions
+
+# Start logging
+if [[ $1 == "-l" ]] || [[ $1 == "--log" ]]; then
+# Remove old log
+    rm -f freedv-rade-build.log ||:
+    cat /etc/os-release > freedv-rade-build.log
+    exec > >(tee -a freedv-rade-build.log)
+    exec 2>&1
+fi
+
 # Check we are not root
-((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 0; }
+((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 1; }
 
 # Check that this is a 64bit machine
 uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
@@ -249,5 +259,5 @@ deactivate || echo "WARNING:Issue deactivating venv"
 ~/freedv-rade-build/mk-updt-desktop || echo "WARNING: Update-RADE desktop file was not created (maybe exists?)"
 
 cd
-echo -e "\n########### Build is complete \o/ ############\nYou can run it from your home folder using:\n \
-      ./freedv-start [-f configfile]  OR  use the desktop FreeDV-RADE desktop icon."
+echo -e "\n\n########### Build is complete \o/ ############\n\nYou can run it from your home folder using:\n\n \
+      ./freedv-start [-f configfile]\n\n  OR  use the desktop FreeDV-RADE desktop icon."
