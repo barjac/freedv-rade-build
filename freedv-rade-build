@@ -176,8 +176,9 @@ case $ID in
     ;;
     arch)
     echo "Enter the root password to install some initially needed dependencies"
-    run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git python speexdsp libsamplerate sox \
-    wxgtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy pulseaudio gsm noto-color-emoji-fontconfig" \
+    run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
+    python python-numpy speexdsp libsamplerate sox wxgtk hamlib alsa-lib libao \
+    libsndfile pulseaudio gsm noto-fonts-emoji" \
             || { echo "Deps install failed"; exit 1; }
     ;;
     manjaro)
