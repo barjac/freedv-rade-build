@@ -1,5 +1,7 @@
 #!/bin/bash
 # This script installs freedv RADE from github on various linux distributions
+# Run with -l or --log to generate a log file for debugging.
+# ./freedv-rade-build [ -l | --log ]
 
 # Start logging
 if [[ $1 == "-l" ]] || [[ $1 == "--log" ]]; then
