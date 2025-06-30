@@ -1,0 +1,38 @@
+#!/bin/bash
+#freedv-rade-dbg-build
+clear
+echo -e \
+"####################################\n\
+This script runs freedv-rade-build with logging of the terminal output\n\
+and basic info about the distro in use. Nothing more.\n\
+It runs slower than a regular build.\n\
+Use it to create a log file to help us to fix any issue you may have using\n\
+freedv-rade-build\n\
+#####################################"
+
+# Run in ~/freedv-rade-build/ folder
+cd ~/freedv-rade-build
+
+# Update freedv-rade=build
+git pull
+
+# Remove any previous log
+rm -f freedv-rade-build.log
+
+# Send system OS info to log
+cat /etc/os-release > freedv-rade-build.log
+
+# Get distro info
+source /etc/os-release
+
+# Run Freedv-rade-build with logging and line buffering
+stdbuf -oL -eL ./freedv-rade-build 2>&1 | tee -a freedv-rade-build.log
+
+    if (( $? != 0 )); then
+        echo -e "Please attach the log file ~/freedv-rade-build/freedv-rade-build.log to a new issue\n\
+with the subject \"Build fail in $PRETTY_NAME\" at https://github.com/barjac/freedv-rade-build\n\
+so the problem may be investigated, Thanks."
+
+    else
+        echo "It seems that this build was successful, log file is at ~/freedv-rade-build/freedv-rade-build.log"
+    fi
