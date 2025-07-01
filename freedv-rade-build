@@ -181,6 +181,33 @@ case $ID in
     libsndfile pulseaudio gsm noto-fonts-emoji" \
             || { echo "Deps install failed"; exit 1; }
     ;;
+    garuda)
+    echo "Enter the root password to install some initially needed dependencies"
+
+    run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
+        python python-numpy speexdsp libsamplerate sox hamlib alsa-lib libao \
+        libsndfile pulseaudio gsm noto-fonts-emoji" \
+        || { echo 'Deps install failed'; exit 1; }
+
+    echo "Checking for wxWidgets GTK3 support..."
+
+    # Check if wxwidgets-gtk3 is already installed
+    if ! pacman -Q wxwidgets-gtk3 &>/dev/null; then
+        echo "wxwidgets-gtk3 not found in pacman. Attempting AUR install..."
+
+        # Detect yay or paru
+        if command -v yay &>/dev/null; then
+            yay -S --needed wxwidgets-gtk3 || { echo "AUR install failed with yay"; exit 1; }
+        elif command -v paru &>/dev/null; then
+            paru -S --needed wxwidgets-gtk3 || { echo "AUR install failed with paru"; exit 1; }
+        else
+            echo "No AUR helper (yay or paru) found. Please install wxwidgets-gtk3 manually."
+            exit 1
+        fi
+    else
+        echo "wxwidgets-gtk3 is already installed."
+    fi
+    ;;
     manjaro)
     echo "Enter the root password to install some initially needed dependencies"
     run_as_root "pacman -S --needed cmake gcc base-devel autoconf automake libtool git python speexdsp libsamplerate sox \
