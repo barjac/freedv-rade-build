@@ -186,8 +186,16 @@ case $ID in
 
     run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
         python python-numpy speexdsp libsamplerate sox hamlib alsa-lib libao \
-        libsndfile pulseaudio gsm noto-fonts-emoji" \
+        libsndfile gsm noto-fonts-emoji" \
         || { echo 'Deps install failed'; exit 1; }
+
+        # Only install PulseAudio if not on PipeWire
+    if pacman -Q pipewire-pulse &>/dev/null; then
+        echo "Using PipeWire for audio – skipping pulseaudio"
+    else
+        echo "Installing pulseaudio..."
+        run_as_root "pacman -S pulseaudio"
+    fi
 
     echo "Checking for wxWidgets GTK3 support..."
 
