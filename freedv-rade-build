@@ -277,7 +277,7 @@ pip3 install NumPy || { echo "ERROR: numpy pip install failed"; exit 1; }
 fi
 
 # Patch build_linux for non-parallel
-sed -i 's: -j$(nproc): -j1:' build_linux.sh
+sed -i 's: -j$(nproc): -j4:' build_linux.sh
 
 # Run the freedv build script
 ./build_linux.sh || { echo "ERROR: Build failed for some reason, check for errors above and run again later."; deactivate; exit 1; }
