@@ -174,7 +174,7 @@ case $ID in
 
         fi
     ;;
-    arch|garuda|endeavouros)
+    arch|garuda|endeavouros|arcolinux|rebornos)
     echo "Enter the root password to install some initially needed dependencies"
 
     run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
