@@ -174,14 +174,7 @@ case $ID in
 
         fi
     ;;
-    arch)
-    echo "Enter the root password to install some initially needed dependencies"
-    run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
-    python python-numpy speexdsp libsamplerate sox wxgtk hamlib alsa-lib libao \
-    libsndfile pulseaudio gsm noto-fonts-emoji" \
-            || { echo "Deps install failed"; exit 1; }
-    ;;
-    garuda)
+    arch|garuda|EndeaverOS)
     echo "Enter the root password to install some initially needed dependencies"
 
     run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
@@ -276,8 +269,9 @@ if [[ $ID == "mageia" ]] || [[ $ID == "linuxmint" ]] || [[ $ID == "fedora" ]] ||
 pip3 install NumPy || { echo "ERROR: numpy pip install failed"; exit 1; }
 fi
 
-# Patch build_linux for non-parallel
-sed -i 's: -j$(nproc): -j4:' build_linux.sh
+# Patches
+#sed -i 's: -j$(nproc): -j4:' build_linux.sh
+patch -p1 < ../../freedv-rade-build/cores.patch && eche "cores.patch applied"
 
 # Run the freedv build script
 ./build_linux.sh || { echo "ERROR: Build failed for some reason, check for errors above and run again later."; deactivate; exit 1; }
