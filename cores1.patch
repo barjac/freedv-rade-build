@@ -1,0 +1,77 @@
+From a88faa4f4b232ecdaf0be777e07c0b2d3a4cdaf0 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Thu, 3 Jul 2025 20:26:04 -0700
+Subject: [PATCH] Make explicit various codec2 dependencies to avoid compile
+ race condition.
+
+---
+ cmake/BuildCodec2.cmake         | 1 +
+ src/config/CMakeLists.txt       | 2 +-
+ src/gui/controls/CMakeLists.txt | 1 +
+ src/gui/dialogs/CMakeLists.txt  | 2 +-
+ src/pipeline/CMakeLists.txt     | 2 +-
+ 5 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/cmake/BuildCodec2.cmake b/cmake/BuildCodec2.cmake
+index 75bd01282..cae7532dc 100644
+--- a/cmake/BuildCodec2.cmake
++++ b/cmake/BuildCodec2.cmake
+@@ -22,6 +22,7 @@ ExternalProject_Add(build_codec2
+ ExternalProject_Get_Property(build_codec2 BINARY_DIR)
+ ExternalProject_Get_Property(build_codec2 SOURCE_DIR)
+ add_library(codec2 STATIC IMPORTED)
++add_dependencies(codec2 build_codec2)
+ 
+ set_target_properties(codec2 PROPERTIES
+     IMPORTED_LOCATION "${BINARY_DIR}/src/libcodec2${CMAKE_STATIC_LIBRARY_SUFFIX}"
+diff --git a/src/config/CMakeLists.txt b/src/config/CMakeLists.txt
+index 73f7f42ba..ac368a18c 100644
+--- a/src/config/CMakeLists.txt
++++ b/src/config/CMakeLists.txt
+@@ -8,7 +8,7 @@ add_library(fdv_config STATIC
+ )
+ 
+ target_include_directories(fdv_config PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+-add_dependencies(fdv_config build_rade)
++add_dependencies(fdv_config build_rade codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_config wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+diff --git a/src/gui/controls/CMakeLists.txt b/src/gui/controls/CMakeLists.txt
+index dcf8d267d..748051c45 100644
+--- a/src/gui/controls/CMakeLists.txt
++++ b/src/gui/controls/CMakeLists.txt
+@@ -7,6 +7,7 @@ add_library(fdv_gui_controls STATIC
+     ReportMessageRenderer.cpp)
+ 
+ target_include_directories(fdv_gui_controls PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../.. ${CMAKE_CURRENT_BINARY_DIR}/../..)
++add_dependencies(fdv_gui_controls codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_gui_controls wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+diff --git a/src/gui/dialogs/CMakeLists.txt b/src/gui/dialogs/CMakeLists.txt
+index 5d27f5c7e..911193d9d 100644
+--- a/src/gui/dialogs/CMakeLists.txt
++++ b/src/gui/dialogs/CMakeLists.txt
+@@ -9,7 +9,7 @@ add_library(fdv_gui_dialogs STATIC
+ 
+ target_include_directories(fdv_gui_dialogs PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../.. ${CMAKE_CURRENT_BINARY_DIR}/../..)
+ 
+-add_dependencies(fdv_gui_dialogs rade opus)
++add_dependencies(fdv_gui_dialogs rade opus codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_gui_dialogs wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
+index 1a4a9a93d..9e3cd3064 100644
+--- a/src/pipeline/CMakeLists.txt
++++ b/src/pipeline/CMakeLists.txt
+@@ -25,7 +25,7 @@ add_library(fdv_audio_pipeline STATIC
+ 
+ target_include_directories(fdv_audio_pipeline PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+ 
+-add_dependencies(fdv_audio_pipeline rade opus)
++add_dependencies(fdv_audio_pipeline rade opus codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_audio_pipeline wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
