@@ -9,16 +9,16 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu,
   |Mageia 9          |OK    | Current stable|
   |Mageia 10 (-dev)  |OK    | Next release  |
   |Linux Mint 21 & 22|OK    |               |
-  |OpenSUSE Tumbleweed|OK    |               |
+  |OpenSUSE Tumbleweed|OK   |               |
   |Debian 12 & 13    |OK    |Thanks to Uli DF7SC for testing!
   |Fedora 40, 41, 42 |OK    |               |
-  |Ubuntu 22/24/25.04 LTS  |OK    |Thanks to LU3JIJ for testing!               |
+  |Ubuntu 22/24/25.04 LTS   |OK    |Thanks to LU3JIJ for testing!|
   |Manjaro           |OK    |Thanks to M0SSN for testing!|
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
   |Kubuntu Oracular (Dev)|OK |Thanks to sblandford for testing!|
   |Arch              |??    |Supported - not tetsed|
-  |Garuda            |OK    |Thanks to                    |
-  |EndeavourOS       |OK    |Thanks to                    |
+  |Garuda            |OK    |Thanks to Dave Baxter NB4S for testing! |
+  |EndeavourOS       |OK    |Thanks to Dave Baxter NB4S for testing! |
   |Arco Linux        |??    |Supported - not tetsed       |
   |RebornOS          |??    |Supported - not tetsed       |
   
@@ -33,13 +33,13 @@ This change has been made in response to Issue#3, however unless you have a spec
 especially if you are not a regular Linux user.
 More help on this is in ~/freedv-rade-build/freedv-rade-anywhere.txt
 
-Then it uses the distro's native package manager to install some essential system packages for which it requests the root password.
+Then it uses the distro's native package manager to install some essential system packages for which it may request the root password.
 
 The remaining script then continues as the regular user.
 
 A working directory called freedv-rade is created in the user's home folder (or alternative 'base' folder) which is used to hold the complete installation.
 
-The freedv-gui sources are cloned from github and (at present) the v2.0-dev branch is checked out.
+The freedv-gui sources are cloned from github master branch.
 
 A python3 virtual environment is then automatically created and activated as described in the freedv-gui README.md
 
@@ -74,6 +74,9 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 
 - 4 June 2025 Updated for the release of FreeDV-2.0.0 which now uses master branch.
 
+- July 2025 Added option to save a log of the build to help with debugging when needed.
+Also added support for several Arch Linux based distros.
+
 ## Using the script
 
    N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
@@ -99,7 +102,7 @@ If you are using hamlib don't forget to add yourself (as root) to the 'dialout' 
 
 \# usermod -aG dialout <your_user_name>
 
-Or in Arch based distros like Manjaro the 'uucp' group:
+Or in Arch based distros like Manjaro, Garuda etc. the 'uucp' group:
 
 \# usermod -aG uucp <your_user_name>
 
