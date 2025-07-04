@@ -2,7 +2,7 @@
 
 This script automates installation of RADE versions of FreeDV-gui in modern Linux distibutions.
 
-It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro OpenSUSE Tumbleweed and Debian**
+It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro OpenSUSE Tumbleweed Garuda EndevourOS and Debian**
 
   |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
@@ -16,7 +16,11 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu,
   |Manjaro           |OK    |Thanks to M0SSN for testing!|
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
   |Kubuntu Oracular (Dev)|OK |Thanks to sblandford for testing!|
-  |Arch              |??    |Should be OK now - needs a tester and bug report - anyone? :)|
+  |Arch              |??    |Supported - not tetsed|
+  |Garuda            |OK    |Thanks to                    |
+  |EndeavourOS       |OK    |Thanks to                    |
+  |Arco Linux        |??    |Supported - not tetsed       |
+  |RebornOS          |??    |Supported - not tetsed       |
   
 ## What it does
 If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below.
@@ -121,7 +125,11 @@ If you have an early clone of freedv-rade-build then you can update it as follow
     4. 'freedv-rade-build/freedv-rade-update' to run it as often as you like
         OR use the Update-RADE desktop icon to run it.
 
-Just follow the prompts. If you hit a problem please open an issue here.
+Just follow the prompts.
+
+If you do hit a problem please open an issue here but first run:
+
+'freedv-rade-build --log' and attach the file ~/freedv-rade-build/freedv-rade-build.log to to the report.
 
 ***Have fun with FreeDV!***
 
