@@ -271,7 +271,7 @@ fi
 
 # Patches
 #sed -i 's: -j$(nproc): -j4:' build_linux.sh
-patch -p1 < ../../freedv-rade-build/cores.patch && echo "cores.patch applied"
+#patch -p1 < ../../freedv-rade-build/cores.patch && echo "cores.patch applied"
 
 # Run the freedv build script
 ./build_linux.sh || { echo "ERROR: Build failed for some reason, check for errors above and run again later."; deactivate; exit 1; }
