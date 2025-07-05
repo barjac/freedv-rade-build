@@ -1,0 +1,788 @@
+From a88faa4f4b232ecdaf0be777e07c0b2d3a4cdaf0 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Thu, 3 Jul 2025 20:26:04 -0700
+Subject: [PATCH 01/20] Make explicit various codec2 dependencies to avoid
+ compile race condition.
+
+---
+ cmake/BuildCodec2.cmake         | 1 +
+ src/config/CMakeLists.txt       | 2 +-
+ src/gui/controls/CMakeLists.txt | 1 +
+ src/gui/dialogs/CMakeLists.txt  | 2 +-
+ src/pipeline/CMakeLists.txt     | 2 +-
+ 5 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/cmake/BuildCodec2.cmake b/cmake/BuildCodec2.cmake
+index 75bd01282..cae7532dc 100644
+--- a/cmake/BuildCodec2.cmake
++++ b/cmake/BuildCodec2.cmake
+@@ -22,6 +22,7 @@ ExternalProject_Add(build_codec2
+ ExternalProject_Get_Property(build_codec2 BINARY_DIR)
+ ExternalProject_Get_Property(build_codec2 SOURCE_DIR)
+ add_library(codec2 STATIC IMPORTED)
++add_dependencies(codec2 build_codec2)
+ 
+ set_target_properties(codec2 PROPERTIES
+     IMPORTED_LOCATION "${BINARY_DIR}/src/libcodec2${CMAKE_STATIC_LIBRARY_SUFFIX}"
+diff --git a/src/config/CMakeLists.txt b/src/config/CMakeLists.txt
+index 73f7f42ba..ac368a18c 100644
+--- a/src/config/CMakeLists.txt
++++ b/src/config/CMakeLists.txt
+@@ -8,7 +8,7 @@ add_library(fdv_config STATIC
+ )
+ 
+ target_include_directories(fdv_config PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+-add_dependencies(fdv_config build_rade)
++add_dependencies(fdv_config build_rade codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_config wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+diff --git a/src/gui/controls/CMakeLists.txt b/src/gui/controls/CMakeLists.txt
+index dcf8d267d..748051c45 100644
+--- a/src/gui/controls/CMakeLists.txt
++++ b/src/gui/controls/CMakeLists.txt
+@@ -7,6 +7,7 @@ add_library(fdv_gui_controls STATIC
+     ReportMessageRenderer.cpp)
+ 
+ target_include_directories(fdv_gui_controls PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../.. ${CMAKE_CURRENT_BINARY_DIR}/../..)
++add_dependencies(fdv_gui_controls codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_gui_controls wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+diff --git a/src/gui/dialogs/CMakeLists.txt b/src/gui/dialogs/CMakeLists.txt
+index 5d27f5c7e..911193d9d 100644
+--- a/src/gui/dialogs/CMakeLists.txt
++++ b/src/gui/dialogs/CMakeLists.txt
+@@ -9,7 +9,7 @@ add_library(fdv_gui_dialogs STATIC
+ 
+ target_include_directories(fdv_gui_dialogs PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../.. ${CMAKE_CURRENT_BINARY_DIR}/../..)
+ 
+-add_dependencies(fdv_gui_dialogs rade opus)
++add_dependencies(fdv_gui_dialogs rade opus codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_gui_dialogs wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
+index 1a4a9a93d..9e3cd3064 100644
+--- a/src/pipeline/CMakeLists.txt
++++ b/src/pipeline/CMakeLists.txt
+@@ -25,7 +25,7 @@ add_library(fdv_audio_pipeline STATIC
+ 
+ target_include_directories(fdv_audio_pipeline PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+ 
+-add_dependencies(fdv_audio_pipeline rade opus)
++add_dependencies(fdv_audio_pipeline rade opus codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_audio_pipeline wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+
+From df965bf80dbb0cc988c1b214ee3c501934e7b4e2 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Thu, 3 Jul 2025 20:28:02 -0700
+Subject: [PATCH 02/20] Add PR #957 to changelog.
+
+---
+ USER_MANUAL.md | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/USER_MANUAL.md b/USER_MANUAL.md
+index 56d4c12f9..4fd81223b 100644
+--- a/USER_MANUAL.md
++++ b/USER_MANUAL.md
+@@ -833,6 +833,7 @@ LDPC | Low Density Parity Check Codes - a family of powerful FEC codes
+     * Update Hamlib to 4.6.3 (macOS/Windows). (PR #930)
+     * Reload current Git hash every time it changes. (PR #935, #951)
+     * Add infrastructure for generating AppImage builds. (PR #937)
++    * Make explicit various codec2 dependencies to avoid compile race condition. (PR #957)
+ 
+ ## V2.0.0 June 2025
+ 
+
+From 3d23013e493f1fd19aeeb33aa3c5db66ab43aef2 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 16:59:18 -0700
+Subject: [PATCH 03/20] No need to use build_rade as the dependency if we're
+ using rade.
+
+---
+ src/CMakeLists.txt | 11 -----------
+ 1 file changed, 11 deletions(-)
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index a8ed014bb..398aaa944 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -58,21 +58,10 @@ endif(APPLE)
+ 
+ if(APPLE)
+ target_link_libraries(FreeDV fdv_audio fdv_audio_pipeline fdv_config fdv_gui_controls fdv_gui_dialogs fdv_gui_util fdv_os_wrapper fdv_rig_control fdv_reporting fdv_sox fdv_util codec2 rade opus git_version)
+-add_dependencies(FreeDV build_rade)
+ else(APPLE)
+ target_link_libraries(freedv fdv_audio fdv_audio_pipeline fdv_config fdv_gui_controls fdv_gui_dialogs fdv_gui_util fdv_os_wrapper fdv_rig_control fdv_reporting fdv_sox fdv_util codec2 rade opus git_version)
+-add_dependencies(freedv build_rade)
+ endif(APPLE)
+ 
+-# Add build dependencies for internally built external libraries.
+-if(USE_INTERNAL_CODEC2)
+-    if(APPLE)
+-        add_dependencies(FreeDV build_codec2)
+-    else(APPLE)
+-        add_dependencies(freedv build_codec2)
+-    endif(APPLE)
+-endif()
+-
+ # Add dependencies for other statically built libraries, if applicable.
+ if(FREEDV_STATIC_DEPS)
+     if(APPLE)
+
+From e33956381b2018d10d6bb4deae3623681f2ad398 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 17:00:01 -0700
+Subject: [PATCH 04/20] Forgot to check in a change.
+
+---
+ src/config/CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/config/CMakeLists.txt b/src/config/CMakeLists.txt
+index ac368a18c..c56538872 100644
+--- a/src/config/CMakeLists.txt
++++ b/src/config/CMakeLists.txt
+@@ -8,7 +8,7 @@ add_library(fdv_config STATIC
+ )
+ 
+ target_include_directories(fdv_config PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+-add_dependencies(fdv_config build_rade codec2)
++add_dependencies(fdv_config rade codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_config wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+
+From 9b3b21ca134ec42011b4f0a906faed04afc5cc9f Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 17:00:56 -0700
+Subject: [PATCH 05/20] Looks like we need the larger FIFO after all.
+
+---
+ src/defines.h                             | 2 +-
+ test/freedv-ctest-fullduplex.conf.tmpl    | 2 +-
+ test/freedv-ctest-reporting-mpp.conf.tmpl | 2 +-
+ test/freedv-ctest-reporting.conf.tmpl     | 2 +-
+ test/freedv-ctest.conf.tmpl               | 2 +-
+ 5 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/defines.h b/src/defines.h
+index e7ac38fe7..12bee6805 100644
+--- a/src/defines.h
++++ b/src/defines.h
+@@ -64,7 +64,7 @@
+ #define NUM_CHANNELS        2                              // I think most sound cards prefer stereo we will convert to mono
+ #define VOX_TONE_FREQ       1000.0                         // optional left channel vox tone freq
+ #define VOX_TONE_AMP        30000                          // optional left channel vox tone amp
+-#define FIFO_SIZE           540                            // default fifo size in ms
++#define FIFO_SIZE           640                            // default fifo size in ms
+ #define FRAME_DURATION      0.02                           // default frame length of 20 mS = 0.02 seconds
+ 
+ #define MAX_BITS_PER_CODEC_FRAME 64                            // 1600 bit/s mode
+diff --git a/test/freedv-ctest-fullduplex.conf.tmpl b/test/freedv-ctest-fullduplex.conf.tmpl
+index 5ff116e78..b6411e5bf 100644
+--- a/test/freedv-ctest-fullduplex.conf.tmpl
++++ b/test/freedv-ctest-fullduplex.conf.tmpl
+@@ -13,7 +13,7 @@ soundCard2OutDeviceName=@FREEDV_COMPUTER_TO_SPEAKER_DEVICE@
+ soundCard2OutSampleRate=48000
+ SquelchActive=1
+ SquelchLevel=-4
+-fifoSize_ms=540
++fifoSize_ms=640
+ transmitLevel=0
+ snrSlow=0
+ mode=4
+diff --git a/test/freedv-ctest-reporting-mpp.conf.tmpl b/test/freedv-ctest-reporting-mpp.conf.tmpl
+index cf2e45fbe..4233fd411 100644
+--- a/test/freedv-ctest-reporting-mpp.conf.tmpl
++++ b/test/freedv-ctest-reporting-mpp.conf.tmpl
+@@ -13,7 +13,7 @@ soundCard2OutDeviceName=@FREEDV_COMPUTER_TO_SPEAKER_DEVICE@
+ soundCard2OutSampleRate=48000
+ SquelchActive=1
+ SquelchLevel=-4
+-fifoSize_ms=540
++fifoSize_ms=640
+ transmitLevel=0
+ snrSlow=0
+ mode=257
+diff --git a/test/freedv-ctest-reporting.conf.tmpl b/test/freedv-ctest-reporting.conf.tmpl
+index ed13a2e80..f2c5e4fda 100644
+--- a/test/freedv-ctest-reporting.conf.tmpl
++++ b/test/freedv-ctest-reporting.conf.tmpl
+@@ -13,7 +13,7 @@ soundCard2OutDeviceName=@FREEDV_COMPUTER_TO_SPEAKER_DEVICE@
+ soundCard2OutSampleRate=48000
+ SquelchActive=1
+ SquelchLevel=-4
+-fifoSize_ms=540
++fifoSize_ms=640
+ transmitLevel=0
+ snrSlow=0
+ mode=257
+diff --git a/test/freedv-ctest.conf.tmpl b/test/freedv-ctest.conf.tmpl
+index e2c51a4e7..1af74494c 100644
+--- a/test/freedv-ctest.conf.tmpl
++++ b/test/freedv-ctest.conf.tmpl
+@@ -13,7 +13,7 @@ soundCard2OutDeviceName=@FREEDV_COMPUTER_TO_SPEAKER_DEVICE@
+ soundCard2OutSampleRate=48000
+ SquelchActive=1
+ SquelchLevel=-4
+-fifoSize_ms=540
++fifoSize_ms=640
+ transmitLevel=0
+ snrSlow=0
+ mode=257
+
+From 4dbc5da541cb1c395b4b7097a6b2c7acae0399ae Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 17:18:46 -0700
+Subject: [PATCH 06/20] Use SRC_SINC_FASTEST for plots.
+
+Should be low to no-impact as previous RADE testing showed only a slight quality
+decrease vs. SRC_SINC_MEDIUM_QUALITY.
+---
+ src/pipeline/ResampleStep.cpp | 5 ++++-
+ src/pipeline/TxRxThread.cpp   | 7 +++----
+ 2 files changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/src/pipeline/ResampleStep.cpp b/src/pipeline/ResampleStep.cpp
+index 1a2b89c6e..d11e6bc82 100644
+--- a/src/pipeline/ResampleStep.cpp
++++ b/src/pipeline/ResampleStep.cpp
+@@ -73,7 +73,10 @@ ResampleStep::ResampleStep(int inputSampleRate, int outputSampleRate, bool forPl
+     , outputSampleRate_(outputSampleRate)
+ {
+     int src_error;
+-    resampleState_ = src_new(forPlotsOnly ? SRC_LINEAR : SRC_SINC_MEDIUM_QUALITY, 1, &src_error);
++    
++    // SRC_LINEAR for plots is fastest but only saves a few additional % of CPU overall
++    // at the expense of possible poorer plot quality.
++    resampleState_ = src_new(forPlotsOnly ? SRC_SINC_FASTEST : SRC_SINC_MEDIUM_QUALITY, 1, &src_error);
+     assert(resampleState_ != nullptr);
+ 
+     // Pre-allocate buffers so we don't have to do so during real-time operation.
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index 6dceeb3b6..e23d04570 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -56,13 +56,12 @@ using namespace std::chrono_literals;
+ // Experimental options for potential future release:
+ //
+ // * ENABLE_FASTER_PLOTS: This uses a faster resampling algorithm to reduce the CPU
+-//   usage required to generate various plots in the user interface. Currently disabled
+-//   due to unknown effects on visual quality. (Tech note: When enabled, libsamplerate is 
+-//   directed to use linear interpolation instead of sinc for the plot resampling.)
++//   usage required to generate various plots in the user interface. (Tech note: When 
++//   enabled, libsamplerate is directed to use SRC_SINC_FASTEST for the plot resampling.)
+ // * ENABLE_PROCESSING_STATS: This causes execution statistics to be collected for RX and TX
+ //   processing and output in the log after the user pushes Stop. 
+ 
+-//#define ENABLE_FASTER_PLOTS
++#define ENABLE_FASTER_PLOTS
+ //#define ENABLE_PROCESSING_STATS
+ 
+ // External globals
+
+From 38341ea89a918bf4fdb81d8bf1d0fbb1b8283729 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 17:20:03 -0700
+Subject: [PATCH 07/20] Update changelog.
+
+---
+ USER_MANUAL.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/USER_MANUAL.md b/USER_MANUAL.md
+index 43fafe809..defaf841b 100644
+--- a/USER_MANUAL.md
++++ b/USER_MANUAL.md
+@@ -831,7 +831,7 @@ LDPC | Low Density Parity Check Codes - a family of powerful FEC codes
+     * Add missing dependency for macOS builds to README. (PR #925; thanks @relistan!)
+     * Add note about using XWayland on Linux. (PR #926)
+ 3. Enhancements:
+-    * General improvements to backend audio processing to further reduce dropouts. (PR #949)
++    * General improvements to backend audio processing to further reduce dropouts. (PR #949, #957)
+ 4. Build system:
+     * Update Hamlib to 4.6.3 (macOS/Windows). (PR #930)
+     * Reload current Git hash every time it changes. (PR #935, #951)
+
+From b1a0378a5b8b46d2f3b9cdb813a0a38c4477cb92 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 18:33:22 -0700
+Subject: [PATCH 08/20] Back to SRC_LINEAR.
+
+---
+ src/pipeline/ResampleStep.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/pipeline/ResampleStep.cpp b/src/pipeline/ResampleStep.cpp
+index d11e6bc82..25a1b5258 100644
+--- a/src/pipeline/ResampleStep.cpp
++++ b/src/pipeline/ResampleStep.cpp
+@@ -76,7 +76,7 @@ ResampleStep::ResampleStep(int inputSampleRate, int outputSampleRate, bool forPl
+     
+     // SRC_LINEAR for plots is fastest but only saves a few additional % of CPU overall
+     // at the expense of possible poorer plot quality.
+-    resampleState_ = src_new(forPlotsOnly ? SRC_SINC_FASTEST : SRC_SINC_MEDIUM_QUALITY, 1, &src_error);
++    resampleState_ = src_new(forPlotsOnly ? SRC_LINEAR : SRC_SINC_MEDIUM_QUALITY, 1, &src_error);
+     assert(resampleState_ != nullptr);
+ 
+     // Pre-allocate buffers so we don't have to do so during real-time operation.
+
+From 380a155545d259f91a93b50227da97f358b13a7e Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 19:13:38 -0700
+Subject: [PATCH 09/20] Update comments.
+
+---
+ src/pipeline/ResampleStep.cpp | 2 --
+ src/pipeline/TxRxThread.cpp   | 2 +-
+ 2 files changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/src/pipeline/ResampleStep.cpp b/src/pipeline/ResampleStep.cpp
+index 25a1b5258..56c6dce8a 100644
+--- a/src/pipeline/ResampleStep.cpp
++++ b/src/pipeline/ResampleStep.cpp
+@@ -74,8 +74,6 @@ ResampleStep::ResampleStep(int inputSampleRate, int outputSampleRate, bool forPl
+ {
+     int src_error;
+     
+-    // SRC_LINEAR for plots is fastest but only saves a few additional % of CPU overall
+-    // at the expense of possible poorer plot quality.
+     resampleState_ = src_new(forPlotsOnly ? SRC_LINEAR : SRC_SINC_MEDIUM_QUALITY, 1, &src_error);
+     assert(resampleState_ != nullptr);
+ 
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index e23d04570..70c6fd156 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -57,7 +57,7 @@ using namespace std::chrono_literals;
+ //
+ // * ENABLE_FASTER_PLOTS: This uses a faster resampling algorithm to reduce the CPU
+ //   usage required to generate various plots in the user interface. (Tech note: When 
+-//   enabled, libsamplerate is directed to use SRC_SINC_FASTEST for the plot resampling.)
++//   enabled, libsamplerate is directed to use SRC_LINEAR for the plot resampling.)
+ // * ENABLE_PROCESSING_STATS: This causes execution statistics to be collected for RX and TX
+ //   processing and output in the log after the user pushes Stop. 
+ 
+
+From 2e2d9c0c438e6ade0d8116d33e3999176d1ddb66 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 19:14:07 -0700
+Subject: [PATCH 10/20] Don't fail fast for Linux builds.
+
+---
+ .github/workflows/cmake-linux.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/.github/workflows/cmake-linux.yml b/.github/workflows/cmake-linux.yml
+index 59422d560..9c5a31afd 100644
+--- a/.github/workflows/cmake-linux.yml
++++ b/.github/workflows/cmake-linux.yml
+@@ -203,7 +203,7 @@ jobs:
+ 
+   build:
+     strategy:
+-      fail-fast: true
++      fail-fast: false
+       matrix:
+         os: [ubuntu-24.04, ubuntu-22.04]
+         sanitizer: [WITH_ASAN=0, WITH_RTSAN=1, WITH_ASAN=1]
+
+From 65c4766c20abcfc829dfd5bda91b48dca9a1c714 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 20:45:50 -0700
+Subject: [PATCH 11/20] Add libsamplerate deps where appropriate.
+
+---
+ src/config/CMakeLists.txt      | 2 +-
+ src/gui/dialogs/CMakeLists.txt | 2 +-
+ src/pipeline/CMakeLists.txt    | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/config/CMakeLists.txt b/src/config/CMakeLists.txt
+index c56538872..8501e89ba 100644
+--- a/src/config/CMakeLists.txt
++++ b/src/config/CMakeLists.txt
+@@ -8,7 +8,7 @@ add_library(fdv_config STATIC
+ )
+ 
+ target_include_directories(fdv_config PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+-add_dependencies(fdv_config rade codec2)
++add_dependencies(fdv_config rade codec2 samplerate)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_config wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+diff --git a/src/gui/dialogs/CMakeLists.txt b/src/gui/dialogs/CMakeLists.txt
+index 911193d9d..051e37ed0 100644
+--- a/src/gui/dialogs/CMakeLists.txt
++++ b/src/gui/dialogs/CMakeLists.txt
+@@ -9,7 +9,7 @@ add_library(fdv_gui_dialogs STATIC
+ 
+ target_include_directories(fdv_gui_dialogs PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../.. ${CMAKE_CURRENT_BINARY_DIR}/../..)
+ 
+-add_dependencies(fdv_gui_dialogs rade opus codec2)
++add_dependencies(fdv_gui_dialogs rade opus codec2 samplerate)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_gui_dialogs wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
+index 9e3cd3064..499251378 100644
+--- a/src/pipeline/CMakeLists.txt
++++ b/src/pipeline/CMakeLists.txt
+@@ -25,7 +25,7 @@ add_library(fdv_audio_pipeline STATIC
+ 
+ target_include_directories(fdv_audio_pipeline PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+ 
+-add_dependencies(fdv_audio_pipeline rade opus codec2)
++add_dependencies(fdv_audio_pipeline rade opus codec2 samplerate)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_audio_pipeline wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+
+From dc00a3b7cd75a91ddd8cabbbce662d18807e7b11 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 20:49:41 -0700
+Subject: [PATCH 12/20] Add sndfile deps.
+
+---
+ src/pipeline/CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
+index 499251378..c56c818fd 100644
+--- a/src/pipeline/CMakeLists.txt
++++ b/src/pipeline/CMakeLists.txt
+@@ -25,7 +25,7 @@ add_library(fdv_audio_pipeline STATIC
+ 
+ target_include_directories(fdv_audio_pipeline PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+ 
+-add_dependencies(fdv_audio_pipeline rade opus codec2 samplerate)
++add_dependencies(fdv_audio_pipeline rade opus codec2 samplerate sndfile)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_audio_pipeline wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+
+From 38c1b8bd75da7ca8fbeb73b4ff3ade2597787f9b Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 20:56:31 -0700
+Subject: [PATCH 13/20] Revert "Add sndfile deps."
+
+This reverts commit dc00a3b7cd75a91ddd8cabbbce662d18807e7b11.
+---
+ src/pipeline/CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
+index c56c818fd..499251378 100644
+--- a/src/pipeline/CMakeLists.txt
++++ b/src/pipeline/CMakeLists.txt
+@@ -25,7 +25,7 @@ add_library(fdv_audio_pipeline STATIC
+ 
+ target_include_directories(fdv_audio_pipeline PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+ 
+-add_dependencies(fdv_audio_pipeline rade opus codec2 samplerate sndfile)
++add_dependencies(fdv_audio_pipeline rade opus codec2 samplerate)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_audio_pipeline wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+
+From 5a38e1c576cf2f68f36ecaf04a102a766fba9bb4 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Fri, 4 Jul 2025 20:56:39 -0700
+Subject: [PATCH 14/20] Revert "Add libsamplerate deps where appropriate."
+
+This reverts commit 65c4766c20abcfc829dfd5bda91b48dca9a1c714.
+---
+ src/config/CMakeLists.txt      | 2 +-
+ src/gui/dialogs/CMakeLists.txt | 2 +-
+ src/pipeline/CMakeLists.txt    | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/config/CMakeLists.txt b/src/config/CMakeLists.txt
+index 8501e89ba..c56538872 100644
+--- a/src/config/CMakeLists.txt
++++ b/src/config/CMakeLists.txt
+@@ -8,7 +8,7 @@ add_library(fdv_config STATIC
+ )
+ 
+ target_include_directories(fdv_config PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+-add_dependencies(fdv_config rade codec2 samplerate)
++add_dependencies(fdv_config rade codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_config wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+diff --git a/src/gui/dialogs/CMakeLists.txt b/src/gui/dialogs/CMakeLists.txt
+index 051e37ed0..911193d9d 100644
+--- a/src/gui/dialogs/CMakeLists.txt
++++ b/src/gui/dialogs/CMakeLists.txt
+@@ -9,7 +9,7 @@ add_library(fdv_gui_dialogs STATIC
+ 
+ target_include_directories(fdv_gui_dialogs PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../.. ${CMAKE_CURRENT_BINARY_DIR}/../..)
+ 
+-add_dependencies(fdv_gui_dialogs rade opus codec2 samplerate)
++add_dependencies(fdv_gui_dialogs rade opus codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_gui_dialogs wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
+index 499251378..9e3cd3064 100644
+--- a/src/pipeline/CMakeLists.txt
++++ b/src/pipeline/CMakeLists.txt
+@@ -25,7 +25,7 @@ add_library(fdv_audio_pipeline STATIC
+ 
+ target_include_directories(fdv_audio_pipeline PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+ 
+-add_dependencies(fdv_audio_pipeline rade opus codec2 samplerate)
++add_dependencies(fdv_audio_pipeline rade opus codec2)
+ 
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_audio_pipeline wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+
+From 5b0d31b1a2602aca2021cfafb19880d6c60662f5 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Sat, 5 Jul 2025 00:20:20 -0700
+Subject: [PATCH 15/20] Reenable processing stats.
+
+---
+ src/pipeline/TxRxThread.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index 70c6fd156..ac18190e0 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -62,7 +62,7 @@ using namespace std::chrono_literals;
+ //   processing and output in the log after the user pushes Stop. 
+ 
+ #define ENABLE_FASTER_PLOTS
+-//#define ENABLE_PROCESSING_STATS
++#define ENABLE_PROCESSING_STATS
+ 
+ // External globals
+ // TBD -- work on fully removing the need for these.
+
+From 8b9b824a882971e417923ab55adbc4a409bd5bf9 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Sat, 5 Jul 2025 00:25:46 -0700
+Subject: [PATCH 16/20] Try building with -O3.
+
+---
+ .github/workflows/cmake-linux.yml   | 2 +-
+ .github/workflows/cmake-macos.yml   | 4 ++--
+ .github/workflows/cmake-windows.yml | 4 ++--
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/.github/workflows/cmake-linux.yml b/.github/workflows/cmake-linux.yml
+index 9c5a31afd..2c1a6133f 100644
+--- a/.github/workflows/cmake-linux.yml
++++ b/.github/workflows/cmake-linux.yml
+@@ -11,7 +11,7 @@ concurrency:
+     
+ env:
+   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+-  BUILD_TYPE: RelWithDebInfo
++  BUILD_TYPE: Release
+ 
+ jobs:
+   lint:
+diff --git a/.github/workflows/cmake-macos.yml b/.github/workflows/cmake-macos.yml
+index 05fc1d2af..ac82a785d 100644
+--- a/.github/workflows/cmake-macos.yml
++++ b/.github/workflows/cmake-macos.yml
+@@ -11,7 +11,7 @@ concurrency:
+     
+ env:
+   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+-  BUILD_TYPE: Debug
++  BUILD_TYPE: Release
+ 
+ jobs:
+   test:
+@@ -43,7 +43,7 @@ jobs:
+     - name: Build freedv-gui
+       shell: bash
+       working-directory: ${{github.workspace}}
+-      run: BUILD_TYPE=RelWithDebInfo UT_ENABLE=1 UNIV_BUILD=0 BUILD_DEPS=0 ./build_osx.sh 
++      run: UT_ENABLE=1 UNIV_BUILD=0 BUILD_DEPS=0 ./build_osx.sh 
+ 
+     - name: Workaround macOS permission issues
+       if: ${{ matrix.os == 'macos-13' }} 
+diff --git a/.github/workflows/cmake-windows.yml b/.github/workflows/cmake-windows.yml
+index 4ad21d55d..ec165ad79 100644
+--- a/.github/workflows/cmake-windows.yml
++++ b/.github/workflows/cmake-windows.yml
+@@ -11,7 +11,7 @@ concurrency:
+     
+ env:
+   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+-  BUILD_TYPE: Debug
++  BUILD_TYPE: Release
+ 
+ jobs:
+   build:
+@@ -72,7 +72,7 @@ jobs:
+         export PATH=${{github.workspace}}/llvm-mingw-20250430-ucrt-ubuntu-22.04-x86_64/bin:$PATH
+         mkdir build_windows
+         cd build_windows
+-        cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/cross-compile/freedv-mingw-llvm-x86_64.cmake -DPython3_ROOT_DIR=$WINEPREFIX/drive_c/Program\ Files/Python312 ..
++        cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/cross-compile/freedv-mingw-llvm-x86_64.cmake -DPython3_ROOT_DIR=$WINEPREFIX/drive_c/Program\ Files/Python312 ..
+ 
+     - name: Build freedv-gui
+       shell: bash
+
+From 2536a15dd2d165c1d94eef39100f3c3ff3ee8452 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Sat, 5 Jul 2025 00:41:26 -0700
+Subject: [PATCH 17/20] Try building using LTO.
+
+---
+ CMakeLists.txt | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0a500edf0..8c96b583b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -55,6 +55,13 @@ if(NOT DEFINED LINUX)
+     endif((${LINUX_LOC} GREATER 0) OR (${LINUX_LOC} EQUAL 0))
+ endif(NOT DEFINED LINUX)
+ 
++if(CMAKE_BUILD_TYPE STREQUAL "Release")
++    # Enable LTO
++    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
++    set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -flto")
++    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto")
++endif(CMAKE_BUILD_TYPE STREQUAL "Release")
++
+ # Adds a tag to the end of the version string. Leave empty
+ # for official release builds.
+ if(NOT DEFINED FREEDV_VERSION_TAG)
+
+From 63010cf8b83896053649eed860a366be190dde70 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Sat, 5 Jul 2025 01:27:02 -0700
+Subject: [PATCH 18/20] Revert "Try building using LTO."
+
+This reverts commit 2536a15dd2d165c1d94eef39100f3c3ff3ee8452.
+---
+ CMakeLists.txt | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8c96b583b..0a500edf0 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -55,13 +55,6 @@ if(NOT DEFINED LINUX)
+     endif((${LINUX_LOC} GREATER 0) OR (${LINUX_LOC} EQUAL 0))
+ endif(NOT DEFINED LINUX)
+ 
+-if(CMAKE_BUILD_TYPE STREQUAL "Release")
+-    # Enable LTO
+-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
+-    set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -flto")
+-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto")
+-endif(CMAKE_BUILD_TYPE STREQUAL "Release")
+-
+ # Adds a tag to the end of the version string. Leave empty
+ # for official release builds.
+ if(NOT DEFINED FREEDV_VERSION_TAG)
+
+From 68762ca070bf5517b6ffd3a75486be661ba98509 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Sat, 5 Jul 2025 01:27:09 -0700
+Subject: [PATCH 19/20] Revert "Try building with -O3."
+
+This reverts commit 8b9b824a882971e417923ab55adbc4a409bd5bf9.
+---
+ .github/workflows/cmake-linux.yml   | 2 +-
+ .github/workflows/cmake-macos.yml   | 4 ++--
+ .github/workflows/cmake-windows.yml | 4 ++--
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/.github/workflows/cmake-linux.yml b/.github/workflows/cmake-linux.yml
+index 2c1a6133f..9c5a31afd 100644
+--- a/.github/workflows/cmake-linux.yml
++++ b/.github/workflows/cmake-linux.yml
+@@ -11,7 +11,7 @@ concurrency:
+     
+ env:
+   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+-  BUILD_TYPE: Release
++  BUILD_TYPE: RelWithDebInfo
+ 
+ jobs:
+   lint:
+diff --git a/.github/workflows/cmake-macos.yml b/.github/workflows/cmake-macos.yml
+index ac82a785d..05fc1d2af 100644
+--- a/.github/workflows/cmake-macos.yml
++++ b/.github/workflows/cmake-macos.yml
+@@ -11,7 +11,7 @@ concurrency:
+     
+ env:
+   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+-  BUILD_TYPE: Release
++  BUILD_TYPE: Debug
+ 
+ jobs:
+   test:
+@@ -43,7 +43,7 @@ jobs:
+     - name: Build freedv-gui
+       shell: bash
+       working-directory: ${{github.workspace}}
+-      run: UT_ENABLE=1 UNIV_BUILD=0 BUILD_DEPS=0 ./build_osx.sh 
++      run: BUILD_TYPE=RelWithDebInfo UT_ENABLE=1 UNIV_BUILD=0 BUILD_DEPS=0 ./build_osx.sh 
+ 
+     - name: Workaround macOS permission issues
+       if: ${{ matrix.os == 'macos-13' }} 
+diff --git a/.github/workflows/cmake-windows.yml b/.github/workflows/cmake-windows.yml
+index ec165ad79..4ad21d55d 100644
+--- a/.github/workflows/cmake-windows.yml
++++ b/.github/workflows/cmake-windows.yml
+@@ -11,7 +11,7 @@ concurrency:
+     
+ env:
+   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+-  BUILD_TYPE: Release
++  BUILD_TYPE: Debug
+ 
+ jobs:
+   build:
+@@ -72,7 +72,7 @@ jobs:
+         export PATH=${{github.workspace}}/llvm-mingw-20250430-ucrt-ubuntu-22.04-x86_64/bin:$PATH
+         mkdir build_windows
+         cd build_windows
+-        cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/cross-compile/freedv-mingw-llvm-x86_64.cmake -DPython3_ROOT_DIR=$WINEPREFIX/drive_c/Program\ Files/Python312 ..
++        cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/cross-compile/freedv-mingw-llvm-x86_64.cmake -DPython3_ROOT_DIR=$WINEPREFIX/drive_c/Program\ Files/Python312 ..
+ 
+     - name: Build freedv-gui
+       shell: bash
+
+From 17bc509e8604d02c40b9d740bc63165d5a3bbc75 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Sat, 5 Jul 2025 01:27:15 -0700
+Subject: [PATCH 20/20] Revert "Reenable processing stats."
+
+This reverts commit 5b0d31b1a2602aca2021cfafb19880d6c60662f5.
+---
+ src/pipeline/TxRxThread.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index ac18190e0..70c6fd156 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -62,7 +62,7 @@ using namespace std::chrono_literals;
+ //   processing and output in the log after the user pushes Stop. 
+ 
+ #define ENABLE_FASTER_PLOTS
+-#define ENABLE_PROCESSING_STATS
++//#define ENABLE_PROCESSING_STATS
+ 
+ // External globals
+ // TBD -- work on fully removing the need for these.
+ 
