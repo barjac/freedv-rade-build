@@ -1,19 +1,17 @@
 #!/bin/bash
 # This script installs freedv RADE from github on various linux distributions
-# Run with -l or --log to generate a log file for debugging.
-# ./freedv-rade-build [ -l | --log ]
-
-# Start logging
-if [[ $1 == "-l" ]] || [[ $1 == "--log" ]]; then
-# Remove old log
-    rm -f freedv-rade-build.log ||:
-    cat /etc/os-release > freedv-rade-build.log
-    exec > >(tee -a freedv-rade-build.log)
-    exec 2>&1
-fi
+# A log file for debugging is automatically generated in ~/freedv-rade-build.
 
 # Check we are not root
 ((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 1; }
+
+#   Remove old log
+    rm -f freedv-rade-build.log || { echo "Failed to remove old log"; exit 1; }
+
+# Start logging
+    cat /etc/os-release > freedv-rade-build.log
+    exec > >(tee -a freedv-rade-build.log)
+    exec 2>&1
 
 # Check that this is a 64bit machine
 uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
