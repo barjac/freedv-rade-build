@@ -1,6 +1,6 @@
  # freedv-rade-build
 
-This script automates installation of RADE versions of FreeDV-gui in modern Linux distibutions.
+This script automates installation of FreeDV RADE in modern Linux distibutions.
 
 It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro OpenSUSE Tumbleweed Garuda EndevourOS and Debian**
 
@@ -74,7 +74,7 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 
 - 4 June 2025 Updated for the release of FreeDV-2.0.0 which now uses master branch.
 
-- July 2025 Added option to save a log of the build to help with debugging when needed.
+- July 2025 Added log of the build to help with debugging when needed.
 Also added support for several Arch Linux based distros.
 
 ## Using the script
@@ -130,9 +130,8 @@ If you have an early clone of freedv-rade-build then you can update it as follow
 
 Just follow the prompts.
 
-If you do hit a problem please open an issue here but first run:
+If you hit a problem please open an issue here and attach the file: ~/freedv-rade-build/freedv-rade-build.log
 
-'freedv-rade-build --log' and attach the file ~/freedv-rade-build/freedv-rade-build.log to to the report.
 
 ***Have fun with FreeDV!***
 
