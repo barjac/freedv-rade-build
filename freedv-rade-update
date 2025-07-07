@@ -1,6 +1,14 @@
 #!/bin/bash
 #set -x
 
+#   Remove old log
+    rm -f ~/freedv-rade-build/freedv-rade-update.log || { echo "Failed to remove old log"; exit 1; }
+
+# Start logging
+    cat /etc/os-release > ~/freedv-rade-build/freedv-rade-update.log
+    exec > >(tee -a ~/freedv-rade-build/freedv-rade-update.log)
+    exec 2>&1
+
 # Set default branch
 default="master"
 prbranch=""
