@@ -114,7 +114,7 @@ exit 0
 
 # Main routine ###################
 clear
-echo "Wait a moment..."
+echo "Wait a moment...                                                                 (update-log branch)"
 
 # Check we are not root
 ((UID)) || { echo "ERROR: You must NOT be root user to run $0, use CTRL/d to become $USER"; exit 1; }

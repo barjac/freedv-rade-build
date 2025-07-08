@@ -10,7 +10,7 @@ cat > ~/Desktop/freedv-rade-update.desktop <<EOF
 [Desktop Entry]
 Version=1.0
 Name=Update-RADE
-Exec=cd /home/$USER/freedv-rade-build; ./freedv-rade-update
+Exec=/home/$USER/freedv-rade-build/freedv-rade-update
 Icon=/home/$USER/freedv-rade-build/freedv.png
 Type=Application
 Terminal=true
