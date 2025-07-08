@@ -330,8 +330,8 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
 
 # Full re-build
         if (( update == 1 )); then 
-            echo -e "\nStarting full rebuild in 5 seconds. Please be patient this will take some time ..."
-            sleep 5
+            echo -e "\nStarting full rebuild in 3 seconds. Please be patient this will take some time ..."
+            sleep 3
             freedv-rade-build/freedv-rade-build
         fi
 # Desktop file
