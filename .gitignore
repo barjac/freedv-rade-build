@@ -1,3 +1,5 @@
 .agent.jackodesktop
 .agent.localhost
 freedv-rade-build.log
+freedv-rade-update.log
+*.patch

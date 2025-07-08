@@ -114,7 +114,9 @@ exit 0
 
 # Main routine ###################
 clear
-echo "Wait a moment...                                                                 (update-log branch)"
+cd freedv-rade-build
+branch="$(git status|grep 'On branch')"
+echo "Wait a moment..."
 
 # Check we are not root
 ((UID)) || { echo "ERROR: You must NOT be root user to run $0, use CTRL/d to become $USER"; exit 1; }
@@ -130,7 +132,7 @@ cd || exit 1
 
 # Preamble
 clear
-echo "################## Welcome to freedv-rade-update ######################"
+echo "############### Welcome to freedv-rade-update ################ ($branch)"
 echo -e "\n This script is for maintaining a build of FreeDV RADE \n \
 created using freedv-rade-build script.\n"
 echo -e "It will optionally:\n \
@@ -297,8 +299,8 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
 
 # Fast update
         if (( fastupdt == 1 )); then
-            echo -e "\nStarting fast update in 5 seconds to latest ${prbranch}."
-            sleep 5
+            echo -e "\nStarting fast update in 3 seconds to latest ${prbranch}."
+            sleep 3
             if fastupdt; then
                 echo "Update complete"
             else
