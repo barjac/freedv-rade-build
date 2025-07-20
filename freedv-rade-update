@@ -74,7 +74,7 @@ git switch $default || { echo "ERROR: switching to $default"; exit 1; }
 git pull
 
     if (( ${#prbranch} > 0 )); then
-        if git switch "$prbranch" | grep -q "error:"; then
+        if git checkout --detach "$prbranch" | grep -q "error:"; then
             echo -e "\nError finding $prbranch - closing.\n"
             exit 1
         fi
@@ -114,7 +114,7 @@ exit 0
 
 # Main routine ###################
 clear
-cd freedv-rade-build
+cd ~/freedv-rade-build
 branch="$(git status|grep 'On branch')"
 echo "Wait a moment..."
 
@@ -196,9 +196,9 @@ else
         esac
 fi
 
-if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch?" "[N/y]" "yY" "nN"; then
+if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch or tag?" "[N/y]" "yY" "nN"; then
     echo ""
-    read -r -p "Enter branch name:" prbranch
+    read -r -p "Enter branch/tag name:" prbranch
 fi
 # Use default branch if non entered
     (( ${#prbranch} == 0 )) && prbranch="$default"
@@ -254,16 +254,16 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     fi
 
     if (( fastupdt == 1 )); then
-        updt_str=" curent $prbranch"
+        updt_str="built at $prbranch"
 
         if (( ${#pname} > 0 )); then
-            updt_str="$updt_str patched with $pname"
+            updt_str="$updt_str and patched with $pname"
         fi
 
         if (( ${#cname} >0 )); then
             updt_str="$updt_str at commit $cname"
         fi
-        echo "FreeDV will be updated to $updt_str"
+        echo "FreeDV will be $updt_str"
     fi
 
     if (( update == 1 )); then 
