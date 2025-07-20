@@ -106,15 +106,15 @@ case $ID in
     linuxmint)
     echo "Enter the root password to install some initially needed dependencies"
     MINT_ID=$(echo $VERSION_ID|cut -d. -f1)
-    if (( MINT_ID == 22 )); then
+    if (( MINT_ID >= 22 )); then
             sudo apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
-            autoconf libtool python3-numpy-dev python3 python3-dev libhamlib-utils fonts-noto-color-emoji \
+            autoconf libtool python3-numpy-dev python3 python3-dev libhamlib-utils automake fonts-noto-color-emoji \
             || { echo "Deps install failed"; exit 1; }
     elif (( MINT_ID == 21 )); then
             sudo apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
-            autoconf libtool python3-numpy python3 python3-dev libhamlib-utils fonts-noto-color-emoji \
+            autoconf libtool python3-numpy python3 python3-dev libhamlib-utils automake fonts-noto-color-emoji \
             || { echo "Deps install failed"; exit 1; }
     else
         { echo "This Mint version is not yet supported, please create an isuue in github"; exit 1; }
