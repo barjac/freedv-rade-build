@@ -74,7 +74,7 @@ git switch $default || { echo "ERROR: switching to $default"; exit 1; }
 git pull
 
     if (( ${#prbranch} > 0 )); then
-        if git checkout --detach "$prbranch" | grep -q "error:"; then
+        if git checkout "$prbranch" | grep -q "error:"; then
             echo -e "\nError finding $prbranch - closing.\n"
             exit 1
         fi
