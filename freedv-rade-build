@@ -211,7 +211,7 @@ case $ID in
     echo "Enter the root password to install some initially needed dependencies"
     run_as_root "pacman -S --needed cmake gcc base-devel autoconf automake libtool git python speexdsp libsamplerate sox \
     wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy manjaro-pulse gsm noto-fonts-emoji" \
-            || { echo "Deps install failed"; exit 1; }
+    || { echo "Deps install failed"; exit 1; }
     ;;
 #    pclinuxos)  # Hamlib package seems unmaintained here and build from git currently fails.
 #    echo "Enter the root password to install some initially needed dependencies"
@@ -220,6 +220,15 @@ case $ID in
 #           python3-devel pulseaudio-devel" \
 #           || { echo "Deps install failed - try again later"; exit 1; }
 #    ;;
+    gentoo)
+    echo "Enter the root password to install some initially needed dependencies"
+    run_as_root "emerge --verbose --noreplace \
+    dev-vcs/git dev-build/cmake dev-build/automake dev-build/autoconf dev-build/libtool x11-libs/wxGTK:3.2 \
+    media-libs/libsamplerate media-libs/libsndfile media-libs/speexdsp media-libs/hamlib media-libs/alsa-lib \
+    media-libs/libao media-sound/gsm sys-devel/gcc media-sound/sox dev-python/virtualenv media-libs/libpulse \
+    dev-lang/python dev-python/numpy media-fonts/noto-color-emoji" \
+    || { echo "Deps install failed"; exit 1; }
+    ;;
     *)
     echo "Sorry $PRETTY_NAME is not yet supported."
     echo "Please create a github issue with details of your system."
