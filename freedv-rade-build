@@ -157,7 +157,7 @@ case $ID in
     debian)
     DEBIAN_ID=$(echo $VERSION_ID|cut -d. -f1)
     echo "Enter the root password if requested to install some initially needed dependencies"
-        if (( DEBIAN_ID == 12 )); then
+        if (( DEBIAN_ID >= 12 )); then
             run_as_root "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev autoconf libtool \
                 python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji automake" \
