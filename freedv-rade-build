@@ -79,9 +79,12 @@ run_as_root() {
     return 1
 }
 
+groups_to_add=()
+
 # Install some system deps
 case $ID in
     mageia)
+    groups_to_add+=(dialout)
     echo "Enter the root password if requested to install some initially needed dependencies"
     MGA_ID=$(echo $VERSION_ID|cut -d. -f1)
     if (( MGA_ID > 9 )); then
@@ -97,6 +100,7 @@ case $ID in
     fi
     ;;
     opensuse-tumbleweed)
+    groups_to_add+=(dialout)
     echo "Enter the root password to install some initially needed dependencies"
     sudo zypper --non-interactive in --no-recommends cmake patch automake autoconf libtool wxGTK3-devel libsamplerate-devel \
             libsndfile-devel speexdsp-devel alsa-lib-devel libao-devel libgsm-devel gcc-c++ sox python3-virtualenv \
@@ -104,6 +108,7 @@ case $ID in
             || { echo "Deps install failed"; exit 1; }
     ;;
     linuxmint)
+    groups_to_add+=(dialout plugdev)
     echo "Enter the root password to install some initially needed dependencies"
     MINT_ID=$(echo $VERSION_ID|cut -d. -f1)
     if (( MINT_ID >= 22 )); then
@@ -121,6 +126,7 @@ case $ID in
     fi
     ;;
     fedora)
+    groups_to_add+=(dialout)
     echo "Enter the root password to install some initially needed dependencies"
         FC_ID=$(echo $VERSION_ID|cut -d. -f1)
         if (( FC_ID == 42 )); then
@@ -139,6 +145,7 @@ case $ID in
         fi
     ;;
     ubuntu)
+    groups_to_add+=(dialout plugdev)
     echo "Enter the root password to install some initially needed dependencies"
         UBUNTU_ID=$(echo $VERSION_ID|cut -d. -f1)
             sudo apt update
@@ -155,6 +162,7 @@ case $ID in
         fi
     ;;
     debian)
+    groups_to_add+=(dialout plugdev)
     DEBIAN_ID=$(echo $VERSION_ID|cut -d. -f1)
     echo "Enter the root password if requested to install some initially needed dependencies"
         if (( DEBIAN_ID >= 12 )); then
@@ -173,6 +181,7 @@ case $ID in
         fi
     ;;
     arch|garuda|endeavouros|arcolinux|rebornos)
+    groups_to_add+=(uucp lock)
     echo "Enter the root password to install some initially needed dependencies"
 
     run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
@@ -208,6 +217,7 @@ case $ID in
     fi
     ;;
     manjaro)
+    groups_to_add+=(uucp lock)
     echo "Enter the root password to install some initially needed dependencies"
     run_as_root "pacman -S --needed cmake gcc base-devel autoconf automake libtool git python speexdsp libsamplerate sox \
     wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy manjaro-pulse gsm noto-fonts-emoji" \
@@ -221,6 +231,7 @@ case $ID in
 #           || { echo "Deps install failed - try again later"; exit 1; }
 #    ;;
     gentoo)
+    groups_to_add+=(dialout uucp)
     echo "Enter the root password to install some initially needed dependencies"
     run_as_root "emerge --verbose --noreplace \
     dev-vcs/git dev-build/cmake dev-build/automake dev-build/autoconf dev-build/libtool x11-libs/wxGTK:3.2 \
