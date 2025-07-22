@@ -77,6 +77,8 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 
 - July 2025 Added log of the build to help with debugging when needed.
 Also added support for several Arch Linux based distros.
+- July 2025 Added update logging.
+
 
 ## Using the script
 
