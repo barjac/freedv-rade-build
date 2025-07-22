@@ -47,28 +47,26 @@ echo -e "\nHello ${USER}, you seem to be using ${PRETTY_NAME}\n"
 echo -e "Installation will be made into ${basedir}/${builddir}\n"
 
 run_as_root() {
-    local CMD="$*"
-
-    if [ -z "$CMD" ]; then
+    if [ $# -eq 0 ]; then
         echo "run_as_root: No command provided." >&2
         return 1
     fi
 
-    # Try passwordless sudo
+    # Join arguments safely into a single command string
+    local CMD="$*"
+
     if command -v sudo >/dev/null 2>&1; then
         if sudo -n true 2>/dev/null; then
-        # Passwordless or password already given and within timeout.
             echo "Running as root via sudo"
-            sudo $CMD
+            sudo bash -c "$CMD"
             return $?
         elif sudo -v >/dev/null 2>&1; then
             echo "Running as root via sudo (with password prompt)"
-            sudo $CMD
+            sudo bash -c "$CMD"
             return $?
         fi
     fi
 
-    # Try su
     if command -v su >/dev/null 2>&1; then
         echo "Running as root via su"
         su -c "$CMD"
