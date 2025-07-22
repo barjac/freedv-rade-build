@@ -5,6 +5,8 @@
 # Check we are not root
 ((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 1; }
 
+user="$(logname 2>/dev/null || echo "$USER")"
+
 #   Remove old log
     rm -f freedv-rade-build.log || { echo "Failed to remove old log"; exit 1; }
 
