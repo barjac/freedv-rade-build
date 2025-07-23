@@ -12,6 +12,7 @@ user="$(logname 2>/dev/null || echo "$USER")"
 
 # Start logging
     cat /etc/os-release > freedv-rade-build.log
+    locale >> freedv-rade-build.log
     exec > >(tee -a freedv-rade-build.log)
     exec 2>&1
 
@@ -42,6 +43,8 @@ builddir=freedv-rade
 
 # Check we have internet and DNS
 ping -c3 google.com > /dev/null || { echo "ERROR: Failed to find internet connection or DNS"; exit 1; }
+
+
 
 # Find out where we are
 . /etc/os-release
@@ -100,11 +103,11 @@ case $ID in
     echo "Enter the root password if requested to install some initially needed dependencies"
     MGA_ID=$(echo $VERSION_ID|cut -d. -f1)
     if (( MGA_ID > 9 )); then
-            run_as_root "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
+            run_as_root "urpmi --auto git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
             libao-devel gsm-devel gcc-c++ automake sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
             fonts-ttf-google-noto-emoji-color" || { echo "Deps install failed"; exit 1; }
     else
-            run_as_root "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
+            run_as_root "urpmi --auto git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
             libao-devel gsm-devel gcc-c++ automake sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
             google-noto-emoji-color-fonts" || { echo \"Deps install failed\"; exit 1; }
     fi
@@ -245,7 +248,7 @@ case $ID in
     groups_to_add+=(dialout uucp)
     echo "Enter the root password to install some initially needed dependencies"
     run_as_root "emerge --verbose --noreplace \
-    dev-vcs/git dev-build/cmake dev-build/automake dev-build/autoconf dev-build/libtool x11-libs/wxGTK:3.2 \
+    dev-vcs/git dev-build/cmake dev-build/automake dev-build/autoconf dev-build/libtool x11-libs/wxGTK \
     media-libs/libsamplerate media-libs/libsndfile media-libs/speexdsp media-libs/hamlib media-libs/alsa-lib \
     media-libs/libao media-sound/gsm sys-devel/gcc media-sound/sox dev-python/virtualenv media-libs/libpulse \
     dev-lang/python dev-python/numpy media-fonts/noto-color-emoji" \
