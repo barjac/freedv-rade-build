@@ -48,18 +48,6 @@ ping -c3 google.com > /dev/null || { echo "ERROR: Failed to find internet connec
 echo -e "\nHello ${USER}, you seem to be using ${PRETTY_NAME}\n"
 echo -e "Installation will be made into ${basedir}/${builddir}\n"
 
-groups_add() {
-# Add the user to each group, if not already a member
-for group in "${groups_to_add[@]}"; do
-    if id "$user" | grep -qw "$group"; then
-        echo "User $user is already in group $group"
-    else
-        echo "Adding $user to group $group"
-        run_as_root "usermod -aG $group $user"
-    fi
-done
-}
-
 run_as_root() {
     if [ $# -eq 0 ]; then
         echo "run_as_root: No command provided." >&2
@@ -115,15 +103,12 @@ case $ID in
             run_as_root "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
             libao-devel gsm-devel gcc-c++ automake sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
             fonts-ttf-google-noto-emoji-color" || { echo "Deps install failed"; exit 1; }
-
-            groups_add || { echo "Group add failed"; exit 1; }
     else
-            run_as_root "
-            urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
+            run_as_root "urpmi git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
             libao-devel gsm-devel gcc-c++ automake sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
-            google-noto-emoji-color-fonts && groups_add || { echo \"Deps install failed\"; exit 1; }
-            "
+            google-noto-emoji-color-fonts" || { echo \"Deps install failed\"; exit 1; }
     fi
+    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     opensuse-tumbleweed)
     groups_to_add+=(dialout)
