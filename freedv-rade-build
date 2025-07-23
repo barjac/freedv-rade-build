@@ -226,7 +226,7 @@ case $ID in
     gentoo)
     echo "Enter the root password to install some initially needed dependencies"
     run_as_root "emerge --verbose --noreplace \
-    dev-vcs/git dev-build/cmake dev-build/automake dev-build/autoconf dev-build/libtool x11-libs/wxGTK:3.2 \
+    dev-vcs/git dev-build/cmake dev-build/automake dev-build/autoconf dev-build/libtool x11-libs/wxGTK \
     media-libs/libsamplerate media-libs/libsndfile media-libs/speexdsp media-libs/hamlib media-libs/alsa-lib \
     media-libs/libao media-sound/gsm sys-devel/gcc media-sound/sox dev-python/virtualenv media-libs/libpulse \
     dev-lang/python dev-python/numpy media-fonts/noto-color-emoji" \
