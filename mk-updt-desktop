@@ -5,8 +5,8 @@
 ((UID)) || { echo "You must NOT run $0 as root - aborting!"; exit 0; }
 
 # Create .desktop file only if missing (don't overwrite existing)
-if ! [[ -f ~/Desktop/freedv-rade-update.desktop ]]; then
-cat > ~/Desktop/freedv-rade-update.desktop <<EOF
+if ! [[ -f $(xdg-user-dir DESKTOP)/freedv-rade-update.desktop ]]; then
+cat > $(xdg-user-dir DESKTOP)/freedv-rade-update.desktop <<EOF
 [Desktop Entry]
 Version=1.0
 Name=Update-RADE
@@ -21,5 +21,8 @@ X-Desktop-File-Install-Version=0.26
 
 EOF
 
-chmod +x ~/Desktop/freedv-rade-update.desktop
+    if [[ -f $(xdg-user-dir DESKTOP)/freedv-rade-update.desktop ]]; then
+        chmod +x $(xdg-user-dir DESKTOP)/freedv-rade-update.desktop
+        echo "Update-RADE desktop file created"
+    fi
 fi
