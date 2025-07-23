@@ -19,20 +19,20 @@ user="$(logname 2>/dev/null || echo "$USER")"
 # Check that this is a 64bit machine
 uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
 
-# Get/set path of base dir to use, defaults to /home/$USER
-if [[ -f /home/${USER}/.freedv-rade-build.cfg ]]; then
-    if cat /home/${USER}/.freedv-rade-build.cfg|grep -v '^[#]'|grep -q "basedir="; then
-        basedir=$(cat /home/${USER}/.freedv-rade-build.cfg|grep -v '^[#]'|grep 'basedir='|cut -d= -f2)
+# Get/set path of base dir to use, defaults to /home/$user
+if [[ -f /home/${user}/.freedv-rade-build.cfg ]]; then
+    if cat /home/${user}/.freedv-rade-build.cfg|grep -v '^[#]'|grep -q "basedir="; then
+        basedir=$(cat /home/${user}/.freedv-rade-build.cfg|grep -v '^[#]'|grep 'basedir='|cut -d= -f2)
     else
-        basedir=/home/$USER
+        basedir=/home/$user
     fi
 else
-    echo "basedir=/home/$USER" > /home/${USER}/.freedv-rade-build.cfg
-    basedir=/home/$USER
+    echo "basedir=/home/$user" > /home/${user}/.freedv-rade-build.cfg
+    basedir=/home/$user
 fi
 
 # Check permissions on target dir
-touch ${basedir}/test_for_perms > /dev/null 2>&1 || { echo -e "Target folder $basedir is not writeable by $USER\n check permissions on this directory it may need ownership changing.\n"; exit 1; }
+touch ${basedir}/test_for_perms > /dev/null 2>&1 || { echo -e "Target folder $basedir is not writeable by $user\n check permissions on this directory it may need ownership changing.\n"; exit 1; }
 rm -f ${basedir}/test_for_perms
 
 # Set default build dir name
@@ -48,7 +48,7 @@ ping -c3 google.com > /dev/null || { echo "ERROR: Failed to find internet connec
 
 # Find out where we are
 . /etc/os-release
-echo -e "\nHello ${USER}, you seem to be using ${PRETTY_NAME}\n"
+echo -e "\nHello ${user}, you seem to be using ${PRETTY_NAME}\n"
 echo -e "Installation will be made into ${basedir}/${builddir}\n"
 
 run_as_root() {
