@@ -89,7 +89,7 @@ for group in "${groups_to_add[@]}"; do
         echo "User $user is already in group $group"
     else
         echo "Adding $user to group $group"
-        run_as_root "usermod -aG $group $user"
+        run_as_root "usermod -aG $group $user"  && grp_added=1
     fi
 done
 }
@@ -337,3 +337,7 @@ deactivate || echo "WARNING:Issue deactivating venv"
 cd
 echo -e "\n\n########### Build is complete \o/ ############\n\nYou can run it from your home folder using:\n\n \
       ./freedv-start [-f configfile]\n\n  OR  use the FreeDV-RADE desktop icon."
+
+        if [[ $grp_added == 1 ]]; then
+            echo "A change was made to your group membership please reboot before using FreeDV"
+        fi
