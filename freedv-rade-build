@@ -336,4 +336,4 @@ deactivate || echo "WARNING:Issue deactivating venv"
 
 cd
 echo -e "\n\n########### Build is complete \o/ ############\n\nYou can run it from your home folder using:\n\n \
-      ./freedv-start [-f configfile]\n\n  OR  use the desktop FreeDV-RADE desktop icon."
+      ./freedv-start [-f configfile]\n\n  OR  use the FreeDV-RADE desktop icon."
