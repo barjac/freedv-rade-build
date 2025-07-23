@@ -103,11 +103,11 @@ case $ID in
     echo "Enter the root password if requested to install some initially needed dependencies"
     MGA_ID=$(echo $VERSION_ID|cut -d. -f1)
     if (( MGA_ID > 9 )); then
-            run_as_root "urpmi --auto git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
+            run_as_root "urpmi --auto --no-recommends git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
             libao-devel gsm-devel gcc-c++ automake sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
             fonts-ttf-google-noto-emoji-color" || { echo "Deps install failed"; exit 1; }
     else
-            run_as_root "urpmi --auto git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
+            run_as_root "urpmi --auto --no-recommends git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
             libao-devel gsm-devel gcc-c++ automake sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
             google-noto-emoji-color-fonts" || { echo \"Deps install failed\"; exit 1; }
     fi
@@ -120,6 +120,7 @@ case $ID in
             libsndfile-devel speexdsp-devel alsa-lib-devel libao-devel libgsm-devel gcc-c++ sox python3-virtualenv \
             pulseaudio-devel python3 python3-devel hamlib hamlib-devel google-noto-coloremoji-fonts \
             || { echo "Deps install failed"; exit 1; }
+    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     linuxmint)
     groups_to_add+=(dialout plugdev)
@@ -138,6 +139,7 @@ case $ID in
     else
         { echo "This Mint version is not yet supported, please create an isuue in github"; exit 1; }
     fi
+    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     fedora)
     groups_to_add+=(dialout)
@@ -157,6 +159,7 @@ case $ID in
         else
             { echo "This Fedora version is not yet supported, please create an isuue in github"; exit 1; }
         fi
+        groups_add || { echo "Group add failed"; exit 1; }
     ;;
     ubuntu)
     groups_to_add+=(dialout plugdev)
@@ -174,6 +177,7 @@ case $ID in
         else
             { echo "This Ubuntu version is not yet supported, please create an isuue in github"; exit 1; }
         fi
+        groups_add || { echo "Group add failed"; exit 1; }
     ;;
     debian)
     groups_to_add+=(dialout plugdev)
@@ -193,6 +197,7 @@ case $ID in
             { echo "This Debian version is not yet supported, please create an isuue in github"; exit 1; }
 
         fi
+    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     arch|garuda|endeavouros|arcolinux|rebornos)
     groups_to_add+=(uucp lock)
@@ -229,6 +234,7 @@ case $ID in
     else
         echo "wxwidgets-gtk3 is already installed."
     fi
+    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     manjaro)
     groups_to_add+=(uucp lock)
@@ -236,6 +242,7 @@ case $ID in
     run_as_root "pacman -S --needed cmake gcc base-devel autoconf automake libtool git python speexdsp libsamplerate sox \
     wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy manjaro-pulse gsm noto-fonts-emoji" \
     || { echo "Deps install failed"; exit 1; }
+    groups_add || { echo "Group add failed"; exit 1; }
     ;;
 #    pclinuxos)  # Hamlib package seems unmaintained here and build from git currently fails.
 #    echo "Enter the root password to install some initially needed dependencies"
@@ -253,6 +260,7 @@ case $ID in
     media-libs/libao media-sound/gsm sys-devel/gcc media-sound/sox dev-python/virtualenv media-libs/libpulse \
     dev-lang/python dev-python/numpy media-fonts/noto-color-emoji" \
     || { echo "Deps install failed"; exit 1; }
+    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     *)
     echo "Sorry $PRETTY_NAME is not yet supported."
