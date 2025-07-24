@@ -87,10 +87,10 @@ run_as_root() {
 groups_to_add=()
 
 # Install some system deps
+echo "Enter the root password if requested to install some initially needed dependencies"
 case $ID in
     mageia)
     groups_to_add+=(dialout)
-    echo "Enter the root password if requested to install some initially needed dependencies"
     MGA_ID=$(echo $VERSION_ID|cut -d. -f1)
     if (( MGA_ID > 9 )); then
             run_as_root "urpmi --auto --no-recommends git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
@@ -112,7 +112,6 @@ case $ID in
     ;;
     linuxmint)
     groups_to_add+=(dialout plugdev)
-    echo "Enter the root password to install some initially needed dependencies"
     MINT_ID=$(echo $VERSION_ID|cut -d. -f1)
     if (( MINT_ID >= 22 )); then
             run_as_root "apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev \
@@ -130,7 +129,6 @@ case $ID in
     ;;
     fedora)
     groups_to_add+=(dialout)
-    echo "Enter the root password to install some initially needed dependencies"
         FC_ID=$(echo $VERSION_ID|cut -d. -f1)
         if (( FC_ID == 42 )); then
             run_as_root "dnf5 install--setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
@@ -148,7 +146,6 @@ case $ID in
     ;;
     ubuntu)
     groups_to_add+=(dialout plugdev)
-    echo "Enter the root password to install some initially needed dependencies"
         UBUNTU_ID=$(echo $VERSION_ID|cut -d. -f1)
             run_as_root "apt update"
         if (( UBUNTU_ID >= 24 )); then
@@ -168,7 +165,6 @@ case $ID in
     debian)
     groups_to_add+=(dialout plugdev)
     DEBIAN_ID=$(echo $VERSION_ID|cut -d. -f1)
-    echo "Enter the root password if requested to install some initially needed dependencies"
         if (( DEBIAN_ID >= 12 )); then
             run_as_root "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev autoconf libtool \
@@ -185,8 +181,6 @@ case $ID in
     ;;
     arch|garuda|endeavouros|arcolinux|rebornos)
     groups_to_add+=(uucp lock)
-    echo "Enter the root password to install some initially needed dependencies"
-
     run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
         python python-numpy speexdsp libsamplerate sox hamlib alsa-lib libao \
         libsndfile gsm noto-fonts-emoji" \
@@ -221,21 +215,18 @@ case $ID in
     ;;
     manjaro)
     groups_to_add+=(uucp lock)
-    echo "Enter the root password to install some initially needed dependencies"
     run_as_root "pacman -S --needed cmake gcc base-devel autoconf automake libtool git python speexdsp libsamplerate sox \
     wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy manjaro-pulse gsm noto-fonts-emoji" \
     || { echo "Deps install failed"; exit 1; }
     ;;
-#    pclinuxos)  # Hamlib package seems unmaintained here and build from git currently fails.
-#    echo "Enter the root password to install some initially needed dependencies"
-#    su -c "apt install automake autoconf libtool git cmake wxgtku3.2-devel libsamplerate-devel libsndfile-devel \
-#           speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3 \
-#           python3-devel pulseaudio-devel" \
-#           || { echo "Deps install failed - try again later"; exit 1; }
-#    ;;
+#     pclinuxos)  # Hamlib package seems unmaintained here and build from git currently fails.
+#     run_as_root "apt install automake autoconf libtool git cmake wxgtku3.2-devel libsamplerate-devel libsndfile-devel \
+#     speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3 \
+#     python3-devel pulseaudio-devel" \
+#     || { echo "Deps install failed - try again later"; exit 1; }
+#     ;;
     gentoo)
     groups_to_add+=(dialout uucp)
-    echo "Enter the root password to install some initially needed dependencies"
     run_as_root "emerge --verbose --noreplace \
     dev-vcs/git dev-build/cmake dev-build/automake dev-build/autoconf dev-build/libtool x11-libs/wxGTK \
     media-libs/libsamplerate media-libs/libsndfile media-libs/speexdsp media-libs/hamlib media-libs/alsa-lib \
