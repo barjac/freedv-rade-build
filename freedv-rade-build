@@ -82,17 +82,7 @@ run_as_root() {
     return 1
 }
 
-groups_add() {
-# Add the user to each group, if not already a member
-for group in "${groups_to_add[@]}"; do
-    if id "$user" | grep -qw "$group"; then
-        echo "User $user is already in group $group"
-    else
-        echo "Adding $user to group $group"
-        run_as_root "usermod -aG $group $user"  && grp_added=1
-    fi
-done
-}
+
 
 groups_to_add=()
 
@@ -111,73 +101,69 @@ case $ID in
             libao-devel gsm-devel gcc-c++ automake sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
             google-noto-emoji-color-fonts" || { echo \"Deps install failed\"; exit 1; }
     fi
-    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     opensuse-tumbleweed)
     groups_to_add+=(dialout)
     echo "Enter the root password to install some initially needed dependencies"
-    sudo zypper --non-interactive in --no-recommends cmake patch automake autoconf libtool wxGTK3-devel libsamplerate-devel \
+    run_as_root "zypper --non-interactive in --no-recommends cmake patch automake autoconf libtool wxGTK3-devel libsamplerate-devel \
             libsndfile-devel speexdsp-devel alsa-lib-devel libao-devel libgsm-devel gcc-c++ sox python3-virtualenv \
-            pulseaudio-devel python3 python3-devel hamlib hamlib-devel google-noto-coloremoji-fonts \
+            pulseaudio-devel python3 python3-devel hamlib hamlib-devel google-noto-coloremoji-fonts" \
             || { echo "Deps install failed"; exit 1; }
-    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     linuxmint)
     groups_to_add+=(dialout plugdev)
     echo "Enter the root password to install some initially needed dependencies"
     MINT_ID=$(echo $VERSION_ID|cut -d. -f1)
     if (( MINT_ID >= 22 )); then
-            sudo apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev \
+            run_as_root "apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
-            autoconf libtool python3-numpy-dev python3 python3-dev libhamlib-utils automake fonts-noto-color-emoji \
+            autoconf libtool python3-numpy-dev python3 python3-dev libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
     elif (( MINT_ID == 21 )); then
-            sudo apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev \
+            run_as_root "apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
-            autoconf libtool python3-numpy python3 python3-dev libhamlib-utils automake fonts-noto-color-emoji \
+            autoconf libtool python3-numpy python3 python3-dev libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
     else
         { echo "This Mint version is not yet supported, please create an isuue in github"; exit 1; }
     fi
-    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     fedora)
     groups_to_add+=(dialout)
     echo "Enter the root password to install some initially needed dependencies"
         FC_ID=$(echo $VERSION_ID|cut -d. -f1)
         if (( FC_ID == 42 )); then
-            sudo dnf5 install--setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
+            run_as_root "dnf5 install--setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
             hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel libtool \
-            python3-devel google-noto-emoji-color-fonts \
+            python3-devel google-noto-emoji-color-fonts" \
             || { echo "Deps install failed"; exit 1; }
         elif (( FC_ID == 41 )); then
-            sudo dnf install --setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel \
+            run_as_root "dnf install --setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel \
             libsndfile-devel speexdsp-devel hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv \
-            pulseaudio-libs-devel libtool python3-devel google-noto-emoji-color-fonts \
+            pulseaudio-libs-devel libtool python3-devel google-noto-emoji-color-fonts" \
             || { echo "Deps install failed"; exit 1; }
-
         else
             { echo "This Fedora version is not yet supported, please create an isuue in github"; exit 1; }
         fi
-        groups_add || { echo "Group add failed"; exit 1; }
     ;;
     ubuntu)
     groups_to_add+=(dialout plugdev)
     echo "Enter the root password to install some initially needed dependencies"
         UBUNTU_ID=$(echo $VERSION_ID|cut -d. -f1)
-            sudo apt update
+            run_as_root "apt update"
         if (( UBUNTU_ID >= 24 )); then
-            sudo apt install -y --no-install-recommends libwxgtk3.2-dev python3-numpy-dev python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
+            run_as_root "apt install -y --no-install-recommends libwxgtk3.2-dev python3-numpy-dev python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libao-dev libasound2-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
-            python3 python3-dev libhamlib-utils fonts-noto-color-emoji automake || { echo "Deps install failed"; exit 1; }
+            python3 python3-dev libhamlib-utils fonts-noto-color-emoji automake" \
+            || { echo "Deps install failed"; exit 1; }
         elif (( UBUNTU_ID >= 22 )); then
-            sudo apt install -y --no-install-recommends libwxgtk3.0-gtk3-dev python3-numpy python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
+            run_as_root "apt install -y --no-install-recommends libwxgtk3.0-gtk3-dev python3-numpy python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
-            python3 python3-dev libhamlib-utils fonts-noto-color-emoji automake || { echo "Deps install failed"; exit 1; }
+            python3 python3-dev libhamlib-utils fonts-noto-color-emoji automake" \
+            || { echo "Deps install failed"; exit 1; }
         else
             { echo "This Ubuntu version is not yet supported, please create an isuue in github"; exit 1; }
         fi
-        groups_add || { echo "Group add failed"; exit 1; }
     ;;
     debian)
     groups_to_add+=(dialout plugdev)
@@ -195,9 +181,7 @@ case $ID in
                 || { echo "Deps install failed"; exit 1; }
         else
             { echo "This Debian version is not yet supported, please create an isuue in github"; exit 1; }
-
         fi
-    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     arch|garuda|endeavouros|arcolinux|rebornos)
     groups_to_add+=(uucp lock)
@@ -234,7 +218,6 @@ case $ID in
     else
         echo "wxwidgets-gtk3 is already installed."
     fi
-    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     manjaro)
     groups_to_add+=(uucp lock)
@@ -242,7 +225,6 @@ case $ID in
     run_as_root "pacman -S --needed cmake gcc base-devel autoconf automake libtool git python speexdsp libsamplerate sox \
     wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy manjaro-pulse gsm noto-fonts-emoji" \
     || { echo "Deps install failed"; exit 1; }
-    groups_add || { echo "Group add failed"; exit 1; }
     ;;
 #    pclinuxos)  # Hamlib package seems unmaintained here and build from git currently fails.
 #    echo "Enter the root password to install some initially needed dependencies"
@@ -260,7 +242,6 @@ case $ID in
     media-libs/libao media-sound/gsm sys-devel/gcc media-sound/sox dev-python/virtualenv media-libs/libpulse \
     dev-lang/python dev-python/numpy media-fonts/noto-color-emoji" \
     || { echo "Deps install failed"; exit 1; }
-    groups_add || { echo "Group add failed"; exit 1; }
     ;;
     *)
     echo "Sorry $PRETTY_NAME is not yet supported."
@@ -268,6 +249,16 @@ case $ID in
     exit 0
     ;;
 esac
+
+# Add the user to each group, if not already a member
+for group in "${groups_to_add[@]}"; do
+    if id "$user" | grep -qw "$group"; then
+        echo "User $user is already in group $group"
+    else
+        echo "Adding $user to group $group"
+        run_as_root "usermod -aG $group $user"  && grp_added=1
+    fi
+done
 
 # Create a build directory
 mkdir -p ${basedir}/${builddir} || { echo "ERROR: mkdir ${basedir}/${builddir} failed"; exit 1; }
@@ -297,8 +288,8 @@ fi
 . ./rade-venv/bin/activate || { echo "ERROR: activate venv failed"; exit 1; }
 
 # Clear cache in venv
-pip cache purge
-pip install --upgrade pip || echo "WARNING: pip upgrade failed"
+pip3 cache purge
+pip3 install --upgrade pip || echo "WARNING: pip upgrade failed"
 
 # Install some python dependencies using pip
 pip3 install torch torchaudio --index-url https://download.pytorch.org/whl/cpu || { echo "torch pip install failed"; exit 1; }
@@ -309,7 +300,7 @@ if [[ $ID == "mageia" ]] || [[ $ID == "linuxmint" ]] || [[ $ID == "fedora" ]] ||
 pip3 install NumPy || { echo "ERROR: numpy pip install failed"; exit 1; }
 fi
 
-# Patches
+# Patches for upstream script
 #sed -i 's: -j$(nproc): -j4:' build_linux.sh
 #patch -p1 < ../../freedv-rade-build/cores.patch && echo "cores.patch applied"
 
@@ -338,6 +329,6 @@ cd
 echo -e "\n\n########### Build is complete \o/ ############\n\nYou can run it from your home folder using:\n\n \
       ./freedv-start [-f configfile]\n\n  OR  use the FreeDV-RADE desktop icon.\n\n"
 
-        if [[ $grp_added == 1 ]]; then
-            echo "####  A change was made to your group membership please reboot before using FreeDV  ####"
-        fi
+    if [[ $grp_added == "1" ]]; then
+        echo "####  Your user has been added to a group (see the log) to enable USB access, please reboot before using FreeDV  ####"
+    fi

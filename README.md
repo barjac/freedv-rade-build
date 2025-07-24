@@ -34,7 +34,9 @@ This change has been made in response to Issue#3, however unless you have a spec
 especially if you are not a regular Linux user.
 More help on this is in ~/freedv-rade-build/freedv-rade-anywhere.txt
 
-Then it uses the distro's native package manager to install some essential system packages for which it may request the root password.
+Then it uses the distro's native package manager to install some essential system packages and for convenience checks the groups to which
+the user belongs. It then adds the user to the relevant dialout, uucp, plugdev and/or lock group(s) for the distro unless already there,
+for which it may request the root password.
 
 The remaining script then continues as the regular user.
 
@@ -77,7 +79,7 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 
 - July 2025 Added log of the build to help with debugging when needed.
 Also added support for several Arch Linux based distros.
-- July 2025 Added update logging.
+- July 2025 Added update logging and adds user to dialout/uucp/plugdev/lock groups as needed by the distro.
 
 
 ## Using the script
@@ -101,15 +103,7 @@ Now put the kettle on, it will take a while!
 
 On completion you should see a message to that effect and instructions on how to launch the program.
 
-If you are using hamlib don't forget to add yourself (as root) to the 'dialout' group:
-
-\# usermod -aG dialout <your_user_name>
-
-Or in Arch based distros like Manjaro, Garuda etc. the 'uucp' group:
-
-\# usermod -aG uucp <your_user_name>
-
-To make that active you will need to reboot the system.
+If you see a message that your user has been added to a 'group', which is generally needed for rig control then REBOOT before running FreeDV.
 
 ## Testing new updates
 There is a 'freedv-rade-update' script which allows updating of your freedv-rade (created using freedv-rade-build), full rebuilds, backup/restore and new desktop file creation from a simple text menu.
