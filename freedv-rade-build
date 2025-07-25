@@ -5,10 +5,13 @@
 # Check we are not root
 ((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 1; }
 
+# Get user name
 user="$(logname 2>/dev/null || echo "$USER")"
 
-#   Remove old log
-    rm -f freedv-rade-build.log || { echo "Failed to remove old log"; exit 1; }
+# Check directory structure is correct
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+[[ $SCRIPT_DIR == "/home/"$user"/freedv-rade-build" ]] || { echo -e "ERROR: The current directory is incorrect\n\n \
+Please read the instructions in README.md and try again."; exit 1; }
 
 # Start logging
     cat /etc/os-release > freedv-rade-build.log
