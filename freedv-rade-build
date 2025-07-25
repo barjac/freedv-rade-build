@@ -10,7 +10,7 @@ user="$(logname 2>/dev/null || echo "$USER")"
 
 # Check directory structure is correct
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-[[ $SCRIPT_DIR == "/home/"$user"/freedv-rade-build" ]] || { echo -e "ERROR: The current directory is incorrect\n\n \
+[[ $SCRIPT_DIR == "/home/$user/freedv-rade-build" ]] || { echo -e "ERROR: The current directory is incorrect\n\n \
 Please read the instructions in README.md and try again."; exit 1; }
 
 # Start logging
