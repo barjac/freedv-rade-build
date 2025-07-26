@@ -14,9 +14,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 Please read the instructions in README.md and try again."; exit 1; }
 
 # Start logging
-    cat /etc/os-release > freedv-rade-build.log
-    locale >> freedv-rade-build.log
-    exec > >(tee -a freedv-rade-build.log)
+    cat /etc/os-release > /home/"$user"/freedv-rade-build/freedv-rade-build.log
+    locale >> /home/"$user"/freedv-rade-build/freedv-rade-build.log
+    exec > >(tee -a /home/"$user"/freedv-rade-build/freedv-rade-build.log)
     exec 2>&1
 
 # Check that this is a 64bit machine
