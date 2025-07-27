@@ -234,7 +234,7 @@ case $ID in
     dev-vcs/git dev-build/cmake dev-build/automake dev-build/autoconf dev-build/libtool x11-libs/wxGTK \
     media-libs/libsamplerate media-libs/libsndfile media-libs/speexdsp media-libs/hamlib media-libs/alsa-lib \
     media-libs/libao media-sound/gsm sys-devel/gcc media-sound/sox dev-python/virtualenv media-libs/libpulse \
-    dev-lang/python dev-python/numpy media-fonts/noto-color-emoji" \
+    dev-lang/python dev-python/numpy media-fonts/noto-emoji" \
     || { echo "Deps install failed"; exit 1; }
     ;;
     *)
