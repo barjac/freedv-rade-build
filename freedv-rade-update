@@ -81,15 +81,19 @@ git pull
             echo -e "\nError finding $prbranch - closing.\n"
             exit 1
         fi
+        git pull
     fi
 
-# Apply a patch if there is one
-if (( ${#pname} > 0 )); then
-    if ! patch -p1 < /home/${user}/freedv-rade-build/$pname; then
-    echo $(pwd)
-        echo "Patch failed to apply.  pwd= $(pwd)"
+# Apply a patches if there are any
+if (( ${#patches[@]} > 0 )); then
+    for patch in "${patches[@]}"; do
+    echo "Applying $patch"
+    if ! patch -p1 < /home/${user}/freedv-rade-build/$patch; then
+#    echo $(pwd)
+        echo "$patch failed to apply.  pwd= $(pwd)"
         exit 1
     fi
+    done
 fi
 
 # Use a specific commit
@@ -206,9 +210,14 @@ fi
 # Use default branch if non entered
     (( ${#prbranch} == 0 )) && prbranch="$default"
 
-if (( fastupdt == 1 )) && confirm "\n\nAdd a patch?" "[N/y]" "yY" "nN"; then
-    echo -e  "\n NOTE: Patch file must be in /home/$user/freedv-rade/build/ folder"
-    read -r -p "Enter the patch name:" pname
+if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
+    echo -e  "\n NOTE: Patch files must be in /home/$user/freedv-rade/build/ folder"
+    patches=()
+        while true; do
+            read -rp "Enter a patch filename (or press Enter to finish): " file
+            [[ -z "$file" ]] && break
+            patches+=("$file")
+        done
 fi
 
 if (( fastupdt == 1 )) && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
@@ -259,8 +268,8 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     if (( fastupdt == 1 )); then
         updt_str="built at $prbranch"
 
-        if (( ${#pname} > 0 )); then
-            updt_str="$updt_str and patched with $pname"
+        if (( ${#patches[@]} > 0 )); then
+            updt_str="$updt_str and patched with ${patches[@]}"
         fi
 
         if (( ${#cname} >0 )); then
