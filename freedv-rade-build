@@ -22,15 +22,15 @@ if [[ "$1" == "--restart" ]]; then
     shift  # remove --restart so rest of script never sees it
 fi
 
-# Only wipe log & write OS info etc. when not restarting after update
+# Only wipe log & write OS info on fresh run
 if ! $RESTARTING; then
     cat /etc/os-release > "$LOGFILE"
     locale >> "$LOGFILE"
-fi
 
-# Append all output from here
-exec > >(tee -a "$LOGFILE")
-exec 2>&1
+    # Append all output from here (logging set up only on fresh run)
+    exec > >(tee -a "$LOGFILE")
+    exec 2>&1
+fi
 
 echo
 echo "==========================="
