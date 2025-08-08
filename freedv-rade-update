@@ -34,9 +34,7 @@ if ! $RESTARTING; then
     exec 2>&1
 fi
 
-echo "==========================="
-echo " Script started: $(date)"
-echo "==========================="
+echo "Script started: $(date)" >> "$LOGFILE"
 
 # Check that this is a 64bit machine
 uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
