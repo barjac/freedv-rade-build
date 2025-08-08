@@ -2,7 +2,7 @@
 
 This script automates installation of FreeDV RADE in modern Linux distibutions.
 
-It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro OpenSUSE Tumbleweed Garuda EndevourOS Gentoo and Debian**
+It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro, OpenSUSE Tumbleweed, Garuda, EndevourOS, Gentoo, PiOS (on RPi5) and Debian**
 
   |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
@@ -12,7 +12,7 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu,
   |OpenSUSE Tumbleweed|OK   |               |
   |Debian 12 & 13    |OK    |Thanks to Uli DF7SC for testing!
   |Fedora 40, 41, 42 |OK    |               |
-  |Ubuntu 22/24/25.04 LTS   |OK    |Thanks to LU3JIJ for testing!|
+  |Ubuntu 22/24/25.04 LTS also on RPi5|OK    |Thanks to LU3JIJ for testing! and 2D0DRM for RPi5 testing|
   |Manjaro           |OK    |Thanks to M0SSN for testing!|
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
   |Kubuntu Oracular (Dev)|OK |Thanks to sblandford for testing!|
@@ -22,7 +22,7 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu,
   |Arco Linux        |??    |Supported - not tetsed       |
   |RebornOS          |??    |Supported - not tetsed       |
   |Gentoo            |OK    |Thanks to W6KS for help and testing!
-  
+  |PiOS              |OK    |Thanks to 2D0DRM for testing (NOTE RPi models < 5 cannot handle RADE|
 ## What it does
 If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below.
 
@@ -80,6 +80,7 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 - July 2025 Added log of the build to help with debugging when needed.
 Also added support for several Arch Linux based distros.
 - July 2025 Added update logging and adds user to dialout/uucp/plugdev/lock groups as needed by the distro.
+- August 2025 Adding soon - automatic script updating during use so you always have the latest version.
 
 
 ## Using the script
