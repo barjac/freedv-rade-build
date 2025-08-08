@@ -24,7 +24,7 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu,
   |Gentoo            |OK    |Thanks to W6KS for help and testing!
   |PiOS              |OK    |Thanks to 2D0DRM for testing (NOTE RPi models < 5 cannot handle RADE|
 ## What it does
-If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below.
+If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below. N.B. Do **NOT** try to use the GitHub generated zip file.
 
 It initially checks which Linux distribution is in use, that it is 64 bit, that disk space is adequate, whether internet with working DNS is
 available and that the script is being run as a regular user.
