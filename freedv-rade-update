@@ -56,7 +56,7 @@ ping -c3 google.com > /dev/null || { echo "ERROR: Failed to find internet connec
 # Self-update check
 echo -e "Checking for any updates to this project...\n"
 if git pull --ff-only | grep -q -v "Already up to date"; then
-    echo "Update to freedv-rade-build found — restarting..."
+    echo "Update to freedv-rade-build project found — restarting..."
     echo "--- Restarting after update: $(date) ---"
     flock -u 8 || { echo "Failed to release lock"; exit 1; }
     exec "$0" --restart "$@"

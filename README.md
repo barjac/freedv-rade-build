@@ -134,7 +134,7 @@ Just follow the prompts.
 
 If you hit a problem please open an issue here and attach the file: ~/freedv-rade-build/freedv-rade-build.log
 
-Please do not create issues related to freedv-rade-build to the upstream freedv-gui project! They are busy enough!
+Please do not send issues related to freedv-rade-build to the upstream freedv-gui project! They are busy enough!
 
 ***Have fun with FreeDV!***
 
