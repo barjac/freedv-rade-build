@@ -91,7 +91,7 @@ Also added support for several Arch Linux based distros.
 
    N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 
-    1. Install the 'git' package using your package manager (git-core in SUSE).
+    1. Install the 'git' package using your package manager (git-core package in SUSE).
 
     2. Go to a terminal emulator on your machine and type: 'cd' followed by the 
     ENTER key to be sure you are in your home directory.
