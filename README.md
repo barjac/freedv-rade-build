@@ -112,7 +112,7 @@ If you see a message that your user has been added to a 'group', which is genera
 
 ## Testing new updates
 There is a 'freedv-rade-update' script which allows updating of your freedv-rade (created using freedv-rade-build), full rebuilds, backup/restore and new desktop file creation from a simple text menu.
-This can now be run from the Update-FreeDV desktop icon, which for recent installs will already be installed.
+This can now be run from the Update-FreeDV desktop icon, which for recent installs will already be there.
 
 **NOTE* As this installation of FreeDV is not under your system's package management control, a system update (especially in a 'Rolling release' distro)
 could break FreeDV. If this happens then you will need to run the FreeDV update script and use the 'Full rebuild' option. This will not destroy any settings you have made or re-create any default start scripts or desktop files.
