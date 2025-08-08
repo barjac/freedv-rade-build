@@ -7,6 +7,9 @@
 # Get user name
 user="$(logname 2>/dev/null || echo "$USER")"
 
+# Move into git repository
+cd ~/freedv-rade-build
+
 # Check not already running
 exec 8>/tmp/radeupdt.lock
 flock -n 8 || { echo "Another instance is already running"; exit 1; }
