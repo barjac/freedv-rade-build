@@ -9,8 +9,8 @@
 user="$(logname 2>/dev/null || echo "$USER")"
 
 # Check not already running
-#exec 9>/tmp/radebuild.lock
-#flock -n 9 || { echo "Another instance is already running"; exit 1; }
+exec 9>/tmp/radebuild.lock
+flock -n 9 || { echo "Another instance is already running"; exit 1; }
 
 # Set full path to log
 LOGFILE="/home/$user/freedv-rade-build/freedv-rade-build.log"
@@ -58,6 +58,7 @@ echo -e "Checking for any updates to this script...\n"
 if git pull --ff-only | grep -q -v "Already up to date"; then
     echo "Update to freedv-rade-build found — restarting..."
     echo "--- Restarting after update: $(date) ---"
+    flock -u 9
     exec "$0" --restart "$@"
 fi
 
