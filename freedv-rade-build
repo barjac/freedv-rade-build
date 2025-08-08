@@ -33,9 +33,9 @@ exec > >(tee -a "$LOGFILE")
 exec 2>&1
 
 echo
-echo "==============================="
+echo "==========================="
 echo " Script started: $(date)"
-echo "==============================="
+echo "==========================="
 echo
 
 # Check that this is a 64bit machine
