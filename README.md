@@ -24,7 +24,9 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu,
   |Gentoo            |OK    |Thanks to W6KS for help and testing!
   |PiOS              |OK    |Thanks to 2D0DRM for testing (NOTE RPi models < 5 cannot handle RADE|
 ## What it does
-If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below. N.B. Do **NOT** try to use the GitHub generated zip file.
+If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below.
+
+N.B. Do **NOT** try to use the GitHub generated zip file. 
 
 It initially checks which Linux distribution is in use, that it is 64 bit, that disk space is adequate, whether internet with working DNS is
 available and that the script is being run as a regular user.
@@ -85,6 +87,8 @@ Also added support for several Arch Linux based distros.
 
 ## Using the script
 
+   Do **NOT** try to use the GitHub generated zip file. Follow the steps below exactly!
+
    N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 
     1. Install the 'git' package using your package manager (git-core in SUSE).
@@ -96,11 +100,11 @@ Also added support for several Arch Linux based distros.
 
     4. Type: 'chmod +x freedv-rade-build/freedv-rade-build' then ENTER
 
-    5. Type: 'freedv-rade-build/freedv-rade-build' then ENTER
+    5. Type: 'cd ~/freedv-rade-build && ./freedv-rade-build' then ENTER
 
     6. Enter the root password when prompted to install some system files then ENTER
 
-Now put the kettle on, it will take a while!
+Now put the kettle on, it may take a while!
 
 On completion you should see a message to that effect and instructions on how to launch the program.
 
