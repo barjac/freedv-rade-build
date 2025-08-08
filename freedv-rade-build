@@ -58,7 +58,7 @@ echo -e "Checking for any updates to this script...\n"
 if git pull --ff-only | grep -q -v "Already up to date"; then
     echo "Update to freedv-rade-build found — restarting..."
     echo "--- Restarting after update: $(date) ---"
-    flock -u 9
+    flock -u 9 || { echo "Failed to release lock"; exit 1; }
     exec "$0" --restart "$@"
 fi
 
