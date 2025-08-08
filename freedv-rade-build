@@ -62,7 +62,7 @@ if git pull --ff-only | grep -q -v "Already up to date"; then
     exec "$0" --restart "$@"
 fi
 
-echo "Script is up to date — running main tasks..."
+echo "Script is up to date"
 
 # Get/set path of base dir to use, defaults to /home/$user
 if [[ -f /home/${user}/.freedv-rade-build.cfg ]]; then
