@@ -69,7 +69,7 @@ echo "Script started: $(date)" >> "$LOGFILE"
 uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
 
 # Check we are in a git clone
-[[ -d "$SCRIPT_DIR/.git" ]] || { echo -e "ERROR: This does not look like a Git repo.\n\n \
+[[ -d "$RUN_DIR/.git" ]] || { echo -e "ERROR: This does not look like a Git repo.\n\n \
 Please read the instructions in README.md carefully and try again."; exit 1; }
 
 # Check we have internet and DNS
