@@ -2,33 +2,33 @@
 # This script installs freedv RADE from github on various linux distributions
 # A log file for debugging is automatically generated in ~/freedv-rade-build.
 
-set -o errexit  # exit on any error
-set -o errtrace # make traps inherit in functions/subshells
-set -o pipefail # catch errors in piped commands
+set -o errexit   # exit on error
+set -o errtrace  # trap works in functions/subshells
+set -o pipefail  # catch failures in pipelines
 
 # Error handler
 error_handler() {
     local exit_code=$?
-    local cmd="${BASH_COMMAND}"  # Command that failed
+    local cmd="${BASH_COMMAND}"
     local line_no=$LINENO
 
     if [[ -n "$CUSTOM_ERROR" ]]; then
-        # Custom error message provided by user
         echo "ERROR: $CUSTOM_ERROR"
     else
-        # Default generic message
         echo "ERROR: Command '$cmd' failed in ${BASH_SOURCE[0]} on line $line_no (exit code $exit_code)"
     fi
 
+    CUSTOM_ERROR=""  # always clear after use
     exit "$exit_code"
 }
 
+# Trap setup
+trap error_handler ERR
+
+# Helper for setting a custom error for the *next* command only
 fail_with() {
     CUSTOM_ERROR="$1"
 }
-
-# Set trap for errors
-trap error_handler ERR
 
 # Basic sanity checks
 

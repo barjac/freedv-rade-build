@@ -1,32 +1,32 @@
 #!/bin/bash
 #set -x
-set -o errexit  # exit on any error
-set -o errtrace # make traps inherit in functions/subshells
-set -o pipefail # catch errors in piped commands
+set -o errexit   # exit on error
+set -o errtrace  # trap works in functions/subshells
+set -o pipefail  # catch failures in pipelines
 
 # Error handler
 error_handler() {
     local exit_code=$?
-    local cmd="${BASH_COMMAND}"  # Command that failed
+    local cmd="${BASH_COMMAND}"
     local line_no=$LINENO
 
     if [[ -n "$CUSTOM_ERROR" ]]; then
-        # Custom error message provided by user
         echo "ERROR: $CUSTOM_ERROR"
     else
-        # Default generic message
         echo "ERROR: Command '$cmd' failed in ${BASH_SOURCE[0]} on line $line_no (exit code $exit_code)"
     fi
 
+    CUSTOM_ERROR=""  # always clear after use
     exit "$exit_code"
 }
 
+# Trap setup
+trap error_handler ERR
+
+# Helper for setting a custom error for the *next* command only
 fail_with() {
     CUSTOM_ERROR="$1"
 }
-
-# Set trap for errors
-trap error_handler ERR
 
 # Check we are not root
 fail_with "You must NOT run $0 as root - aborting!"
@@ -40,11 +40,12 @@ RUN_DIR="/home/$user/freedv-rade-build"
 cd "$RUN_DIR" || { echo "Failed to change to RUN_DIR"; exit 1; }
 
 # Check not already running
+fail_with "Another instance is already running"
 exec 8>/tmp/radeupdt.lock
-flock -n 8 || { echo "Another instance is already running"; exit 1; }
+flock -n 8
 
 # Set full path to log
-LOGFILE="/home/$user/freedv-rade-build/freedv-rade-update.log"
+LOGFILE="$RUN_DIR/freedv-rade-update.log"
 
 # Detect restart flag and strip it from args
 RESTARTING=false
@@ -297,10 +298,6 @@ fi
 if (( fastupdt == 1 )) && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
     read -r -p "Enter the commit git#:" cname
 fi
-
-# Check patch exists
-(( ${#pname} > 0 )) && [[ -z /home/$user/freedv-rade-build/$pname ]] && { echo "ERROR: Non existant or invalid patch name"; exit 1; }
-
 
 if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )) && (( switch != 1 )); then
 # Ask to backup with the current version
