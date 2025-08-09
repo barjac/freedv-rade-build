@@ -100,7 +100,7 @@ Also added support for several Arch Linux based distros.
 
     4. Type: 'chmod +x freedv-rade-build/freedv-rade-build' then ENTER
 
-    5. Type: 'cd ~/freedv-rade-build && ./freedv-rade-build' then ENTER
+    5. Type: 'freedv-rade-build/freedv-rade-build' then ENTER
 
     6. Enter the root password when prompted to install some system files then ENTER
 

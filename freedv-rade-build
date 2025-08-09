@@ -2,24 +2,37 @@
 # This script installs freedv RADE from github on various linux distributions
 # A log file for debugging is automatically generated in ~/freedv-rade-build.
 
+# Basic sanity checks
+
 # Check we are not root
 ((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 1; }
 
 # Get user name
 user="$(logname 2>/dev/null || echo "$USER")"
 
+# Check that this is a 64bit machine
+uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
+
+# Set run directory
+RUN_DIR="/home/$user/freedv-rade-build"
+echo "Current dir = $(pwd)"
+echo "Changing to RUN_DIR"
+cd "$RUN_DIR" || { echo "Switch to RUN_DIR failed"; exit 1; }
+
 # Check not already running
+echo "Checking for another instance"
 exec 9>/tmp/radebuild.lock
 flock -n 9 || { echo "Another instance is already running"; exit 1; }
 
 # Set full path to log
-LOGFILE="/home/$user/freedv-rade-build/freedv-rade-build.log"
+LOGFILE="$RUN_DIR/freedv-rade-build.log"
 
 # Detect restart flag and strip it from args
 RESTARTING=false
 if [[ "$1" == "--restart" ]]; then
     RESTARTING=true
     shift  # remove --restart so rest of script never sees it
+    echo "--restart passed to script"
 fi
 
 # Only wipe log & write OS info on fresh run
@@ -32,37 +45,27 @@ if ! $RESTARTING; then
     exec 2>&1
 fi
 
-echo
-echo "==========================="
 echo " Script started: $(date)"
-echo "==========================="
-echo
-
-# Check that this is a 64bit machine
-uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
-
-# Check directory structure is correct
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-[[ $SCRIPT_DIR == "/home/$user/freedv-rade-build" ]] || { echo -e "ERROR: The current directory is incorrect\n\n \
-Please read the instructions in README.md carefully and try again."; exit 1; }
 
 # Check we are in a git clone
-[[ -d "$SCRIPT_DIR/.git" ]] || { echo -e "ERROR: This does not look like a Git repo.\n\n \
+[[ -d "$RUN_DIR/.git" ]] || { echo -e "ERROR: This does not look like a Git repo.\n\n \
 Please read the instructions in README.md carefully and try again."; exit 1; }
 
 # Check we have internet and DNS
 ping -c3 google.com > /dev/null || { echo "ERROR: Failed to find internet connection or DNS"; exit 1; }
 
 # Self-update check
-echo -e "Checking for any updates to this script...\n"
+echo -e "Checking for updates to freedv-rade-build project in GitHub...\n"
 if git pull --ff-only | grep -q -v "Already up to date"; then
-    echo "Update to freedv-rade-build found — restarting..."
-    echo "--- Restarting after update: $(date) ---"
+    echo "Updated to newer freedv-rade-build from GitHub."
+    echo "Releasing lock"
     flock -u 9 || { echo "Failed to release lock"; exit 1; }
-    exec "$0" --restart "$@"
+    echo "Restarting now: $(date)"
+    exec "$RUN_DIR/freedv-rade-build" --restart "$@"
 fi
 
-echo "Script is up to date"
+echo "Project is up to date"
+
 
 # Get/set path of base dir to use, defaults to /home/$user
 if [[ -f /home/${user}/.freedv-rade-build.cfg ]]; then
@@ -330,7 +333,7 @@ if [[ $ID == "mageia" ]] || [[ $ID == "linuxmint" ]] || [[ $ID == "fedora" ]] ||
 pip3 install NumPy || { echo "ERROR: numpy pip install failed"; exit 1; }
 fi
 
-# Patches for upstream script
+# Testing patches for upstream script
 #sed -i 's: -j$(nproc): -j4:' build_linux.sh
 #patch -p1 < ../../freedv-rade-build/cores.patch && echo "cores.patch applied"
 
@@ -357,8 +360,8 @@ deactivate || echo "WARNING:Issue deactivating venv"
 
 cd || exit 1
 echo -e "\n\n########### Build is complete \o/ ############\n\nYou can run it from your home folder using:\n\n \
-      ./freedv-start [-f configfile]\n\n  OR  use the FreeDV-RADE desktop icon.\n\n"
+        ./freedv-start [-f configfile]\n\n  OR  use the FreeDV-RADE desktop icon.\n\n"
 
-    if [[ $grp_added == "1" ]]; then
+if [[ $grp_added == "1" ]]; then
         echo "####  Your user has been added to a group (see the log) to enable USB access, please reboot before using FreeDV  ####"
-    fi
+fi
