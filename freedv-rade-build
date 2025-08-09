@@ -31,9 +31,11 @@ fail_with() {
 }
 
 # Basic sanity checks
+#================================
 
 # Check we are not root
-((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 1; }
+fail_with "ERROR: You must NOT run $0 as root - aborting!"
+((UID))
 
 # Get user name
 user="$(logname 2>/dev/null || echo "$USER")"
