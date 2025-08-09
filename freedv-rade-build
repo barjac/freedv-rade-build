@@ -300,7 +300,9 @@ cd "${basedir}/${builddir}" || { echo "ERROR: cd to ${basedir}/${builddir} faile
 rm -rf "${basedir}/${builddir}/freedv-gui" || { echo "ERROR: removing old freedv-gui dir"; exit 1; }
 
 # Check we have space in base directory
-(( $(df -m --output=avail "freedv-rade" | tail -1) > 1500 )) || { echo "ERROR: You will need more than 1500MB of free disk space in $basedir"; exit 1; }
+(( $(df -m --output=avail "${basedir}/${builddir}/" | tail -1) > 2500 )) || { echo -e "ERROR: You need more than 2.5GB free disk space in $basedir.\nYou only have $(df -m --output=avail "${basedir}/${builddir}" | tail -1)MB"; exit 1; }
+
+
 # Get the latest freedv sources from github
 echo Cloning freedv github repository...
 git clone https://github.com/drowe67/freedv-gui.git || { echo "ERROR: git clone failed"; exit 1; }
