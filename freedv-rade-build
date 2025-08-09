@@ -2,6 +2,34 @@
 # This script installs freedv RADE from github on various linux distributions
 # A log file for debugging is automatically generated in ~/freedv-rade-build.
 
+set -o errexit  # exit on any error
+set -o errtrace # make traps inherit in functions/subshells
+set -o pipefail # catch errors in piped commands
+
+# Error handler
+error_handler() {
+    local exit_code=$?
+    local cmd="${BASH_COMMAND}"  # Command that failed
+    local line_no=$LINENO
+
+    if [[ -n "$CUSTOM_ERROR" ]]; then
+        # Custom error message provided by user
+        echo "ERROR: $CUSTOM_ERROR"
+    else
+        # Default generic message
+        echo "ERROR: Command '$cmd' failed in ${BASH_SOURCE[0]} on line $line_no (exit code $exit_code)"
+    fi
+
+    exit "$exit_code"
+}
+
+fail_with() {
+    CUSTOM_ERROR="$1"
+}
+
+# Set trap for errors
+trap error_handler ERR
+
 # Basic sanity checks
 
 # Check we are not root
@@ -11,7 +39,8 @@
 user="$(logname 2>/dev/null || echo "$USER")"
 
 # Check that this is a 64bit machine
-uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
+fail_with "ERROR: A 64bit system is needed"
+uname -m | grep -q "64"
 
 # Set run directory
 RUN_DIR="/home/$user/freedv-rade-build"
