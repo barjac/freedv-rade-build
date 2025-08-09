@@ -36,7 +36,7 @@ fail_with "You must NOT run $0 as root - aborting!"
 user="$(logname 2>/dev/null || echo "$USER")"
 
 # Move into git repository
-RUN_DIR="home/$user/freedv-rade-build"
+RUN_DIR="/home/$user/freedv-rade-build"
 cd "$RUN_DIR" || { echo "Failed to change to RUN_DIR"; exit 1; }
 
 # Check not already running
