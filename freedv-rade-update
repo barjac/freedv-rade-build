@@ -1,14 +1,43 @@
 #!/bin/bash
 #set -x
+set -o errexit  # exit on any error
+set -o errtrace # make traps inherit in functions/subshells
+set -o pipefail # catch errors in piped commands
+
+# Error handler
+error_handler() {
+    local exit_code=$?
+    local cmd="${BASH_COMMAND}"  # Command that failed
+    local line_no=$LINENO
+
+    if [[ -n "$CUSTOM_ERROR" ]]; then
+        # Custom error message provided by user
+        echo "ERROR: $CUSTOM_ERROR"
+    else
+        # Default generic message
+        echo "ERROR: Command '$cmd' failed in ${BASH_SOURCE[0]} on line $line_no (exit code $exit_code)"
+    fi
+
+    exit "$exit_code"
+}
+
+fail_with() {
+    CUSTOM_ERROR="$1"
+}
+
+# Set trap for errors
+trap error_handler ERR
 
 # Check we are not root
-((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 1; }
+fail_with "You must NOT run $0 as root - aborting!"
+((UID))
 
 # Get user name
 user="$(logname 2>/dev/null || echo "$USER")"
 
 # Move into git repository
-cd ~/freedv-rade-build
+RUN_DIR="home/$usr/freedv-rade-build"
+cd "$RUN_DIR" || { echo "Failed to change to RUN_DIR"; exit 1; } }
 
 # Check not already running
 exec 8>/tmp/radeupdt.lock
@@ -38,11 +67,6 @@ echo "Script started: $(date)" >> "$LOGFILE"
 
 # Check that this is a 64bit machine
 uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
-
-# Check directory structure is correct
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-[[ $SCRIPT_DIR == "/home/$user/freedv-rade-build" ]] || { echo -e "ERROR: The current directory is incorrect\n\n \
-Please read the instructions in README.md carefully and try again."; exit 1; }
 
 # Check we are in a git clone
 [[ -d "$SCRIPT_DIR/.git" ]] || { echo -e "ERROR: This does not look like a Git repo.\n\n \
@@ -140,7 +164,6 @@ if (( ${#patches[@]} > 0 )); then
     for patch in "${patches[@]}"; do
     echo "Applying $patch"
     if ! patch -p1 < /home/${user}/freedv-rade-build/$patch; then
-#    echo $(pwd)
         echo "$patch failed to apply.  pwd= $(pwd)"
         exit 1
     fi
