@@ -37,7 +37,7 @@ user="$(logname 2>/dev/null || echo "$USER")"
 
 # Move into git repository
 RUN_DIR="home/$usr/freedv-rade-build"
-cd "$RUN_DIR" || { echo "Failed to change to RUN_DIR"; exit 1; } }
+cd "$RUN_DIR" || { echo "Failed to change to RUN_DIR"; exit 1; }
 
 # Check not already running
 exec 8>/tmp/radeupdt.lock
