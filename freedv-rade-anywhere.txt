@@ -30,7 +30,7 @@
     path and name in the command, before hitting ENTER. You should see no response unless
     an error occured.
 
- 4. Now follow the normal instructions for using freedv-rade-build (freedv-rade-build.md)
+ 4. Now follow the normal instructions for using freedv-rade-build in README.md
     and the space used in your home folder will be minimal.
     
     Enjoy FreeDV!

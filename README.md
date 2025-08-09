@@ -26,10 +26,15 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu,
 ## What it does
 If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below.
 
-N.B. Do **NOT** try to use the GitHub generated zip file.
+N.B. Do **NOT** try to use the GitHub generated zip file for this project or you will create problems for yourself.
+
+The system 'git' package **MUST** be installed manually prior to attempting to use the script(s).
+Ideally use the system package manager to do this.
 
 It initially checks which Linux distribution is in use, that it is 64 bit, that disk space is adequate, whether internet with working DNS is
 available and that the script is being run as a regular user.
+
+A check is made to be sure that your freedv-rade-build clone is up to date with GitHub and otherwise automatically updates it. 
 
 It also checks for a .freedv-rade-build.cfg file which may be used to set a specific build directory outside the user's home folder.
 This change has been made in response to Issue#3, however unless you have a specific need to use this feature then just ignore it,
@@ -53,11 +58,12 @@ Several essential python modules are then installed by python pip in the virtual
 build_linux.sh is then run to continue with the download and building of more dependencies and ultimately freedv.
 
 On completion of the build a start script is written to the user's home folder called freedv-start which is then made executable ready for use.
-'./freedv-start' or optionally './freedv-start -f yourfreedv.conf' should start freedv.
+'./freedv-start' or optionally './freedv-start -f yourfreedv.conf' (if you have made a custom config file) should start freedv.
 
 The 'freedv-start' script already includes code (commented out by default) to start and stop hamlib rigctld, this needs editing to suit the user's radio. See notes in the script.
 
-A desktop file to start FreeDV is added to the user's ~/Desktop folder. This calls the 'freedv-start' script so changes there e.g. rigctld settings will still work. 
+A desktop file to start FreeDV is added to the user's ~/Desktop (name adjusted for different locales) folder. This calls the 'freedv-start' 
+script so changes there e.g. rigctld settings will still work. 
 
 **Important** If you start rigctld from 'freedv-start' and want to run two instances of FreeDV-RADE at the same time, e.g. a second one to monitor an SDR,  then you
  must use two differently named start scripts.
@@ -82,7 +88,8 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 - July 2025 Added log of the build to help with debugging when needed.
 Also added support for several Arch Linux based distros.
 - July 2025 Added update logging and adds user to dialout/uucp/plugdev/lock groups as needed by the distro.
-- August 2025 Adding soon - automatic script updating during use so you always have the latest version.
+
+- August 2025 Automatic script updating during use so you always have the latest version.
 
 
 ## Using the script
@@ -93,7 +100,7 @@ Also added support for several Arch Linux based distros.
 
     1. Install the 'git' package using your package manager (git-core package in SUSE).
 
-    2. Go to a terminal emulator on your machine and type: 'cd' followed by the 
+    2. Go to a terminal emulator (e.g. konsole, xterm etc.) and type: 'cd' followed by the
     ENTER key to be sure you are in your home directory.
 
     3. Type: 'git clone https://github.com/barjac/freedv-rade-build' then ENTER
@@ -106,7 +113,7 @@ Also added support for several Arch Linux based distros.
 
 Now put the kettle on, it may take a while!
 
-On completion you should see a message to that effect and instructions on how to launch the program.
+On completion you should see a message with basic instructions on how to launch the program.
 
 If you see a message that your user has been added to a 'group', which is generally needed for rig control then REBOOT before running FreeDV.
 

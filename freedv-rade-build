@@ -19,13 +19,13 @@ echo "Current dir = $(pwd)"
 echo "Changing to RUN_DIR"
 cd "$RUN_DIR" || { echo "Switch to RUN_DIR failed"; exit 1; }
 
+# Set full path to log
+LOGFILE="$RUN_DIR/freedv-rade-build.log"
+
 # Check not already running
 echo "Checking for another instance"
 exec 9>/tmp/radebuild.lock
 flock -n 9 || { echo "Another instance is already running"; exit 1; }
-
-# Set full path to log
-LOGFILE="$RUN_DIR/freedv-rade-build.log"
 
 # Detect restart flag and strip it from args
 RESTARTING=false
@@ -45,7 +45,7 @@ if ! $RESTARTING; then
     exec 2>&1
 fi
 
-echo " Script started: $(date)"
+echo " Script start: $(date)"
 
 # Check we are in a git clone
 [[ -d "$RUN_DIR/.git" ]] || { echo -e "ERROR: This does not look like a Git repo.\n\n \
@@ -64,8 +64,7 @@ if git pull --ff-only | grep -q -v "Already up to date"; then
     exec "$RUN_DIR/freedv-rade-build" --restart "$@"
 fi
 
-echo "Project is up to date"
-
+echo "Project is up to date with GitHub"
 
 # Get/set path of base dir to use, defaults to /home/$user
 if [[ -f /home/${user}/.freedv-rade-build.cfg ]]; then
@@ -91,6 +90,7 @@ builddir=freedv-rade
 
 # Find out where we are
 . /etc/os-release
+clear
 echo -e "\nHello ${user}, you seem to be using ${PRETTY_NAME}\n"
 echo -e "Installation will be made into ${basedir}/${builddir}\n"
 
