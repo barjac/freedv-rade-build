@@ -85,9 +85,6 @@ rm -f "${basedir}"/test_for_perms
 # Set default build dir name
 builddir=freedv-rade
 
-# Check we have space
-(( $(df -hBG --output=avail "$basedir" |tr '\n' ' '|tr -s ' '|xargs|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo "ERROR: You will need more than 3GB of free disk space in $basedir"; exit 1; }
-
 # Find out where we are
 . /etc/os-release
 clear
@@ -301,6 +298,9 @@ cd "${basedir}/${builddir}" || { echo "ERROR: cd to ${basedir}/${builddir} faile
 
 # Delete freedv-gui directory
 rm -rf "${basedir}/${builddir}/freedv-gui" || { echo "ERROR: removing old freedv-gui dir"; exit 1; }
+
+# Check we have space in base directory
+(( $(df -hBG --output=avail "$basedir" |tr '\n' ' '|tr -s ' '|xargs|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo "ERROR: You will need more than 3GB of free disk space in $basedir"; exit 1; }
 
 # Get the latest freedv sources from github
 echo Cloning freedv github repository...
