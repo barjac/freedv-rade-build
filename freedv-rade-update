@@ -308,6 +308,7 @@ if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( deskto
         (( $(df -hBG --output=avail $basedir |tr '\n' ' '|tr -s ' '|xargs|cut -d ' ' -f2|cut -dG -f1) > 3 )) || { echo -e "\nInsufficient disk space for backup"; backup=0; }
     fi
 fi
+
 if (( bak == 1 )) && (( restore != 1 )) && (( desktop != 1 )) && (( switch != 1 )); then
     echo -e "\nYou already have a backup of a previous FreeDV build."
     if confirm "Replace the current backup with a new one of the current version?" "[N/y]" "Yy" "Nn"; then
