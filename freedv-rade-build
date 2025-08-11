@@ -263,6 +263,7 @@ case $ID in
     || { echo "Deps install failed"; exit 1; }
     ;;
     pclinuxos)
+    groups_to_add+=(dialout) ## Needs checking
     # Detect wxWidgets 3.2 devel package name in PCLinuxOS
     detect_wx_pkg() {
     # Search the repo for anything matching wxgtku3.2-devel
