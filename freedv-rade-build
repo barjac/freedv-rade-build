@@ -1,5 +1,5 @@
 #!/bin/bash
-#set -x
+set -x
 
 # This script installs freedv RADE from github on various linux distributions
 # A log file for debugging is automatically generated in ~/freedv-rade-build.
@@ -262,12 +262,30 @@ case $ID in
     wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy manjaro-pulse gsm noto-fonts-emoji" \
     || { echo "Deps install failed"; exit 1; }
     ;;
-#     pclinuxos)  # Hamlib package seems unmaintained here and build from git currently fails.
-#     run_as_root "apt install automake autoconf libtool git cmake wxgtku3.2-devel libsamplerate-devel libsndfile-devel \
-#     speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3 \
-#     python3-devel pulseaudio-devel" \
-#     || { echo "Deps install failed - try again later"; exit 1; }
-#     ;;
+    pclinuxos)
+    # Detect wxWidgets 3.2 devel package name in PCLinuxOS
+    detect_wx_pkg() {
+    # Search the repo for anything matching wxgtku3.2-devel
+    local pkg
+    pkg=$(apt-cache search wxgtku3.2-devel | awk '{print $1}' | grep -m1 'wxgtku3.2-devel')
+
+    if [[ -z "$pkg" ]]; then
+        echo "Error: wxWidgets 3.2 development package not found in repo." >&2
+        exit 1
+    fi
+
+    echo "$pkg"
+    }
+
+    WXPKG=$(detect_wx_pkg)
+    echo "Using wxWidgets package: $WXPKG"
+
+# Hamlib package seems unmaintained here and build from git currently fails.
+    run_as_root "apt install -y $WXPKG automake autoconf libtool git cmake libsamplerate-devel libsndfile-devel \
+    speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3 \
+    python3-devel pulseaudio-devel hamlib-devel" \
+    || { echo "Deps install failed - try again later"; exit 1; }
+    ;;
     gentoo)
     groups_to_add+=(dialout uucp)
     run_as_root "emerge --verbose --noreplace \
