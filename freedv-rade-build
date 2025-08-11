@@ -281,9 +281,9 @@ case $ID in
     echo "Using wxWidgets package: $WXPKG"
 
 # Hamlib package seems unmaintained here and build from git currently fails.
-    run_as_root "apt install -y $WXPKG automake autoconf libtool git cmake libsamplerate-devel libsndfile-devel \
+    run_as_root "apt install -y --fix-missing $WXPKG automake autoconf libtool git cmake libsamplerate-devel libsndfile-devel \
     speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3 \
-    python3-devel pulseaudio-devel hamlib-devel" \
+    python3-devel pulseaudio-devel" \
     || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     gentoo)
