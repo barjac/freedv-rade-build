@@ -1,4 +1,6 @@
 #!/bin/bash
+#set -x
+
 # This script installs freedv RADE from github on various linux distributions
 # A log file for debugging is automatically generated in ~/freedv-rade-build.
 

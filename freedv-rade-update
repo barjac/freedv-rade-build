@@ -1,32 +1,5 @@
 #!/bin/bash
 #set -x
-#set -o errexit   # exit on error
-#set -o errtrace  # trap works in functions/subshells
-#set -o pipefail  # catch failures in pipelines
-
-# Error handler
-#error_handler() {
-#    local exit_code=$?
-#    local cmd="${BASH_COMMAND}"
-#    local line_no=$LINENO
-#
-#    if [[ -n "$CUSTOM_ERROR" ]]; then
-#        echo "ERROR: $CUSTOM_ERROR"
-#    else
-#        echo "ERROR: Command '$cmd' failed in ${BASH_SOURCE[0]} on line $line_no (exit code $exit_code)"
-#    fi
-
-#    CUSTOM_ERROR=""  # always clear after use
-#    exit "$exit_code"
-#}
-
-# Trap setup
-#trap error_handler ERR
-
-# Helper for setting a custom error for the *next* command only
-#fail_with() {
-#    CUSTOM_ERROR="$1"
-#}
 
 # Check we are not root
 ((UID)) || { echo "ERROR: You must NOT be root user to run $0, use CTRL/d to become $user"; exit 1; }
