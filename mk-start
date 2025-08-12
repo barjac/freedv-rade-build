@@ -20,6 +20,28 @@ cat > ~/freedv-start <<EOF
 # Start script for freedv rade version
 # Specify a config file to use (optional) default is ~/.freedv
 # e.g. freedv-start -f myfreedv.conf
+
+###################################
+# Load OS info to detect distro
+if [[ -f /etc/os-release ]]; then
+    source /etc/os-release
+fi
+
+# For PCLinuxOS, prepend local hamlib tests dir to PATH for rigctld
+if [[ $ID == "pclinuxos" ]]; then
+    local_rigctld_dir="/home/$USER/freedv-rade/freedv-gui/build_linux/build_hamlib-prefix/src/build_hamlib/tests"
+    if [[ -d "$local_rigctld_dir" ]]; then
+        export PATH="$local_rigctld_dir:$PATH"
+    else
+        echo "WARNING: Expected rigctld dir not found: $local_rigctld_dir"
+    fi
+fi
+
+# Optionally verify rigctld is now in PATH
+if ! command -v rigctld &>/dev/null; then
+    echo "WARNING: rigctld not found in PATH"
+fi
+
 ####################################
 # Edit and uncomment (remove #) the 'rigcltd...' line below with your radio code (-m) and USB port (-r) to start rigctld at freedv launch.
 # Mine below is for the TS-450S, yours will be different probably without the --set-conf..... part - but leave the '&' at the end of that line.
@@ -33,6 +55,7 @@ cat > ~/freedv-start <<EOF
 # Other computers wishing to communicate with the radio will be able to use <IP of this machine>:4532. You will need port 4532/tcp open in
 # this  machine's firewall if active.
 ####################################
+
 # Function to kill all rigctld processes
 killrigctld() {
 parr=\$(ps aux|grep [r]igctld|tr -s ' '|cut -d ' ' -f2)
