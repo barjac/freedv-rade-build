@@ -47,7 +47,7 @@ cd ${builddir}/freedv-gui
 . ./rade-venv/bin/activate
 
 # Add hamlib tests directory to PATH for rigctl/rigctld on PCLinuxOS
-if [[ $ID == "pclinuxos" ]]; then
+if [[ "$ID" == "pclinuxos" ]]; then
     export PATH="${builddir}/freedv-gui/build_linux/build_hamlib-prefix/src/build_hamlib/tests:\$PATH"
 fi
 
