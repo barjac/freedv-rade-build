@@ -2,5 +2,5 @@
 .agent.localhost
 freedv-rade-build.log
 freedv-rade-update.log
-.freedv-rade-*.kate-swp
+.*.kate-swp
 *.patch

@@ -69,11 +69,6 @@ cd ${builddir}/freedv-gui
 # Activate virtual environment
 . ./rade-venv/bin/activate
 
-# Add hamlib tests directory to PATH for rigctl/rigctld on PCLinuxOS
-if [[ "$ID" == "pclinuxos" ]]; then
-    export PATH="${builddir}/freedv-gui/build_linux/build_hamlib-prefix/src/build_hamlib/tests:\$PATH"
-fi
-
 cd build_linux
 
 # Ensure model19_check3 symlink exists
