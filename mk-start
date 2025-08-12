@@ -8,6 +8,9 @@ else
     builddir=/home/${USER}/freedv-rade
 fi
 
+# Source os-release in case this is run directly and not sourced by freedv-rade-build
+. /etc/os-release
+
 cd
 # Create start script in user's home if not present
 if ! [[ -f ~/freedv-start ]]; then
@@ -42,6 +45,11 @@ cd ${builddir}/freedv-gui
 
 # Activate virtual environment
 . ./rade-venv/bin/activate
+
+# Add hamlib tests directory to PATH for rigctl/rigctld on PCLinuxOS
+if [[ $ID == "pclinuxos" ]]; then
+    export PATH="${builddir}/freedv-gui/build_linux/build_hamlib-prefix/src/build_hamlib/tests:\$PATH"
+fi
 
 cd build_linux
 
