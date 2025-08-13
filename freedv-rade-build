@@ -126,18 +126,6 @@ run_as_root() {
     return 1
 }
 
-gitclone() {
-    if [ -z "$1" ]; then
-        echo "Usage: gitclone <repository-url> [target-dir]"
-        return 1
-    fi
-    git clone --progress "$@" 2>&1 \
-        | grep --line-buffered '%' \
-        | sed -u -n 's/.* \([0-9]\+\)%.*/\1/p' \
-        | uniq \
-        | awk '{printf("\rCloning: %s%%", $1)} END {print ""}'
-}
-
 groups_to_add=()
 
 # Install some system deps
@@ -333,7 +321,7 @@ rm -rf "${basedir}/${builddir}/freedv-gui" || { echo "ERROR: removing old freedv
 
 # Get the latest freedv sources from github
 echo Cloning freedv github repository...
-gitclone https://github.com/drowe67/freedv-gui.git || { echo "ERROR: git clone failed, probably a network issue - try again later"; exit 1; }
+git clone --progress https://github.com/drowe67/freedv-gui.git || { echo "ERROR: git clone failed, probably a network issue - try again later"; exit 1; }
 
 # Move into source code directory
 cd "${basedir}/${builddir}/freedv-gui" || { echo "ERROR: cd to freedv-gui failed"; exit 1; }
