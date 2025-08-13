@@ -27,17 +27,17 @@ if [[ -f /etc/os-release ]]; then
     source /etc/os-release
 fi
 
-# For PCLinuxOS, prepend local hamlib tests dir to PATH for rigctld
-if [[ $ID == "pclinuxos" ]]; then
-    local_rigctld_dir="/home/$USER/freedv-rade/freedv-gui/build_linux/build_hamlib-prefix/src/build_hamlib/tests"
-    if [[ -d "$local_rigctld_dir" ]]; then
-        export PATH="$local_rigctld_dir:$PATH"
+# For PCLinuxOS, prepend local external/dist/bin dir to PATH for rigctld
+if [[ $ID == "mageia" ]]; then
+    EXT_DIST_BIN="/home/$USER/freedv-rade/freedv-gui/build_linux/external/dist/bin"
+    if [[ -d "$EXT_DIST_BIN" ]]; then
+        export PATH="$EXT_DIST_BIN:$PATH"
     else
-        echo "WARNING: Expected rigctld dir not found: $local_rigctld_dir"
+        echo "WARNING: Expected rigctld path not found: $EXT_DIST_BIN"
     fi
 fi
 
-# Optionally verify rigctld is now in PATH
+# Verify rigctld is now in PATH
 if ! command -v rigctld &>/dev/null; then
     echo "WARNING: rigctld not found in PATH"
 fi
