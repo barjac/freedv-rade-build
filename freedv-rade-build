@@ -131,6 +131,7 @@ groups_to_add=()
 # Install some system deps
 echo "Enter the root password if requested to install some initially needed dependencies"
 case $ID in
+#=================================
     mageia)
     groups_to_add+=(dialout)
     MGA_ID=$(echo "$VERSION_ID"|cut -d. -f1)
@@ -144,6 +145,7 @@ case $ID in
             google-noto-emoji-color-fonts" || { echo \"Deps install failed\"; exit 1; }
     fi
     ;;
+#=================================
     opensuse-tumbleweed)
     groups_to_add+=(dialout)
     echo "Enter the root password to install some initially needed dependencies"
@@ -152,6 +154,7 @@ case $ID in
             pulseaudio-devel python3 python3-devel hamlib hamlib-devel google-noto-coloremoji-fonts" \
             || { echo "Deps install failed"; exit 1; }
     ;;
+#=================================
     linuxmint)
     groups_to_add+=(dialout plugdev)
     MINT_ID=$(echo "$VERSION_ID"|cut -d. -f1)
@@ -169,6 +172,7 @@ case $ID in
         { echo "This Mint version is not yet supported, please create an isuue in github"; exit 1; }
     fi
     ;;
+#=================================
     fedora)
     groups_to_add+=(dialout)
         FC_ID=$(echo "$VERSION_ID"|cut -d. -f1)
@@ -186,6 +190,7 @@ case $ID in
             { echo "This Fedora version is not yet supported, please create an isuue in github"; exit 1; }
         fi
     ;;
+#=================================
     ubuntu)
     groups_to_add+=(dialout plugdev)
         UBUNTU_ID=$(echo "$VERSION_ID"|cut -d. -f1)
@@ -204,6 +209,7 @@ case $ID in
             { echo "This Ubuntu version is not yet supported, please create an isuue in github"; exit 1; }
         fi
     ;;
+#=================================
     debian)
     groups_to_add+=(dialout plugdev)
     DEBIAN_ID=$(echo "$VERSION_ID"|cut -d. -f1)
@@ -221,6 +227,7 @@ case $ID in
             { echo "This Debian version is not yet supported, please create an isuue in github"; exit 1; }
         fi
     ;;
+#=================================
     arch|garuda|endeavouros|arcolinux|rebornos)
     groups_to_add+=(uucp lock)
     run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
@@ -255,12 +262,14 @@ case $ID in
         echo "wxwidgets-gtk3 is already installed."
     fi
     ;;
+#=================================
     manjaro)
     groups_to_add+=(uucp lock)
     run_as_root "pacman -S --needed cmake gcc base-devel autoconf automake libtool git python speexdsp libsamplerate sox \
     wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy manjaro-pulse gsm noto-fonts-emoji" \
     || { echo "Deps install failed"; exit 1; }
     ;;
+#=================================
     pclinuxos)
     groups_to_add+=(dialout)
     # Detect wxWidgets 3.2 devel package name in PCLinuxOS
@@ -280,6 +289,7 @@ case $ID in
     speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3  python3-devel pulseaudio-devel readline-devel" \
     || { echo "Deps install failed - try again later"; exit 1; }
     ;;
+#=================================
     gentoo)
     groups_to_add+=(dialout uucp)
     run_as_root "emerge --verbose --noreplace \
@@ -289,20 +299,24 @@ case $ID in
     dev-lang/python dev-python/numpy media-fonts/noto-emoji" \
     || { echo "Deps install failed"; exit 1; }
     ;;
+#=================================
     *)
     echo "Sorry $PRETTY_NAME is not yet supported."
     echo "Please create a github issue with details of your system."
     exit 0
     ;;
+#=================================
 esac
 
 # Add the user to each required group, if not already a member
+
+groups_added=()
 for group in "${groups_to_add[@]}"; do
     if id "$user" | grep -qw "$group"; then
         echo "User $user is already in group $group"
     else
         echo "Adding $user to group $group"
-        run_as_root "usermod -aG $group $user"  && grp_added=1
+        run_as_root "usermod -aG $group $user"  && groups_added+=$group
     fi
 done
 
@@ -379,6 +393,10 @@ cd || exit 1
 echo -e "\n\n########### Build is complete \o/ ############\n\nYou can run it from your home folder using:\n\n \
         ./freedv-start [-f configfile]\n\n  OR  use the FreeDV-RADE desktop icon.\n\n"
 
-if [[ $grp_added == "1" ]]; then
-        echo "####  Your user has been added to a group (see the log) to enable USB access, please reboot before using FreeDV  ####"
+if (( ${#groups_added[@]} > 0 )) then
+    echo -e "####  Your user has been added to ${groups_added[0]} group"
+    if (( ${#groups_add[@]} == 2 )) then
+    echo -e " and ${groups_added[1]} group"
+    fi
+echo -e ", please reboot before using FreeDV  ####"
 fi
