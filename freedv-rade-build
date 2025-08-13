@@ -126,6 +126,17 @@ run_as_root() {
     return 1
 }
 
+gitclone() {
+    if [ -z "$1" ]; then
+        echo "Usage: gitclone <repository-url> [target-dir]"
+        return 1
+    fi
+    git clone --progress "$@" 2>&1 \
+        | grep --line-buffered '%' \
+        | sed -u -n 's/.* \([0-9]\+\)%.*/\1/p' \
+        | uniq \
+        | awk '{printf("\rCloning: %s%%", $1)} END {print ""}'
+}
 
 groups_to_add=()
 
@@ -263,28 +274,22 @@ case $ID in
     || { echo "Deps install failed"; exit 1; }
     ;;
     pclinuxos)
-    groups_to_add+=(dialout) ## Needs checking
+    groups_to_add+=(dialout)
     # Detect wxWidgets 3.2 devel package name in PCLinuxOS
     detect_wx_pkg() {
     # Search the repo for anything matching wxgtku3.2-devel
     local pkg
     pkg=$(apt-cache search wxgtku3.2-devel | awk '{print $1}' | grep -m1 'wxgtku3.2-devel')
-
     if [[ -z "$pkg" ]]; then
         echo "Error: wxWidgets 3.2 development package not found in repo." >&2
         exit 1
     fi
-
     echo "$pkg"
     }
-
     WXPKG=$(detect_wx_pkg)
     echo "Using wxWidgets package: $WXPKG"
-
-# Hamlib package seems unmaintained here and build from git currently fails.
     run_as_root "apt install -y --fix-missing $WXPKG automake autoconf libtool git cmake libsamplerate-devel libsndfile-devel \
-    speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3 \
-    python3-devel pulseaudio-devel readline-devel" \
+    speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3  python3-devel pulseaudio-devel readline-devel" \
     || { echo "Deps install failed - try again later"; exit 1; }
     ;;
     gentoo)
@@ -303,7 +308,7 @@ case $ID in
     ;;
 esac
 
-# Add the user to each group, if not already a member
+# Add the user to each required group, if not already a member
 for group in "${groups_to_add[@]}"; do
     if id "$user" | grep -qw "$group"; then
         echo "User $user is already in group $group"
@@ -328,7 +333,7 @@ rm -rf "${basedir}/${builddir}/freedv-gui" || { echo "ERROR: removing old freedv
 
 # Get the latest freedv sources from github
 echo Cloning freedv github repository...
-git clone --progress https://github.com/drowe67/freedv-gui.git || { echo "ERROR: git clone failed, probably a network issue - try again later"; exit 1; }
+gitclone https://github.com/drowe67/freedv-gui.git || { echo "ERROR: git clone failed, probably a network issue - try again later"; exit 1; }
 
 # Move into source code directory
 cd "${basedir}/${builddir}/freedv-gui" || { echo "ERROR: cd to freedv-gui failed"; exit 1; }
