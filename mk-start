@@ -8,9 +8,6 @@ else
     builddir=/home/${USER}/freedv-rade
 fi
 
-# Source os-release in case this is run directly and not sourced by freedv-rade-build
-. /etc/os-release
-
 cd
 # Create start script in user's home if not present
 if ! [[ -f ~/freedv-start ]]; then
@@ -22,26 +19,11 @@ cat > ~/freedv-start <<EOF
 # e.g. freedv-start -f myfreedv.conf
 
 ###################################
-# Load OS info to detect distro
-if [[ -f /etc/os-release ]]; then
-    source /etc/os-release
-fi
-
-# For PCLinuxOS, prepend local external/dist/bin dir to PATH for rigctld
-if [[ $ID == "mageia" ]]; then
-    EXT_DIST_BIN="/home/$USER/freedv-rade/freedv-gui/build_linux/external/dist/bin"
-    if [[ -d "$EXT_DIST_BIN" ]]; then
+# Add path to rigctld if built locally
+    EXT_DIST_BIN="/home/$USER/freedv-rade/freedv-gui/build_linux/external/dist/bin/"
+    if ! command -v rigctld &>/dev/null; then
         export PATH="$EXT_DIST_BIN:$PATH"
-    else
-        echo "WARNING: Expected rigctld path not found: $EXT_DIST_BIN"
     fi
-fi
-
-# Verify rigctld is now in PATH
-if ! command -v rigctld &>/dev/null; then
-    echo "WARNING: rigctld not found in PATH"
-fi
-
 ####################################
 # Edit and uncomment (remove #) the 'rigcltd...' line below with your radio code (-m) and USB port (-r) to start rigctld at freedv launch.
 # Mine below is for the TS-450S, yours will be different probably without the --set-conf..... part - but leave the '&' at the end of that line.
