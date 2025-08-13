@@ -328,7 +328,7 @@ rm -rf "${basedir}/${builddir}/freedv-gui" || { echo "ERROR: removing old freedv
 
 # Get the latest freedv sources from github
 echo Cloning freedv github repository...
-git clone https://github.com/drowe67/freedv-gui.git || { echo "ERROR: git clone failed"; exit 1; }
+git clone --progress https://github.com/drowe67/freedv-gui.git || { echo "ERROR: git clone failed"; exit 1; }
 
 # Move into source code directory
 cd "${basedir}/${builddir}/freedv-gui" || { echo "ERROR: cd to freedv-gui failed"; exit 1; }
