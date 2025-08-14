@@ -59,7 +59,7 @@ ping -c3 google.com > /dev/null || { echo "Failed to find internet connection or
 
 # Self-update check
 echo -e "Checking for updates to freedv-rade-build project in GitHub...\n"
-if git pull --ff-only | grep -q -v "Already up to date"; then
+if LC_ALL=C git pull --ff-only | grep -q -v "Already up to date"; then
     echo "Updated to newer freedv-rade-build from GitHub."
     echo "Releasing lock"
     flock -u 9 || { echo "Failed to release lock"; exit 1; }
