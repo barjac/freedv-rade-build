@@ -2,7 +2,7 @@
 
 This script automates installation of FreeDV RADE in modern Linux distibutions.
 
-It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro, OpenSUSE Tumbleweed, Garuda, EndevourOS, Gentoo, PiOS (on RPi5) and Debian**
+It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro, OpenSUSE Tumbleweed, Garuda, EndevourOS, Gentoo, PiOS (on RPi5), PCLinuxOS and Debian**.
 
   |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
@@ -21,8 +21,9 @@ It is currently tested in **Mageia, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu,
   |EndeavourOS       |OK    |Thanks to Dave Baxter NB4S for testing! |
   |Arco Linux        |??    |Supported - not tetsed       |
   |RebornOS          |??    |Supported - not tetsed       |
-  |Gentoo            |OK    |Thanks to W6KS for help and testing!
+  |Gentoo            |OK    |Thanks to W6KS for help and testing!|
   |PiOS              |OK    |Thanks to 2D0DRM for testing (NOTE RPi models < 5 cannot handle RADE|
+  |PCLinuxOS         |OK*   |*Must not have distro hamlib package installed as its too old, latest is built during this FreeDV build|
 ## What it does
 If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below.
 
@@ -89,7 +90,7 @@ If you want a second desktop file for the SDR instance then you can edit the ori
 Also added support for several Arch Linux based distros.
 - July 2025 Added update logging and adds user to dialout/uucp/plugdev/lock groups as needed by the distro.
 
-- August 2025 Automatic script updating during use so you always have the latest version.
+- August 2025 Automatic script updating during use so you always have the latest version. Added PCLinuxOS.
 
 
 ## Using the script
