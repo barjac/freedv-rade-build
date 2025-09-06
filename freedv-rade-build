@@ -177,7 +177,7 @@ case $ID in
     groups_to_add+=(dialout)
         FC_ID=$(echo "$VERSION_ID"|cut -d. -f1)
         if (( FC_ID == 42 )); then
-            run_as_root "dnf5 install--setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
+            run_as_root "dnf5 install --setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
             hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3-virtualenv pulseaudio-libs-devel libtool \
             python3-devel google-noto-emoji-color-fonts" \
             || { echo "Deps install failed"; exit 1; }
