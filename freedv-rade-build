@@ -159,12 +159,12 @@ case $ID in
     groups_to_add+=(dialout plugdev)
     MINT_ID=$(echo "$VERSION_ID"|cut -d. -f1)
     if (( MINT_ID >= 22 )); then
-            run_as_root "apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev \
+            run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
             autoconf libtool python3-numpy-dev python3 python3-dev libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
     elif (( MINT_ID == 21 )); then
-            run_as_root "apt install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev \
+            run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
             autoconf libtool python3-numpy python3 python3-dev libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
@@ -194,17 +194,27 @@ case $ID in
     ubuntu)
     groups_to_add+=(dialout plugdev)
         UBUNTU_ID=$(echo "$VERSION_ID"|cut -d. -f1)
-            run_as_root "apt update"
+            echo "=== Starting apt-get update ==="
+            run_as_root bash -c "DEBIAN_FRONTEND=noninteractive apt-get update" \
+            || { echo "apt-get update FAILED"; exit 1; }
         if (( UBUNTU_ID >= 24 )); then
-            run_as_root "apt install -y --no-install-recommends libwxgtk3.2-dev python3-numpy-dev python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
+            echo "=== Starting dependency install ==="
+            run_as_root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libwxgtk3.2-dev python3-numpy-dev python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libao-dev libasound2-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
             python3 python3-dev libhamlib-utils fonts-noto-color-emoji automake" \
-            || { echo "Deps install failed"; exit 1; }
+            || {
+            echo "Dependency installation failed."
+            exit 1
+}
         elif (( UBUNTU_ID >= 22 )); then
-            run_as_root "apt install -y --no-install-recommends libwxgtk3.0-gtk3-dev python3-numpy python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
+            echo "=== Starting dependency install ==="
+            run_as_root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libwxgtk3.0-gtk3-dev python3-numpy python3-venv libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
             python3 python3-dev libhamlib-utils fonts-noto-color-emoji automake" \
-            || { echo "Deps install failed"; exit 1; }
+            || {
+            echo "Dependency installation failed."
+            exit 1
+}
         else
             { echo "This Ubuntu version is not yet supported, please create an isuue in github"; exit 1; }
         fi
@@ -214,12 +224,12 @@ case $ID in
     groups_to_add+=(dialout plugdev)
     DEBIAN_ID=$(echo "$VERSION_ID"|cut -d. -f1)
         if (( DEBIAN_ID >= 12 )); then
-            run_as_root "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
+            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev autoconf libtool \
                 python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji automake" \
                 || { echo "Deps install failed"; exit 1; }
         elif (( DEBIAN_ID == 11 )); then
-            run_as_root "apt install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev libasound2-dev libao-dev \
+            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev autoconf libtool \
                 python3-numpy-dev python3-dev libhamlib-utils fonts-noto-color-emoji automake" \
                 || { echo "Deps install failed"; exit 1; }
@@ -285,7 +295,7 @@ case $ID in
     }
     WXPKG=$(detect_wx_pkg)
     echo "Using wxWidgets package: $WXPKG"
-    run_as_root "apt install -y --fix-missing $WXPKG automake autoconf libtool git cmake libsamplerate-devel libsndfile-devel \
+    run_as_root "apt-get install -y --fix-missing $WXPKG automake autoconf libtool git cmake libsamplerate-devel libsndfile-devel \
     speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox python3  python3-devel pulseaudio-devel readline-devel" \
     || { echo "Deps install failed - try again later"; exit 1; }
     ;;
