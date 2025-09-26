@@ -1,0 +1,15 @@
+#!/bin/bash
+# ubuntu-chk
+# Run as regular user
+###################
+# Where to save the log
+LOGFILE="$HOME/freedv-rade-build/ubuntu_chk_$(date +%F_%H-%M-%S).log"
+
+echo "Collecting repair logs in $LOGFILE ..."
+echo "=== Running apt-get -f install ==="    | tee "$LOGFILE"
+sudo apt-get -f install 2>&1 | tee -a "$LOGFILE"
+
+echo "=== Running dpkg --configure -a ==="   | tee -a "$LOGFILE"
+sudo dpkg --configure -a 2>&1 | tee -a "$LOGFILE"
+
+echo "Done. Please send me the file: $LOGFILE"
