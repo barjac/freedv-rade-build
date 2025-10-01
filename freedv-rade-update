@@ -166,6 +166,7 @@ exit 0
 }
 
 # Main routine ###################
+while true; do
 clear
 cd ~/freedv-rade-build
 branch="$(git status|grep 'On branch')"
@@ -392,8 +393,13 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         if (( desktop == 1 )); then
             freedv-rade-build/mk-desktop
         fi
-
-        bye
+# Restart or quit
+        if confirm "(Quit or (R)un again" "[Q/R]" "qQ" "rR"; then
+            bye
+        else
+            continue
+        fi
+        done
     fi
 else
     bye
