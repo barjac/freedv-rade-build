@@ -53,7 +53,7 @@ if LC_ALL=C git pull --ff-only | grep -q -v "Already up to date"; then
     echo "Update to freedv-rade-build project found — restarting..."
     echo "--- Restarting after update: $(date) ---"
     flock -u 8 || { echo "Failed to release lock"; exit 1; }
-    exec "$RUN_DIR/freedv-rade-update --restart" "$@"
+    exec "$RUN_DIR/freedv-rade-update" --restart "$@"
 fi
 
 echo "Script is up to date"
