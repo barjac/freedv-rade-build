@@ -160,14 +160,28 @@ cd || exit 1
 }
 
 bye() {
-echo -e "\nClosing - Bye! :)"
-sleep 2
-exit 0
+echo -e "\nClosing - Goodbye! :)"
+flock -u 8 || { echo "Failed to release lock"; exit 1; }
+if [ -n "$SHELL" ]; then
+    exec "$SHELL" -i
+else
+    exec bash -i
+fi
+}
+
+clearvars () {
+fastupdate=
+update=
+backup=
+restore=
+switch=
+desktop=
 }
 
 # Main routine ###################
 while true; do
 clear
+clearvars
 cd ~/freedv-rade-build
 branch="$(git status|grep 'On branch')"
 echo "Wait a moment..."
@@ -393,14 +407,14 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         if (( desktop == 1 )); then
             freedv-rade-build/mk-desktop
         fi
-# Restart or quit
-        if confirm "(Quit or (R)un again" "[Q/R]" "qQ" "rR"; then
-            bye
-        else
-            continue
-        fi
-        done
     fi
 else
     bye
 fi
+# Restart or quit
+if confirm "(Quit or (R)un again" "[Q/R]" "qQ" "rR"; then
+    bye
+else
+    continue
+fi
+done
