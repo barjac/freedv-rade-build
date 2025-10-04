@@ -192,8 +192,9 @@ clearvars
 cd ~/freedv-rade-build
 
 # Show branch if not main
+
 branch="$(git status|grep 'On branch')"
-[[ "main" =~ "$branch" ]] && branch=
+[[ "main" =~ "$branch" ]] || branch=
 echo "Wait a moment..."
 
 # Check we have internet and DNS
