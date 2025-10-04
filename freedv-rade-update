@@ -192,7 +192,7 @@ clearvars
 cd ~/freedv-rade-build
 
 # Show branch if not main
-branch="$(git status|grep 'On branch'|cut -d ' ' -f3)"
+branch="$(git status|grep 'On branch')"
 [[ "main" =~ "$branch" ]] && branch=
 echo "Wait a moment..."
 
