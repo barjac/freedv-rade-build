@@ -176,7 +176,7 @@ case $ID in
     else
             run_as_root "urpmi --auto --no-recommends git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
             libao-devel gsm-devel gcc-c++ automake sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
-            google-noto-emoji-color-fonts" || { echo \"Deps install failed\"; exit 1; }clean_ld_preload
+            google-noto-emoji-color-fonts" || { echo \"Deps install failed\"; exit 1; }
     fi
     ;;
 #=================================
