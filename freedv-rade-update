@@ -185,10 +185,10 @@ desktop=
 }
 
 # Get current FreeDV-GUI branch name and git#
-getcurrent() {
-currdir=pwd
+showcurrent() {
+currdir=$(pwd)
 cd $basedir/freedv-rade/freedv-gui
-echo "NOTE: Your current system is using $(git branch --show-current 2>/dev/null || echo HEAD) @ $(git rev-parse --short HEAD 2>/dev/null)"
+echo -e "\nNOTE: Your current system is using $(git branch --show-current 2>/dev/null || echo HEAD) @ $(git rev-parse --short HEAD 2>/dev/null)\n"
 cd $currdir
 }
 
@@ -236,7 +236,10 @@ TIP: Hitting ENTER without typing will automatically select the first option to 
 # Check if there is already a backup and flag it
 [[ -d ${basedir}/freedv-rade_bak ]] && bak=1
 
+showcurrent
+
 if (( bak == 1 )); then
+
     confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup, (R)estore from backup, (S)witch backup/current, Create (D)esktop launcher or (Q)uit?" "[U/F/B/R/S/D/Q]" "Uu" "Ff" "Bb" "Rr" "Ss" "Dd" "Qq"
         case $rval in
             0)
@@ -281,8 +284,6 @@ else
             ;;
         esac
 fi
-
-getcurrent
 
 if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch or tag?" "[N/y]" "yY" "nN"; then
     echo ""
