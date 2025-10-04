@@ -135,7 +135,6 @@ groups_to_add=()
 
 # Install some system deps
 echo "Enter the root password if requested to install some initially needed dependencies"
-clean_ld_preload
 case $ID in
 #=================================
     mageia)
