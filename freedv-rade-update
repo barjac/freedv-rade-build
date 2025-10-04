@@ -193,7 +193,7 @@ cd ~/freedv-rade-build
 
 # Show branch if not main
 branch="$(git status|grep 'On branch'|cut -d ' ' -f3)"
-branch=$([[ $branch == "main" ]] || echo $branch)
+[[ "main" =~ "$branch" ]] && branch=
 echo "Wait a moment..."
 
 # Check we have internet and DNS
@@ -207,7 +207,7 @@ cd || exit 1
 
 # Preamble
 clear
-echo "############### Welcome to freedv-rade-update ################ ($branch)"
+echo "############### Welcome to freedv-rade-update ################ $branch"
 echo -e "\n This script is for maintaining a build of FreeDV RADE \n \
 created using freedv-rade-build script.\n"
 echo -e "It will optionally:\n \
