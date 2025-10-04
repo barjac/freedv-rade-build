@@ -184,6 +184,14 @@ switch=
 desktop=
 }
 
+# Get current FreeDV-GUI branch name and git#
+getcurrent() {
+currdir=pwd
+cd $basedir/freedv-rade/freedv-gui
+echo "NOTE: Your current system is using $(git branch --show-current 2>/dev/null || echo HEAD) @ $(git rev-parse --short HEAD 2>/dev/null)"
+cd $currdir
+}
+
 # Main routine ###################
 while true; do
 clear
@@ -273,6 +281,8 @@ else
             ;;
         esac
 fi
+
+getcurrent
 
 if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch or tag?" "[N/y]" "yY" "nN"; then
     echo ""
