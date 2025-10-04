@@ -190,7 +190,10 @@ clear
 clearvars
 
 cd ~/freedv-rade-build
-branch="$(git status|grep 'On branch')"
+
+# Show branch if not main
+branch="$(git status|grep 'On branch'|cut -d ' ' -f3)"
+branch=$([[ $branch == "main" ]] || echo $branch)
 echo "Wait a moment..."
 
 # Check we have internet and DNS
@@ -201,10 +204,6 @@ cd || exit 1
 
 # Check that freedv-rade-build is there
 [[ -d freedv-rade-build ]] || { echo -e "ERROR: The freedv-rade-build folder is missing!\nFollow the instructions in the README #at:\nhttps://github.com/barjac/freedv-rade-build\n"; exit 1; }
-
-# Show freedv-rade-build branch if not main
-branch=$(git status | grep "On branch" |cut -d ' ' -f3)
-branch= $([[ $branch == "main" ]] || echo "$branch")
 
 # Preamble
 clear
