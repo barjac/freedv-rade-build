@@ -10,6 +10,11 @@
 # Check we are not root
 ((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 1; }
 
+if [ -n "$LD_PRELOAD" ] && [ ! -e "$LD_PRELOAD" ]; then
+    echo "Warning: LD_PRELOAD points to missing file ($LD_PRELOAD) — unsetting."
+    unset LD_PRELOAD
+fi
+
 # Get user name
 user="$(logname 2>/dev/null || echo "$USER")"
 
@@ -125,11 +130,6 @@ run_as_root() {
     echo "Unable to gain root access via sudo or su." >&2
     return 1
 }
-
-if [ -n "$LD_PRELOAD" ] && [ ! -e "$LD_PRELOAD" ]; then
-    echo "Warning: LD_PRELOAD points to missing file ($LD_PRELOAD) — unsetting."
-    unset LD_PRELOAD
-fi
 
 groups_to_add=()
 
