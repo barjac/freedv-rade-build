@@ -193,7 +193,7 @@ cd ~/freedv-rade-build
 
 # Show branch if not main
 branch="$(git status|grep 'On branch')"
-if [[ "main" =~ "$branch" ]]; then
+if [[ $branch =~ "main" ]]; then
     branch=
 fi
 
