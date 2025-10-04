@@ -126,10 +126,44 @@ run_as_root() {
     return 1
 }
 
+# Clean up stale LD_PRELOAD entries (e.g., libgtk3-nocsd.so.0)
+clean_ld_preload() {
+    local preload="/etc/ld.so.preload"
+    [ ! -f "$preload" ] && return 0
+
+    echo "Checking for stale LD_PRELOAD entries in $preload..."
+
+    local tmpfile
+    tmpfile=$(mktemp) || return 1
+    local changed=0
+
+    while IFS= read -r line; do
+        # skip empty/comment lines
+        [ -z "$line" ] || [[ "$line" =~ ^# ]] && { echo "$line" >> "$tmpfile"; continue; }
+
+        if [ -e "$line" ]; then
+            echo "$line" >> "$tmpfile"
+        else
+            echo "Removing stale preload entry: $line"
+            changed=1
+        fi
+    done < "$preload"
+
+    if [ $changed -eq 1 ]; then
+        run_as_root "cp '$preload' '${preload}.bak' && cp '$tmpfile' '$preload'"
+        echo "Updated $preload (backup saved as ${preload}.bak)"
+    else
+        echo "No stale entries found in $preload."
+    fi
+
+    rm -f "$tmpfile"
+}
+
 groups_to_add=()
 
 # Install some system deps
 echo "Enter the root password if requested to install some initially needed dependencies"
+clean_ld_preload
 case $ID in
 #=================================
     mageia)
@@ -281,6 +315,7 @@ case $ID in
     ;;
 #=================================
     pclinuxos)
+    clean_ld_preload
     groups_to_add+=(dialout)
     # Detect wxWidgets 3.2 devel package name in PCLinuxOS
     detect_wx_pkg() {
