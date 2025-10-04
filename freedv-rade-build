@@ -10,6 +10,7 @@
 # Check we are not root
 ((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 1; }
 
+# Check for missing preload file
 if [ -n "$LD_PRELOAD" ] && [ ! -e "$LD_PRELOAD" ]; then
     echo "Warning: LD_PRELOAD points to missing file ($LD_PRELOAD) — unsetting."
     unset LD_PRELOAD

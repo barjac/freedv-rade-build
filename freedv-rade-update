@@ -4,6 +4,12 @@
 # Check we are not root
 ((UID)) || { echo "ERROR: You must NOT be root user to run $0, use CTRL/d to become $user"; exit 1; }
 
+# Check for missing preload file
+if [ -n "$LD_PRELOAD" ] && [ ! -e "$LD_PRELOAD" ]; then
+    echo "Warning: LD_PRELOAD points to missing file ($LD_PRELOAD) — unsetting."
+    unset LD_PRELOAD
+fi
+
 # Get user name
 user="$(logname 2>/dev/null || echo "$USER")"
 
@@ -195,6 +201,10 @@ cd || exit 1
 
 # Check that freedv-rade-build is there
 [[ -d freedv-rade-build ]] || { echo -e "ERROR: The freedv-rade-build folder is missing!\nFollow the instructions in the README #at:\nhttps://github.com/barjac/freedv-rade-build\n"; exit 1; }
+
+# Show freedv-rade-build branch if not main
+branch=$(git status | grep "On branch" |cut -d ' ' -f3)
+branch= $([[ $branch == "main" ]] || echo "$branch")
 
 # Preamble
 clear
