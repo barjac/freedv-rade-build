@@ -182,6 +182,7 @@ backup=
 restore=
 switch=
 desktop=
+rval=
 }
 
 # Get current FreeDV-GUI branch name and git#
