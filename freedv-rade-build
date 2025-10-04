@@ -176,7 +176,7 @@ case $ID in
     else
             run_as_root "urpmi --auto --no-recommends git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
             libao-devel gsm-devel gcc-c++ automake sox python3-virtualenv pulseaudio-devel hamlib-utils python3 python3-devel \
-            google-noto-emoji-color-fonts" || { echo \"Deps install failed\"; exit 1; }
+            google-noto-emoji-color-fonts" || { echo \"Deps install failed\"; exit 1; }clean_ld_preload
     fi
     ;;
 #=================================
@@ -315,7 +315,6 @@ case $ID in
     ;;
 #=================================
     pclinuxos)
-    clean_ld_preload
     groups_to_add+=(dialout)
     # Detect wxWidgets 3.2 devel package name in PCLinuxOS
     detect_wx_pkg() {
