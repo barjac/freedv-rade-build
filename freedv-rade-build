@@ -126,38 +126,10 @@ run_as_root() {
     return 1
 }
 
-# Clean up stale LD_PRELOAD entries (e.g., libgtk3-nocsd.so.0)
-clean_ld_preload() {
-    local preload="/etc/ld.so.preload"
-    [ ! -f "$preload" ] && return 0
-
-    echo "Checking for stale LD_PRELOAD entries in $preload..."
-
-    local tmpfile
-    tmpfile=$(mktemp) || return 1
-    local changed=0
-
-    while IFS= read -r line; do
-        # skip empty/comment lines
-        [ -z "$line" ] || [[ "$line" =~ ^# ]] && { echo "$line" >> "$tmpfile"; continue; }
-
-        if [ -e "$line" ]; then
-            echo "$line" >> "$tmpfile"
-        else
-            echo "Removing stale preload entry: $line"
-            changed=1
-        fi
-    done < "$preload"
-
-    if [ $changed -eq 1 ]; then
-        run_as_root "cp '$preload' '${preload}.bak' && cp '$tmpfile' '$preload'"
-        echo "Updated $preload (backup saved as ${preload}.bak)"
-    else
-        echo "No stale entries found in $preload."
-    fi
-
-    rm -f "$tmpfile"
-}
+if [ -n "$LD_PRELOAD" ] && [ ! -e "$LD_PRELOAD" ]; then
+    echo "Warning: LD_PRELOAD points to missing file ($LD_PRELOAD) — unsetting."
+    unset LD_PRELOAD
+fi
 
 groups_to_add=()
 
