@@ -61,8 +61,10 @@ fi
 # Set Python path for dynamic module access
 export PYTHONPATH="\$(pwd)/rade_src:\$PYTHONPATH"
 
-# Force GTK to use X11 for window positioning under Wayland
-export GDK_BACKEND=x11
+# Force GTK to use X11 for persistent window positioning under Wayland
+# Optional and may slow down arm (e.g. Raspberry Pi 5) installations
+# Uncomment to use:
+#export GDK_BACKEND=x11
 
 # Run the FreeDV RADE GUI
 src/freedv \$@
