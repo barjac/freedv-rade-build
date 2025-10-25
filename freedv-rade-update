@@ -293,7 +293,7 @@ fi
     (( ${#prbranch} == 0 )) && prbranch="$default"
 
 if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
-    echo -e  "\n NOTE: Patch files must be in /home/$user/freedv-rade/build/ folder"
+    echo -e  "\n NOTE: Patch files must be in /home/$user/freedv-rade-build/ folder"
     patches=()
         while true; do
             read -rp "Enter a patch filename (or press Enter to finish): " file
