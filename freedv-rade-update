@@ -436,7 +436,7 @@ else
     bye
 fi
 # Restart or quit
-if confirm "(Quit or (R)un again" "[Q/R]" "qQ" "rR"; then
+if confirm "Run again?" "[N/y]" "Nn" "Yy"; then
     bye
 else
     continue
