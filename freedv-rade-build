@@ -248,7 +248,7 @@ case $ID in
     groups_to_add+=(uucp lock)
     run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
         python python-numpy speexdsp libsamplerate sox hamlib alsa-lib libao \
-        libsndfile gsm noto-fonts-emoji" \
+        libsndfile gsm noto-fonts-emoji libpulse" \
         || { echo 'Deps install failed'; exit 1; }
 
         # Only install PulseAudio if not on PipeWire
