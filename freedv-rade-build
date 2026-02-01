@@ -282,7 +282,7 @@ case $ID in
     manjaro)
     groups_to_add+=(uucp lock)
     run_as_root "pacman -S --needed cmake gcc base-devel autoconf automake libtool git python speexdsp libsamplerate sox \
-    wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy gsm noto-fonts-emoji" \
+    wxwidgets-gtk3 hamlib alsa-lib libao libsndfile python-virtualenv python-numpy libpulse gsm noto-fonts-emoji" \
     || { echo "Deps install failed"; exit 1; }
     ;;
 #=================================
