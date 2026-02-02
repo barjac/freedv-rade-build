@@ -163,19 +163,30 @@ case $ID in
 #=================================
     linuxmint)
     groups_to_add+=(dialout plugdev)
-    MINT_ID=$(echo "$VERSION_ID"|cut -d. -f1)
-    if (( MINT_ID >= 22 )); then
+
+    # Check if this is LMDE (Debian-based) or regular Mint (Ubuntu-based)
+    if [[ $ID_LIKE == *"debian"* ]]; then
+        # LMDE - use Debian packages
+        echo "Detected Linux Mint Debian Edition"
+        run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev \
+            libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
+            autoconf libtool python3-numpy-dev python3 python3-dev libhamlib-utils automake fonts-noto-color-emoji" \
+            || { echo "Deps install failed"; exit 1; }
+    else
+        MINT_ID=$(echo "$VERSION_ID"|cut -d. -f1)
+        if (( MINT_ID >= 22 )); then
             run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
             autoconf libtool python3-numpy-dev python3 python3-dev libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
-    elif (( MINT_ID == 21 )); then
+        elif (( MINT_ID == 21 )); then
             run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential python3-venv libpulse-dev \
             autoconf libtool python3-numpy python3 python3-dev libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
-    else
-        { echo "This Mint version is not yet supported, please create an isuue in github"; exit 1; }
+        else
+            { echo "This Mint version is not yet supported, please create an isuue in github"; exit 1; }
+        fi
     fi
     ;;
 #=================================

@@ -9,6 +9,7 @@ It is currently tested in **Mageia, MX Linux, LinuxMint, Fedora, Ubuntu, Xubuntu
   |Mageia 9          |OK    | Current stable|
   |Mageia 10 (-dev)  |OK    | Next release  |
   |Linux Mint 21 & 22|OK    |               |
+  |LMDE (Trixie)     |??    |Supported - not tested|
   |OpenSUSE Tumbleweed|OK   |               |
   |Debian 12 & 13    |OK    |Thanks to Uli DF7SC for testing!|
   |MX Linux          |OK    |Thanks to David KD4E for testing!|
