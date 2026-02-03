@@ -2,7 +2,7 @@
 
 This script automates installation of FreeDV RADE in modern Linux distibutions.
 
-It is currently tested in **Mageia, MX Linux, LinuxMint, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro, OpenSUSE Tumbleweed, Garuda, EndevourOS, Gentoo, PiOS (on RPi5), PCLinuxOS and Debian**.
+It is currently tested in **Mageia, MX Linux, LinuxMint, LMDE, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro, OpenSUSE Tumbleweed, Garuda, EndevourOS, Gentoo, PiOS (on RPi5), PCLinuxOS and Debian**.
 
   |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
