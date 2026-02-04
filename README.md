@@ -94,6 +94,8 @@ Also added support for several Arch Linux based distros.
 
 - August 2025 Automatic script updating during use so you always have the latest version. Added PCLinuxOS.
 
+- January 2026 Fix dependency for Arch and Manjaro. Add LMDE to supported distros.
+
 
 ## Using the script
 
