@@ -114,7 +114,7 @@ Also added support for several Arch Linux based distros.
 
     5. Type: 'freedv-rade-build/freedv-rade-build' then ENTER
 
-    6. Enter the root password when prompted to install some system files then ENTER
+    6. Enter the root password if prompted to install some system files then ENTER
 
 Now put the kettle on, it may take a while!
 
@@ -122,16 +122,24 @@ On completion you should see a message with basic instructions on how to launch 
 
 If you see a message that your user has been added to a 'group', which is generally needed for rig control then REBOOT before running FreeDV.
 
+## Starting FreeDV
+You can (double) click the ready made 'FreeDV RADE' icon on your desktop.
+Or you can launch from your user's home folder in a terminal with: './freedv-start'
+
 ## Testing new updates
 There is a 'freedv-rade-update' script which allows updating of your freedv-rade (created using freedv-rade-build), full rebuilds, backup/restore and new desktop file creation from a simple text menu.
 This can now be run from the Update-FreeDV desktop icon, which for recent installs will already be there.
 
-**NOTE* As this installation of FreeDV is not under your system's package management control, a system update (especially in a 'Rolling release' distro)
-could break FreeDV. If this happens then you will need to run the FreeDV update script and use the 'Full rebuild' option. This will not destroy any settings you have made or re-create any default start scripts or desktop files.
+**NOTE* Running either freedv-rade-build or freedv-rade-update will now automatically update this whole freedv-rade-build project so it will never
+need any manual updating.
 
-N.B. Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
+**NOTE* As the installed FreeDV is not under your system's package management control, a system update (especially in a 'Rolling release' distro)
+could break FreeDV. If this happens then you will need to simply run the FreeDV update script and use the 'Full rebuild' option.
+This will not destroy any settings you have made or re-create any default start scripts or desktop files.
 
-If you have an early clone of freedv-rade-build then you can update it as follows:
+If you have a very early clone of freedv-rade-build then you can update it as follows:
+
+**NOTE* Always **copy/paste** commands from here **excluding** the surrounding ' ' to avoid typos!
 
     1. 'cd ~/freedv-rade-build'
 
@@ -139,8 +147,7 @@ If you have an early clone of freedv-rade-build then you can update it as follow
 
     3. 'cd && chmod +x freedv-rade-build/freedv-rade-update' to make the update script executable
 
-    4. 'freedv-rade-build/freedv-rade-update' to run it as often as you like
-        OR use the Update-RADE desktop icon to run it.
+    4. 'freedv-rade-build/freedv-rade-update' to run it or use the Update-RADE desktop icon.
 
 Just follow the prompts.
 
