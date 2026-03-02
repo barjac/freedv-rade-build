@@ -13,7 +13,7 @@ It is currently tested in **Mageia, MX Linux, LinuxMint, LMDE, Fedora, Ubuntu, X
   |OpenSUSE Tumbleweed|OK   |               |
   |Debian 12 & 13    |OK    |Thanks to Uli DF7SC for testing!|
   |MX Linux          |OK    |Thanks to David KD4E for testing!|
-  |Fedora 40, 41, 42 |OK    |               |
+  |Fedora 40/41/42/43 |OK    |             |
   |Ubuntu 22/24/25.04 LTS also on RPi5|OK    |Thanks to LU3JIJ for testing! and 2D0DRM for RPi5 testing|
   |Manjaro           |OK    |Thanks to M0SSN for testing!|
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
