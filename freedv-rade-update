@@ -17,6 +17,11 @@ user="$(logname 2>/dev/null || echo "$USER")"
 RUN_DIR="/home/$user/freedv-rade-build"
 cd "$RUN_DIR" || { echo "Failed to change to RUN_DIR"; exit 1; }
 
+if grep -q venv < ~/freedv-start; then
+    echo -e "This system is using a Python based version of FreeDV RADE, \n\
+You MUST use the 'Full rebuild' (f) option NOW to start using the new C build"
+fi
+
 # Check not already running
 exec 8>/tmp/radeupdt.lock
 flock -n 8 || { echo "Another instance is already running"; exit 1; }
