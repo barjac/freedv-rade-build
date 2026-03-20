@@ -48,18 +48,12 @@ done
 
 cd ${builddir}/freedv-gui
 
-# Activate virtual environment
-. ./rade-venv/bin/activate
-
 cd build_linux
 
 # Ensure model19_check3 symlink exists
 if ! [[ -h model19_check3 ]]; then
     ln -s \$(pwd)/rade_src/model19_check3 model19_check3
 fi
-
-# Set Python path for dynamic module access
-export PYTHONPATH="\$(pwd)/rade_src:\$PYTHONPATH"
 
 # Force GTK to use X11 for persistent window positioning under Wayland
 # Optional and may slow down arm (e.g. Raspberry Pi 5) installations
@@ -68,9 +62,6 @@ export PYTHONPATH="\$(pwd)/rade_src:\$PYTHONPATH"
 
 # Run the FreeDV RADE GUI
 src/freedv \$@
-
-# Deactivate venv on exit
-deactivate
 
 # Uncomment the next line to totally kill rigctld on closing freedv.
 #killrigctld
@@ -81,4 +72,8 @@ EOF
 	if [[ -f ~/freedv-start ]]; then
 		chmod +x ~/freedv-start || echo "WARNING: chmod +x freedv-start failed"
 	fi
+else # Start script exists but check its not using python, if so edit it
+    if grep -q venv < ~/freedv-start; then
+        sed -i.pybak '/venv\|deactivate\|python\|PYTHONPATH\|environment/Id' ~/freedv-start
+    fi
 fi
