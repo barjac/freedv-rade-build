@@ -17,11 +17,6 @@ user="$(logname 2>/dev/null || echo "$USER")"
 RUN_DIR="/home/$user/freedv-rade-build"
 cd "$RUN_DIR" || { echo "Failed to change to RUN_DIR"; exit 1; }
 
-if grep -q venv < ~/freedv-start; then
-    echo -e "This system is using a Python based version of FreeDV RADE, \n\
-You MUST use the 'Full rebuild' (f) option NOW to start using the new C build"
-fi
-
 # Check not already running
 exec 8>/tmp/radeupdt.lock
 flock -n 8 || { echo "Another instance is already running"; exit 1; }
@@ -243,6 +238,11 @@ TIP: Hitting ENTER without typing will automatically select the first option to 
 
 showcurrent
 
+if grep -q venv < ~/freedv-start; then
+    echo "*************************** Your system is using a Python based version of FreeDV RADE."
+    echo "*************************** You MUST use the 'Full rebuild' (f) option NOW to update to the new C build."
+fi
+
 if (( bak == 1 )); then
 
     confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup, (R)estore from backup, (S)witch backup/current, Create (D)esktop launcher or (Q)uit?" "[U/F/B/R/S/D/Q]" "Uu" "Ff" "Bb" "Rr" "Ss" "Dd" "Qq"
@@ -430,7 +430,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         if (( update == 1 )); then 
             echo -e "\nStarting full rebuild in 3 seconds. Please be patient this will take some time ..."
             sleep 3
-            freedv-rade-build/freedv-rade-build
+            freedv-rade-build/freedv-rade-build --restart
         fi
 # Desktop file
         if (( desktop == 1 )); then
