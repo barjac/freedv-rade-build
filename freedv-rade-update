@@ -156,12 +156,11 @@ if (( ${#cname} > 0 )); then
     fi
 fi
 
-source ./rade-venv/bin/activate
 cd build_linux || exit 1
 if ! [[ -h model19_check3 ]]; then
     ln -s "$(pwd)"/rade_src/model19_check3 model19_check3
 fi
-PYTHONPATH="$(pwd)/rade_src:$PYTHONPATH" make
+make
 cd || exit 1
 }
 
