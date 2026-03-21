@@ -2,12 +2,14 @@
 
 This script automates installation of FreeDV RADE in modern Linux distibutions.
 
+NOTE: It no longer supports earlier FreeDV builds that used .
+
 It is currently tested in **Mageia, MX Linux, LinuxMint, LMDE, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro, OpenSUSE Tumbleweed, Garuda, EndevourOS, Gentoo, PiOS (on RPi5), PCLinuxOS and Debian**.
 
   |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
   |Mageia 9          |OK    | Current stable|
-  |Mageia 10 (-dev)  |OK    | Next release  |
+  |Mageia 10 (-dev)  |OK    | Next release  | Also now running on a RPi4b (8GB) with slight issues (WIP :)
   |Linux Mint 21 & 22|OK    |               |
   |LMDE (Trixie)     |OK    |Thanks to Phil F5NLG for testing!|
   |OpenSUSE Tumbleweed|OK   |               |
@@ -54,10 +56,6 @@ A working directory called freedv-rade is created in the user's home folder (or 
 
 The freedv-gui sources are cloned from github master branch.
 
-A python3 virtual environment is then automatically created and activated as described in the freedv-gui README.md
-
-Several essential python modules are then installed by python pip in the virtual environment.
-
 build_linux.sh is then run to continue with the download and building of more dependencies and ultimately freedv.
 
 On completion of the build a start script is written to the user's home folder called freedv-start which is then made executable ready for use.
@@ -95,6 +93,8 @@ Also added support for several Arch Linux based distros.
 - August 2025 Automatic script updating during use so you always have the latest version. Added PCLinuxOS.
 
 - January 2026 Fix dependency for Arch and Manjaro. Add LMDE to supported distros.
+
+- March 2026 Removed all Python dependencies from this project.
 
 
 ## Using the script
