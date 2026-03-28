@@ -129,12 +129,26 @@ git switch $default || { echo "ERROR: switching to $default"; exit 1; }
 
 git pull
 
-    if (( ${#prbranch} > 0 )); then
-        if git checkout "$prbranch" | grep -q "error:"; then
-            echo -e "\nError finding $prbranch - closing.\n"
+if (( ${#prbranch} > 0 )); then
+        # Handle fork PRs via GitHub's PR ref (format: pr:1268)
+        if [[ "$prbranch" == pr:* ]]; then
+            prnumber="${prbranch#pr:}"
+            echo "Fetching PR #$prnumber via GitHub ref..."
+            git fetch origin "refs/pull/$prnumber/head:pr/$prnumber" \
+                || { echo "ERROR: Failed to fetch PR #$prnumber"; exit 1; }
+            git checkout "pr/$prnumber" \
+                || { echo "ERROR: Failed to checkout PR #$prnumber"; exit 1; }
+        # Warn if someone pastes a fork:branch style name directly
+        elif [[ "$prbranch" == *:* ]]; then
+            echo "ERROR: Fork branch '$prbranch' not in upstream. Use pr:NNNN format instead."
             exit 1
+        else
+            if git checkout "$prbranch" | grep -q "error:"; then
+                echo -e "\nError finding $prbranch - closing.\n"
+                exit 1
+            fi
+            git pull
         fi
-        git pull
     fi
 
 # Apply a patches if there are any
@@ -291,8 +305,10 @@ fi
 
 if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch or tag?" "[N/y]" "yY" "nN"; then
     echo ""
-    read -r -p "Enter branch/tag name:" prbranch
+    echo -e " TIP: For a fork PR use format  pr:1268  (GitHub PR number)"
+    read -r -p "Enter branch/tag/pr number:" prbranch
 fi
+
 # Use default branch if non entered
     (( ${#prbranch} == 0 )) && prbranch="$default"
 
