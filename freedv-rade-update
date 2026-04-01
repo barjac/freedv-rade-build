@@ -131,6 +131,10 @@ git pull
 
 if (( ${#prbranch} > 0 )); then
         # Handle fork PRs via GitHub's PR ref (format: pr:1268)
+        if [[ "$prbranch" =~ ^[0-9]+$ ]]; then
+            prbranch="pr:$prbranch"
+        fi
+
         if [[ "$prbranch" == pr:* ]]; then
             prnumber="${prbranch#pr:}"
             echo "Fetching PR #$prnumber via GitHub ref..."
@@ -305,7 +309,7 @@ fi
 
 if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch or tag?" "[N/y]" "yY" "nN"; then
     echo ""
-    echo -e " TIP: For a fork PR use format  pr:1268  (GitHub PR number)"
+#    echo -e " TIP: For a fork PR use format  pr:1268  (GitHub PR number)"
     read -r -p "Enter branch/tag/pr number:" prbranch
 fi
 
