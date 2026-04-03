@@ -24,12 +24,19 @@ flock -n 8 || { echo "Another instance is already running"; exit 1; }
 # Set full path to log
 LOGFILE="$RUN_DIR/freedv-rade-update.log"
 
-# Detect restart flag and strip it from args
+# Parse flags: strip --restart from args, keep --debug for restart passthrough
 RESTARTING=false
-if [[ "$1" == "--restart" ]]; then
-    RESTARTING=true
-    shift  # remove --restart so rest of script never sees it
-fi
+DEBUG=false
+_args=()
+for _arg in "$@"; do
+    case "$_arg" in
+        --restart) RESTARTING=true ;;
+        --debug)   DEBUG=true; _args+=("$_arg") ;;
+        *)         _args+=("$_arg") ;;
+    esac
+done
+set -- "${_args[@]}"
+unset _arg _args
 
 # Only wipe log & write OS info on fresh run
 if ! $RESTARTING; then
@@ -178,7 +185,11 @@ cd build_linux || exit 1
 if ! [[ -h model19_check3 ]]; then
     ln -s "$(pwd)"/rade_src/model19_check3 model19_check3
 fi
-make
+if [[ $DEBUG == true ]]; then
+    make VERBOSE=1
+else
+    make
+fi
 cd || exit 1
 }
 
