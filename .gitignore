@@ -3,4 +3,4 @@
 freedv-rade-build.log
 freedv-rade-update.log
 .*.kate-swp
-*.patch
+#*.patch
