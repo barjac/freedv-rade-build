@@ -373,6 +373,9 @@ cd "${basedir}/${builddir}/freedv-gui" || { echo "ERROR: cd to freedv-gui failed
 # Always create verbose log from make
 #sed -i 's: -j$(nproc): -j$(nproc) VERBOSE=1:' build_linux.sh
 
+# Temporary fix for issue: build_linux.sh failing in master #1298
+patch -p1 < ../../freedv-rade-build/werror.patch ||:
+
 # Run the freedv build script
 ./build_linux.sh || { echo "ERROR: Build failed for some reason, check for errors above and run again later."; exit 1; }
 
