@@ -2,6 +2,43 @@
 # ubuntu-chk
 # Run as regular user
 ###################
+# PURPOSE:
+#   This diagnostic and repair script fixes common Ubuntu package management
+#   problems. It is safe to run as a regular user (it will prompt for your
+#   password when it needs administrator rights via 'sudo').
+#
+# BACKGROUND:
+#   Ubuntu uses two tools to install and manage software packages:
+#     - apt-get : The high-level package manager. It handles downloading
+#                 software, resolving dependencies (i.e. making sure all the
+#                 other software a package needs is also installed), and
+#                 keeping track of what is installed on your system.
+#     - dpkg    : The low-level package manager that apt-get sits on top of.
+#                 It does the actual unpacking and installation of individual
+#                 package files (.deb files). Sometimes a package can get
+#                 stuck in a half-installed or broken state (e.g. after a
+#                 crash or interrupted install), and dpkg needs to be told
+#                 to finish what it started.
+#
+# WHAT THIS SCRIPT DOES:
+#   1. apt-get -f install
+#        The '-f' flag stands for '--fix-broken'. This command scans your
+#        installed packages for any broken dependencies or incomplete
+#        installations, then automatically downloads and installs whatever
+#        is missing or corrects whatever is wrong.
+#
+#   2. dpkg --configure -a
+#        The '-a' flag means 'all'. This tells dpkg to find every package
+#        that was unpacked but never fully configured (set up), and complete
+#        its configuration. This typically happens when an installation was
+#        interrupted partway through.
+#
+# OUTPUT:
+#   All output from both commands is saved to a timestamped log file at:
+#     ~/freedv-rade-build/ubuntu_chk_<date>_<time>.log
+#   This log can be shared for remote troubleshooting if the problems persist.
+###################
+
 # Where to save the log
 LOGFILE="$HOME/freedv-rade-build/ubuntu_chk_$(date +%F_%H-%M-%S).log"
 
