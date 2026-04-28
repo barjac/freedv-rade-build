@@ -130,10 +130,14 @@ fastupdt() {
 cd ${basedir}/freedv-rade/freedv-gui || exit 1
 
 # Remove any patched/edited files
+echo "Resetting any patches or edits"
 git reset --hard
+git clean -fd
 
+echo "Switching to $default"
 git switch $default || { echo "ERROR: switching to $default"; exit 1; }
 
+echo "git pull from $default"
 git pull
 
 if (( ${#prbranch} > 0 )); then
@@ -161,6 +165,7 @@ if (( ${#prbranch} > 0 )); then
             git pull
         fi
     fi
+    echo "Using branch $prbranch"
 
 # Apply a patches if there are any
 if (( ${#patches[@]} > 0 )); then
