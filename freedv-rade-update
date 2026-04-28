@@ -151,7 +151,7 @@ if (( ${#prbranch} > 0 )); then
             echo "Fetching PR #$prnumber via GitHub ref..."
             git fetch origin "refs/pull/$prnumber/head:pr/$prnumber" \
                 || { echo "ERROR: Failed to fetch PR #$prnumber"; exit 1; }
-            git checkout "pr/$prnumber" \patch -p1 < ../../freedv-rade-build/cores.patch && echo "cores.patch applied" \
+            git checkout "pr/$prnumber" \
                 || { echo "ERROR: Failed to checkout PR #$prnumber"; exit 1; }
         # Warn if someone pastes a fork:branch style name directly
         elif [[ "$prbranch" == *:* ]]; then
