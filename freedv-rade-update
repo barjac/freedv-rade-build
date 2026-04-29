@@ -149,7 +149,7 @@ if (( ${#prbranch} > 0 )); then
         if [[ "$prbranch" == pr:* ]]; then
             prnumber="${prbranch#pr:}"
             echo "Fetching PR #$prnumber via GitHub ref..."
-            git fetch origin "refs/pull/$prnumber/head:pr/$prnumber" \
+            git fetch origin "+refs/pull/$prnumber/head:pr/$prnumber" \
                 || { echo "ERROR: Failed to fetch PR #$prnumber"; exit 1; }
             git checkout "pr/$prnumber" \
                 || { echo "ERROR: Failed to checkout PR #$prnumber"; exit 1; }
