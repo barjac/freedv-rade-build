@@ -74,7 +74,7 @@ echo "Script is up to date"
 
 # Set default branch
 default="master"
-prbranch=""
+prbranches=()
 pname=""
 cname=""
 
@@ -140,32 +140,54 @@ git switch $default || { echo "ERROR: switching to $default"; exit 1; }
 echo "git pull from $default"
 git pull
 
-if (( ${#prbranch} > 0 )); then
-        # Handle fork PRs via GitHub's PR ref (format: pr:1268)
-        if [[ "$prbranch" =~ ^[0-9]+$ ]]; then
-            prbranch="pr:$prbranch"
-        fi
-
-        if [[ "$prbranch" == pr:* ]]; then
-            prnumber="${prbranch#pr:}"
+if (( ${#prbranches[@]} == 0 )); then
+        echo "Using branch $default"
+    elif (( ${#prbranches[@]} == 1 )); then
+        # Single entry — existing checkout behaviour (branch, tag, or PR)
+        entry="${prbranches[0]}"
+        if [[ "$entry" == pr:* ]]; then
+            prnumber="${entry#pr:}"
             echo "Fetching PR #$prnumber via GitHub ref..."
             git fetch origin "+refs/pull/$prnumber/head:pr/$prnumber" \
                 || { echo "ERROR: Failed to fetch PR #$prnumber"; exit 1; }
             git checkout "pr/$prnumber" \
                 || { echo "ERROR: Failed to checkout PR #$prnumber"; exit 1; }
-        # Warn if someone pastes a fork:branch style name directly
-        elif [[ "$prbranch" == *:* ]]; then
-            echo "ERROR: Fork branch '$prbranch' not in upstream. Use pr:NNNN format instead."
+        elif [[ "$entry" == *:* ]]; then
+            echo "ERROR: Fork branch '$entry' not in upstream. Use a PR number instead."
             exit 1
         else
-            if git checkout "$prbranch" | grep -q "error:"; then
-                echo -e "\nError finding $prbranch - closing.\n"
+            if git checkout "$entry" | grep -q "error:"; then
+                echo -e "\nError finding $entry - closing.\n"
                 exit 1
             fi
             git pull
         fi
+        echo "Using branch $entry"
+    else
+        # Multiple PRs — validate all are PR numbers, then merge into a throwaway branch
+        for entry in "${prbranches[@]}"; do
+            if [[ "$entry" != pr:* ]]; then
+                echo "ERROR: '$entry' is not a PR number. When combining multiple entries all must be PR numbers."
+                exit 1
+            fi
+        done
+        git checkout -B build/combined "$default" \
+            || { echo "ERROR: Could not create build/combined branch"; exit 1; }
+        for entry in "${prbranches[@]}"; do
+            prnumber="${entry#pr:}"
+            echo "Fetching PR #$prnumber..."
+            git fetch origin "+refs/pull/$prnumber/head:pr/$prnumber" \
+                || { echo "ERROR: Failed to fetch PR #$prnumber"; exit 1; }
+            echo "Merging PR #$prnumber..."
+            if ! git merge --no-edit "pr/$prnumber"; then
+                git merge --abort 2>/dev/null
+                echo "ERROR: PR #$prnumber conflicts with existing changes — aborting."
+                exit 1
+            fi
+            echo "PR #$prnumber merged OK"
+        done
+        echo "Using combined PRs: ${prbranches[*]}"
     fi
-    echo "Using branch $prbranch"
 
 # Apply a patches if there are any
 if (( ${#patches[@]} > 0 )); then
@@ -323,14 +345,16 @@ else
         esac
 fi
 
-if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch or tag?" "[N/y]" "yY" "nN"; then
-    echo ""
-#    echo -e " TIP: For a fork PR use format  pr:1268  (GitHub PR number)"
-    read -r -p "Enter branch/tag/pr number:" prbranch
+prbranches=()
+if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch, tag or PR(s)?" "[N/y]" "yY" "nN"; then
+    echo -e "\n NOTE: Enter PR numbers or a single branch name/tag. Enter a blank line when done."
+    while true; do
+        read -r -p "Enter branch/tag/PR number (or press Enter to finish): " entry
+        [[ -z "$entry" ]] && break
+        [[ "$entry" =~ ^[0-9]+$ ]] && entry="pr:$entry"
+        prbranches+=("$entry")
+    done
 fi
-
-# Use default branch if non entered
-    (( ${#prbranch} == 0 )) && prbranch="$default"
 
 if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
     echo -e  "\n NOTE: Patch files must be in /home/$user/freedv-rade-build/ folder"
@@ -367,7 +391,7 @@ if (( bak == 1 )) && (( restore != 1 )) && (( desktop != 1 )) && (( switch != 1 
 fi
 
 # Debug
-#echo "U=$fastupdt F=$update B=$backup R=$restore S=$switch D=$desktop prbranch=$prbranch"
+#echo "U=$fastupdt F=$update B=$backup R=$restore S=$switch D=$desktop prbranches=${prbranches[*]}"
 # Summary of what will be done
 if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore == 1 )) || (( desktop == 1 )) || (( switch == 1 )); then
     echo -e "\n\nSummary of selected tasks:"
@@ -385,7 +409,13 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     fi
 
     if (( fastupdt == 1 )); then
-        updt_str="built at $prbranch"
+        if (( ${#prbranches[@]} == 0 )); then
+            updt_str="built at $default"
+        elif (( ${#prbranches[@]} == 1 )); then
+            updt_str="built at ${prbranches[0]}"
+        else
+            updt_str="built with merged PRs: ${prbranches[*]}"
+        fi
 
         if (( ${#patches[@]} > 0 )); then
             updt_str="$updt_str and patched with ${patches[@]}"
@@ -430,7 +460,13 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
 
 # Fast update
         if (( fastupdt == 1 )); then
-            echo -e "\nStarting fast update in 3 seconds to latest ${prbranch}."
+            if (( ${#prbranches[@]} > 1 )); then
+                echo -e "\nStarting fast update in 3 seconds combining PRs: ${prbranches[*]}."
+            elif (( ${#prbranches[@]} == 1 )); then
+                echo -e "\nStarting fast update in 3 seconds to ${prbranches[0]}."
+            else
+                echo -e "\nStarting fast update in 3 seconds to latest $default."
+            fi
             sleep 3
             if fastupdt; then
                 echo "Update complete"
