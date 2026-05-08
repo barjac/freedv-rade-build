@@ -512,7 +512,9 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
             echo -e "Your ~/freedv-start script has been edited to work without Python \n\
                  and a backup of the original has been saved as freedv-start.pybak. \n\
                  Any other custom start scripts will need to be modified in a similar fashion. \n"
-            sed -i.pybak '/venv\|deactivate\|python\|PYTHONPATH\|environment/Id' ~/freedv-start
+            sed -i.pybak \
+                -e '/PYTHONPATH.*src\/freedv/ s/.*/src\/freedv $@/' \
+                -e '/venv\|deactivate\|python\|PYTHONPATH\|environment/Id' ~/freedv-start
         fi
     fi
 else

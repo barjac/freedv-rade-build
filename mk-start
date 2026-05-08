@@ -74,6 +74,8 @@ EOF
 	fi
 else # Start script exists but check its not using python, if so edit it
     if grep -q venv < ~/freedv-start; then
-        sed -i.pybak '/venv\|deactivate\|python\|PYTHONPATH\|environment/Id' ~/freedv-start
+        sed -i.pybak \
+            -e '/PYTHONPATH.*src\/freedv/ s/.*/src\/freedv $@/' \
+            -e '/venv\|deactivate\|python\|PYTHONPATH\|environment/Id' ~/freedv-start
     fi
 fi
