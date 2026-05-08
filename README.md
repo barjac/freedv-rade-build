@@ -4,7 +4,7 @@ This script automates installation of FreeDV RADE in modern Linux distibutions.
 
 NOTE: It no longer supports earlier FreeDV sources that used Python.
 
-It is currently tested in **Mageia, MX Linux, LinuxMint, LMDE, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro, OpenSUSE Tumbleweed, Garuda, EndevourOS, Gentoo, PiOS (on RPi5), PCLinuxOS and Debian**.
+It is currently tested in **Mageia, MX Linux, LinuxMint, LMDE, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro, OpenSUSE Tumbleweed, Garuda, EndevourOS, Gentoo, PiOS (on RPi5), PCLinuxOS, Debian and ML4W OS**.
 
   |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
@@ -25,6 +25,7 @@ It is currently tested in **Mageia, MX Linux, LinuxMint, LMDE, Fedora, Ubuntu, X
   |EndeavourOS       |OK    |Thanks to Dave Baxter NB4S for testing! |
   |Arco Linux        |??    |Supported - not tetsed       |
   |RebornOS          |??    |Supported - not tetsed       |
+  |ML4W OS           |OK    |Thanks to Tuyoshi JE1BTJ for testing!|
   |Gentoo            |OK    |Thanks to W6KS for help and testing!|
   |PiOS              |OK    |Thanks to 2D0DRM for testing (NOTE RPi models < 5 cannot handle RADE|
   |PCLinuxOS         |OK*   |*Must not have distro hamlib development package installed as it is too old, latest upstream hamlib is built locally instead. FreeDV build|
@@ -95,6 +96,8 @@ Also added support for several Arch Linux based distros.
 - January 2026 Fix dependency for Arch and Manjaro. Add LMDE to supported distros.
 
 - March 2026 Removed all Python dependencies from this project.
+
+- May 2026 Added ML4W OS to supported Arch-based distros.
 
 
 ## Using the script
