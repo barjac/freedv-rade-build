@@ -255,7 +255,7 @@ case $ID in
         fi
     ;;
 #=================================
-    arch|garuda|endeavouros|arcolinux|rebornos)
+    arch|garuda|endeavouros|arcolinux|rebornos|ml4wos)
     groups_to_add+=(uucp lock)
     run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
         speexdsp libsamplerate sox hamlib alsa-lib libao \
