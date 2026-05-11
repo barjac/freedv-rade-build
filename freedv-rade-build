@@ -156,8 +156,17 @@ case $ID in
     groups_to_add+=(dialout)
     echo "Enter the root password to install some initially needed dependencies"
     run_as_root "zypper --non-interactive in --no-recommends cmake patch automake autoconf libtool wxGTK3-devel libsamplerate-devel \
-            libsndfile-devel speexdsp-devel alsa-lib-devel libao-devel libgsm-devel gcc-c++ sox \
+            libsndfile-devel speexdsp-devel alsa-devel libao-devel libgsm-devel gcc-c++ sox \
             pulseaudio-devel hamlib hamlib-devel google-noto-coloremoji-fonts" \
+            || { echo "Deps install failed"; exit 1; }
+    ;;
+#=================================
+    opensuse-leap)
+    groups_to_add+=(dialout)
+    echo "Enter the root password to install some initially needed dependencies"
+    run_as_root "zypper --non-interactive in --no-recommends cmake patch automake autoconf libtool wxGTK3-devel libsamplerate-devel \
+            libsndfile-devel speexdsp-devel alsa-devel libao-devel libgsm-devel gcc-c++ sox \
+            libpulse-devel hamlib hamlib-devel google-noto-coloremoji-fonts" \
             || { echo "Deps install failed"; exit 1; }
     ;;
 #=================================
