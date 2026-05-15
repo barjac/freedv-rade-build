@@ -408,10 +408,10 @@ cd || exit 1
 echo -e "\n\n########### Build is complete \o/ ############\n\nYou can run it from your home folder using:\n\n \
         ./freedv-start [-f configfile]\n\n  OR  use the FreeDV-RADE desktop icon.\n\n"
 
-if (( ${#groups_added[@]} > 0 )) then
-    echo -e "####  Your user has been added to ${groups_added[0]} group"
-    if (( ${#groups_add[@]} == 2 )) then
-    echo -e " and ${groups_added[1]} group"
+if (( ${#groups_added[@]} > 0 )); then
+        echo -e "####  Your user has been added to ${groups_added[0]} group"
+    if (( ${#groups_add[@]} == 2 )); then
+        echo -e " and ${groups_added[1]} group"
     fi
-echo -e ", please reboot before using FreeDV  ####"
+    echo -e ", please reboot before using FreeDV  ####"
 fi
