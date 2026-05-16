@@ -17,7 +17,7 @@ if [ -n "$LD_PRELOAD" ] && [ ! -e "$LD_PRELOAD" ]; then
 fi
 
 # Get user name
-user="$(logname 2>/dev/null || echo "$USER")"
+user="$(id -un)"
 
 # Check that this is a 64bit machine
 uname -m | grep -q "64" || { echo "ERROR: A 64bit system is needed"; exit 1; }
