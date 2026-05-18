@@ -1,0 +1,31 @@
+diff --git a/src/main.cpp b/src/main.cpp
+index 266a9c12..b6591e76 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -869,7 +869,10 @@ void MainFrame::loadConfiguration_()
+     if (wxGetApp().appConfiguration.rigControlConfiguration.hamlibRigName == wxT(""))
+     {
+         wxGetApp().m_intHamlibRig = pConfig->ReadLong("/Hamlib/RigName", -1);
+-        wxGetApp().appConfiguration.rigControlConfiguration.hamlibRigName = HamlibRigController::RigIndexToName(wxGetApp().m_intHamlibRig);
++        if (wxGetApp().m_intHamlibRig >= 0)
++        {
++            wxGetApp().appConfiguration.rigControlConfiguration.hamlibRigName = HamlibRigController::RigIndexToName(wxGetApp().m_intHamlibRig);
++        }
+     }
+     else
+     {
+diff --git a/src/rig_control/HamlibRigController.cpp b/src/rig_control/HamlibRigController.cpp
+index 680a0cc6..de51fe4e 100644
+--- a/src/rig_control/HamlibRigController.cpp
++++ b/src/rig_control/HamlibRigController.cpp
+@@ -283,6 +283,10 @@ int HamlibRigController::RigNameToIndex(std::string const& rigName)
+ std::string HamlibRigController::RigIndexToName(unsigned int rigIndex)
+ {
+     InitializeHamlibLibrary();
++    if (rigIndex >= RigNameList_.size())
++    {
++        return "";
++    }
+     return RigNameList_[rigIndex];
+ }
+ 
