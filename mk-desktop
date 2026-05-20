@@ -17,12 +17,20 @@ Terminal=true
 Categories=AudioVideo;Audio;HamRadio;
 Comment=Digital Voice mode for HF Radio
 Keywords=Radio;HAM;HF;RF;codec2;voice;modem;
+StartupWMClass=freedv
 X-Desktop-File-Install-Version=0.26
 
 EOF
 
     if [[ -f $(xdg-user-dir DESKTOP)/freedv-rade.desktop ]]; then
         chmod +x $(xdg-user-dir DESKTOP)/freedv-rade.desktop || echo "WARNING: failed to chmod desktop file"
+        gio set $(xdg-user-dir DESKTOP)/freedv-rade.desktop metadata::trusted true 2>/dev/null || true
         echo "FreeDV-RADE Desktop file created"
-	fi
+    fi
 fi
+
+# Install to applications directory so panel window-list can match the icon
+mkdir -p ~/.local/share/applications
+cp $(xdg-user-dir DESKTOP)/freedv-rade.desktop ~/.local/share/applications/freedv.desktop
+command -v update-desktop-database &>/dev/null && update-desktop-database ~/.local/share/applications/
+echo "FreeDV-RADE applications entry installed"

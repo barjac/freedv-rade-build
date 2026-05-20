@@ -249,7 +249,12 @@ case $ID in
     debian)
     groups_to_add+=(dialout plugdev)
     DEBIAN_ID=$(echo "$VERSION_ID"|cut -d. -f1)
-        if (( DEBIAN_ID >= 12 )); then
+        if (( DEBIAN_ID > 12 )); then
+            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libasound2-dev libao-dev \
+                libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
+                fonts-noto-color-emoji automake" \
+                || { echo "Deps install failed"; exit 1; }
+        elif (( DEBIAN_ID == 12 )); then
             run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
                 libhamlib-utils fonts-noto-color-emoji automake" \
