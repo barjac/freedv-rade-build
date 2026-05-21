@@ -8,6 +8,9 @@ else
     builddir=/home/${USER}/freedv-rade
 fi
 
+# Compute path relative to home so freedv-start is username-agnostic
+reldir="${builddir#/home/$USER}"
+
 cd
 # Create start script in user's home if not present
 if ! [[ -f ~/freedv-start ]]; then
@@ -20,9 +23,9 @@ cat > ~/freedv-start <<EOF
 
 ###################################
 # Add path to rigctld if built locally
-    EXT_DIST_BIN="/home/$USER/freedv-rade/freedv-gui/build_linux/external/dist/bin/"
+    EXT_DIST_BIN="\$HOME${reldir}/freedv-gui/build_linux/external/dist/bin/"
     if ! command -v rigctld &>/dev/null; then
-        export PATH="$EXT_DIST_BIN:$PATH"
+        export PATH="\$EXT_DIST_BIN:\$PATH"
     fi
 ####################################
 # Edit and uncomment (remove #) the 'rigcltd...' line below with your radio code (-m) and USB port (-r) to start rigctld at freedv launch.
@@ -46,7 +49,7 @@ for p in \${parr[@]};do
 done
 }
 
-cd ${builddir}/freedv-gui
+cd "\$HOME${reldir}/freedv-gui"
 
 cd build_linux
 
