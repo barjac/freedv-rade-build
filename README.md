@@ -99,6 +99,8 @@ Also added support for several Arch Linux based distros.
 
 - May 2026 Added ML4W OS to supported Arch-based distros.
 
+- May 2026 Added support for RPi4 but only with some changes to the system default sample rate
+see ~/freedv-rade-build/rpi4-audio-howto.md the results are excellent.
 
 ## Using the script
 
