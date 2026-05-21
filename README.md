@@ -4,7 +4,7 @@ This script automates installation of FreeDV RADE in modern Linux distibutions.
 
 NOTE: It no longer supports earlier FreeDV sources that used Python.
 
-It is currently tested in **Mageia, MX Linux, LinuxMint, LMDE, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro, OpenSUSE Tumbleweed, Garuda, EndevourOS, Gentoo, PiOS (on RPi5), PCLinuxOS, Debian and ML4W OS**.
+It is currently tested in **Mageia, MX Linux, LinuxMint, LMDE, Fedora, Ubuntu, Xubuntu, Kubuntu, Manjaro, OpenSUSE Tumbleweed, Garuda, EndevourOS, Gentoo, PiOS (on RPi4/5), PCLinuxOS, Debian and ML4W OS**.
 
   |**Distribution**      |**Status** | **Notes** | 
   |:---              | :----: | :--- |
@@ -100,7 +100,7 @@ Also added support for several Arch Linux based distros.
 - May 2026 Added ML4W OS to supported Arch-based distros.
 
 - May 2026 Added support for RPi4 but only with some changes to the system default sample rate
-see ~/freedv-rade-build/rpi4-audio-howto.md the results are excellent.
+see **~/freedv-rade-build/rpi4-audio-howto.md** the results are excellent.
 
 ## Using the script
 
