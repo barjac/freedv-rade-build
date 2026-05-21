@@ -359,6 +359,14 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
         while true; do
             read -rp "Enter a patch filename (or press Enter to finish): " file
             [[ -z "$file" ]] && break
+            if [[ ! -f "/home/${user}/freedv-rade-build/$file" ]]; then
+                echo -e "\nERROR: Patch file '$file' not found in /home/$user/freedv-rade-build/"
+                if confirm "Continue without this patch?" "[Y/n]" "yY" "nN"; then
+                    continue
+                else
+                    exit 1
+                fi
+            fi
             patches+=("$file")
         done
 fi
