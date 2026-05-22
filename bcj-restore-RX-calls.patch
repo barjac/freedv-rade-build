@@ -1,8 +1,8 @@
 From c32192f117090644b9e261c7d93757ac57ca5565 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Fri, 22 May 2026 12:47:48 +0100
-Subject: [PATCH] Restore heard callsign list from CSV log on startup and modem
- start.
+Subject: [PATCH 1/2] Restore heard callsign list from CSV log on startup and
+ modem start.
 
 On startup and each time the modem is started, read up to the 100 most
 recent entries from the CSV RX log and pre-populate the stations-heard
@@ -131,6 +131,48 @@ index d784bdba..64e3e6c8 100644
          void resetStats_();
          void exportConfiguration_(wxConfigBase* config);
          void setConfiguration_(wxFileConfig* config);
+-- 
+2.52.0
+
+
+From 4ec09b9e22f860eff215a292469db7f0cb977fe5 Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@mageia.org>
+Date: Fri, 22 May 2026 13:38:47 +0100
+Subject: [PATCH 2/2] Enable Log QSO button based on list content, not modem
+ state.
+
+The log button is now live whenever the stations-heard list has entries,
+allowing QSOs to be logged from the restored CSV list without needing to
+start the modem.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/main.cpp | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/main.cpp b/src/main.cpp
+index a810de16..974fd691 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -993,6 +993,7 @@ setDefaultMode:
+     m_freqBox->Show(isFrequencyControlEnabled_());
+ 
+     restoreCallsignListFromCsv_();
++    m_logQSO->Enable(m_lastReportedCallsignListView->GetItemCount() > 0);
+ 
+     // Show/hide callsign combo box based on reporting enablement
+     if (wxGetApp().appConfiguration.reportingConfiguration.reportingEnabled)
+@@ -2820,8 +2821,8 @@ void MainFrame::performFreeDVOff_()
+         m_rb700d->Enable();
+         m_rb700e->Enable();
+         
+-        m_logQSO->Disable();
+-        
++        m_logQSO->Enable(m_lastReportedCallsignListView->GetItemCount() > 0);
++
+         // Make sure QSY button becomes disabled after stop.
+         if (m_reporterDialog != nullptr)
+         {
 -- 
 2.52.0
 
