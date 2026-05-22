@@ -130,12 +130,10 @@ fastupdt() {
 cd ${basedir}/freedv-rade/freedv-gui || exit 1
 
 # Remove any patched/edited files and sync to origin
-echo "Resetting any patches or edits"
-git clean -fd
-
-echo "Switching to $default and syncing with origin"
+echo "Syncing with origin and resetting any patches or edits"
 git fetch origin
-git checkout -B $default origin/$default || { echo "ERROR: failed to reset $default to origin/$default"; exit 1; }
+git reset --hard origin/$default || { echo "ERROR: failed to reset to origin/$default"; exit 1; }
+git clean -fd
 
 if (( ${#prbranches[@]} == 0 )); then
         echo "Using branch $default"
