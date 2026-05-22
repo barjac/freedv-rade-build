@@ -195,6 +195,7 @@ if (( ${#patches[@]} > 0 )); then
         exit 1
     fi
     done
+    git commit -a -m "Applied patches: ${patches[*]}"
 fi
 
 # Use a specific commit
