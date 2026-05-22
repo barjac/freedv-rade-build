@@ -1,7 +1,7 @@
 From c32192f117090644b9e261c7d93757ac57ca5565 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Fri, 22 May 2026 12:47:48 +0100
-Subject: [PATCH 1/3] Restore heard callsign list from CSV log on startup and
+Subject: [PATCH 1/4] Restore heard callsign list from CSV log on startup and
  modem start.
 
 On startup and each time the modem is started, read up to the 100 most
@@ -138,7 +138,7 @@ index d784bdba..64e3e6c8 100644
 From 4ec09b9e22f860eff215a292469db7f0cb977fe5 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Fri, 22 May 2026 13:38:47 +0100
-Subject: [PATCH 2/3] Enable Log QSO button based on list content, not modem
+Subject: [PATCH 2/4] Enable Log QSO button based on list content, not modem
  state.
 
 The log button is now live whenever the stations-heard list has entries,
@@ -180,7 +180,7 @@ index a810de16..974fd691 100644
 From adc22b9e1c4d63652122e13bc784c021cd7bb6ae Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Fri, 22 May 2026 13:58:05 +0100
-Subject: [PATCH 3/3] Guard against null logger in log entry dialog.
+Subject: [PATCH 3/4] Guard against null logger in log entry dialog.
 
 logContact() was called unconditionally on a pointer that is null when
 the modem is stopped or WSJT-X logging is not configured, causing a
@@ -231,6 +231,57 @@ index ba378061..7e1afa66 100644
          this->EndModal(wxOK);
      }
  }
+-- 
+2.52.0
+
+
+From 460e7dd5b1a8997acb42f41ae92aebeef5ef7a69 Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@mageia.org>
+Date: Fri, 22 May 2026 14:07:44 +0100
+Subject: [PATCH 4/4] Create temporary logger in log dialog when modem is
+ stopped.
+
+When the modem is not running the app-level logger is null. If UDP
+reporting is configured, spin up a short-lived WSJTXNetworkLogger for
+the single logContact() call so logging reaches the logging program
+regardless of modem state.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/gui/dialogs/log_entry.cpp | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/src/gui/dialogs/log_entry.cpp b/src/gui/dialogs/log_entry.cpp
+index 7e1afa66..2251e4bf 100644
+--- a/src/gui/dialogs/log_entry.cpp
++++ b/src/gui/dialogs/log_entry.cpp
+@@ -20,6 +20,7 @@
+ //==========================================================================
+ 
+ #include "../../main.h"
++#include "../../logging/WSJTXNetworkLogger.h"
+ #include <wx/wx.h>
+ #include <wx/valnum.h>
+ #include "log_entry.h"
+@@ -209,9 +210,16 @@ void LogEntryDialog::OnOK(wxCommandEvent&)
+         
+         std::time_t timeSinceUnixEpoch = logTime_.GetTicks();
+ 
+-        if (logger_ != nullptr)
++        auto logger = logger_;
++        if (logger == nullptr && wxGetApp().appConfiguration.reportingConfiguration.udpReportingEnabled)
+         {
+-            logger_->logContact(
++            logger = std::make_shared<WSJTXNetworkLogger>(
++                (const char*)wxGetApp().appConfiguration.reportingConfiguration.udpReportingHostname->ToUTF8(),
++                wxGetApp().appConfiguration.reportingConfiguration.udpReportingPort);
++        }
++        if (logger != nullptr)
++        {
++            logger->logContact(
+                 std::chrono::system_clock::from_time_t(timeSinceUnixEpoch),
+                 (const char*)dxCall_->GetValue().ToUTF8(),
+                 (const char*)dxGrid_->GetValue().ToUTF8(),
 -- 
 2.52.0
 
