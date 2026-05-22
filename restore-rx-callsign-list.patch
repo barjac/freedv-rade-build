@@ -1,20 +1,22 @@
-From 35d3d25a7eec865c934deed5dc2a60a522577c61 Mon Sep 17 00:00:00 2001
+From c32192f117090644b9e261c7d93757ac57ca5565 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Fri, 22 May 2026 12:47:48 +0100
-Subject: [PATCH] Restore heard callsign list from CSV log on startup.
+Subject: [PATCH] Restore heard callsign list from CSV log on startup and modem
+ start.
 
-On startup, read up to the 100 most recent entries from the CSV RX log
-and pre-populate the stations-heard list. Restored entries are shown in
-grey to distinguish them from callsigns heard in the current session.
+On startup and each time the modem is started, read up to the 100 most
+recent entries from the CSV RX log and pre-populate the stations-heard
+list. Restored entries are shown in grey to distinguish them from
+callsigns heard in the current session.
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ---
- src/main.cpp | 68 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/main.cpp | 72 ++++++++++++++++++++++++++++++++++++++++++++++++++--
  src/main.h   |  1 +
- 2 files changed, 69 insertions(+)
+ 2 files changed, 71 insertions(+), 2 deletions(-)
 
 diff --git a/src/main.cpp b/src/main.cpp
-index 266a9c12..d1d3434d 100644
+index 266a9c12..a810de16 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -22,6 +22,7 @@
@@ -106,6 +108,17 @@ index 266a9c12..d1d3434d 100644
  static std::recursive_mutex stoppingMutex;
  
  void MainFrame::setConfiguration_(wxFileConfig* config)
+@@ -2334,8 +2402,8 @@ void MainFrame::performFreeDVOn_()
+ 
+         m_txtCtrlCallSign->SetValue(wxT(""));
+         m_lastReportedCallsignListView->DeleteAllItems();
+-        m_cboLastReportedCallsigns->Enable(false);
+-            
++        restoreCallsignListFromCsv_();
++        m_cboLastReportedCallsigns->Enable(m_lastReportedCallsignListView->GetItemCount() > 0);
+         m_cboLastReportedCallsigns->SetText(wxT(""));
+         
+         m_logQSO->Disable();
 diff --git a/src/main.h b/src/main.h
 index d784bdba..64e3e6c8 100644
 --- a/src/main.h
