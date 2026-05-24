@@ -1,0 +1,206 @@
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index 2681679f..70a03545 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -25,6 +25,7 @@
+ #endif // defined(WIN32)
+ 
+ #include "codec2_fdmdv.h" // for FDMDV_FCENTRE
++#include "pipeline/eoo_debug.h"
+ 
+ extern int g_mode;
+ 
+@@ -1170,24 +1171,32 @@ void MainFrame::togglePTT(void) {
+         // timeout as backup.
+         if (freedvInterface.getCurrentMode() == FREEDV_MODE_RADE)
+         {
++            eoo_debug_begin();
+             log_info("Waiting for EOO to be queued");
++            eoo_debug("ongui: endingTx.store(true)");
+             endingTx.store(true, std::memory_order_release);
+-            
++
+             auto beginTime = std::chrono::high_resolution_clock::now();
+             while(true)
+             {
+                 if (g_eoo_enqueued.load(std::memory_order_acquire))
+                 {
++                    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
++                        std::chrono::high_resolution_clock::now() - beginTime).count();
++                    eoo_debug("ongui: g_eoo_enqueued detected elapsed=%ldms", (long)elapsed);
+                     log_info("Detected that EOO has been enqueued");
+                     break;
+                 }
+- 
++
+                 wxThread::Sleep(1);
+                 wxGetApp().Yield(true);
+ 
+                 auto endTime = std::chrono::high_resolution_clock::now();
+                 if ((endTime - beginTime) >= std::chrono::seconds(2))
+                 {
++                    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
++                        endTime - beginTime).count();
++                    eoo_debug("ongui: TIMEOUT waiting for g_eoo_enqueued elapsed=%ldms", (long)elapsed);
+                     log_warn("Timed out waiting for EOO to be enqueued");
+                     break;
+                 }
+diff --git a/src/pipeline/RADETransmitStep.cpp b/src/pipeline/RADETransmitStep.cpp
+index b6f2a93d..54d755b8 100644
+--- a/src/pipeline/RADETransmitStep.cpp
++++ b/src/pipeline/RADETransmitStep.cpp
+@@ -38,6 +38,7 @@
+ #include <functional>
+ #include "RADETransmitStep.h"
+ #include "pipeline_defines.h"
++#include "eoo_debug.h"
+ #include "../util/logging/ulog.h"
+ 
+ #if defined(__APPLE__)
+@@ -221,6 +222,12 @@ void RADETransmitStep::restartVocoder() FREEDV_NONBLOCKING
+     int numEOOSamples = rade_n_tx_eoo_out(dv_);
+     FREEDV_END_VERIFIED_SAFE
+ 
++    FREEDV_BEGIN_VERIFIED_SAFE
++    eoo_debug("restartVocoder: numEOOSamples=%d silence=%d fifo_used=%d fifo_free=%d",
++              numEOOSamples, NUM_SAMPLES_SILENCE,
++              outputSampleFifo_.numUsed(), outputSampleFifo_.numFree());
++    FREEDV_END_VERIFIED_SAFE
++
+     FREEDV_BEGIN_VERIFIED_SAFE
+         rade_tx_eoo(dv_, eooOut_);
+     FREEDV_END_VERIFIED_SAFE
+@@ -231,10 +238,26 @@ void RADETransmitStep::restartVocoder() FREEDV_NONBLOCKING
+         eooOutShort_[index] = eooOut_[index].real * RADE_SCALING_FACTOR;
+     }
+ 
++    FREEDV_BEGIN_VERIFIED_SAFE
++    eoo_debug("restartVocoder: eooOut[0..4].real = %.5f %.5f %.5f %.5f %.5f",
++              eooOut_[0].real, eooOut_[1].real, eooOut_[2].real,
++              eooOut_[3].real, eooOut_[4].real);
++    eoo_debug("restartVocoder: eooOutShort[0..4] = %d %d %d %d %d",
++              (int)eooOutShort_[0], (int)eooOutShort_[1], (int)eooOutShort_[2],
++              (int)eooOutShort_[3], (int)eooOutShort_[4]);
++    FREEDV_END_VERIFIED_SAFE
++
+     if (outputSampleFifo_.write(eooOutShort_, numEOOSamples + NUM_SAMPLES_SILENCE) != 0)
+     {
+         FREEDV_BEGIN_VERIFIED_SAFE
+         log_warn("Could not queue EOO samples (remaining space in FIFO = %d)", outputSampleFifo_.numFree());
++        eoo_debug("restartVocoder: FIFO WRITE FAILED fifo_free=%d", outputSampleFifo_.numFree());
++        FREEDV_END_VERIFIED_SAFE
++    }
++    else
++    {
++        FREEDV_BEGIN_VERIFIED_SAFE
++        eoo_debug("restartVocoder: FIFO write OK fifo_used=%d", outputSampleFifo_.numUsed());
+         FREEDV_END_VERIFIED_SAFE
+     }
+ }
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index 93837df6..acab0877 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -65,6 +65,7 @@ using namespace std::chrono_literals;
+ #include "LinkStep.h"
+ 
+ #include "util/logging/ulog.h"
++#include "eoo_debug.h"
+ #include "os/os_interface.h"
+ 
+ #include "codec2_alloc.h"
+@@ -764,22 +765,42 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
+                     if (!hasEooBeenSent_)
+                     {
+                         // Special case for handling RADE EOT
++                        FREEDV_BEGIN_VERIFIED_SAFE
++                        eoo_debug("TxRxThread: calling restartTxVocoder");
++                        FREEDV_END_VERIFIED_SAFE
+                         freedvInterface.restartTxVocoder();
+                         hasEooBeenSent_ = true;
++                        FREEDV_BEGIN_VERIFIED_SAFE
++                        eoo_debug("TxRxThread: restartTxVocoder returned");
++                        FREEDV_END_VERIFIED_SAFE
+                     }
+ 
+                     auto outputSamples = pipeline_->execute(inputPtr, 0, &nout);
++                    FREEDV_BEGIN_VERIFIED_SAFE
++                    eoo_debug("TxRxThread: execute(0) returned nout=%d outfifo1_free=%d",
++                              nout, cbData->outfifo1->numFree());
++                    FREEDV_END_VERIFIED_SAFE
+                     if (nout > 0 && outputSamples != nullptr)
+                     {
+                         if (cbData->outfifo1->write(outputSamples, nout) != 0)
+                         {
+                             FREEDV_BEGIN_VERIFIED_SAFE
+                             log_warn("Could not inject resampled EOO samples (space remaining in FIFO = %d)", cbData->outfifo1->numFree());
++                            eoo_debug("TxRxThread: INJECT FAILED outfifo1_free=%d", cbData->outfifo1->numFree());
++                            FREEDV_END_VERIFIED_SAFE
++                        }
++                        else
++                        {
++                            FREEDV_BEGIN_VERIFIED_SAFE
++                            eoo_debug("TxRxThread: injected %d samples to outfifo1", nout);
+                             FREEDV_END_VERIFIED_SAFE
+                         }
+                     }
+                     else
+                     {
++                        FREEDV_BEGIN_VERIFIED_SAFE
++                        eoo_debug("TxRxThread: setting g_eoo_enqueued=true");
++                        FREEDV_END_VERIFIED_SAFE
+                         g_eoo_enqueued.store(true, std::memory_order_release);
+                     }
+                 }
+diff --git a/src/pipeline/eoo_debug.h b/src/pipeline/eoo_debug.h
+new file mode 100644
+index 00000000..c3ebd9d7
+--- /dev/null
++++ b/src/pipeline/eoo_debug.h
+@@ -0,0 +1,46 @@
++//=========================================================================
++// Name:            eoo_debug.h
++// Purpose:         Millisecond-precise EOO debug logging to file.
++//                  Written to /tmp/freedv_eoo_debug.log; appends per
++//                  transmission so multiple PTT cycles accumulate.
++//=========================================================================
++
++#ifndef AUDIO_PIPELINE__EOO_DEBUG_H
++#define AUDIO_PIPELINE__EOO_DEBUG_H
++
++#include <cstdio>
++#include <ctime>
++#include <cstdarg>
++
++static inline void eoo_debug(const char* fmt, ...)
++{
++    FILE* f = fopen("/tmp/freedv_eoo_debug.log", "a");
++    if (!f) return;
++
++    struct timespec ts;
++    clock_gettime(CLOCK_REALTIME, &ts);
++    struct tm tm_info;
++    localtime_r(&ts.tv_sec, &tm_info);
++    char timebuf[16];
++    strftime(timebuf, sizeof(timebuf), "%H:%M:%S", &tm_info);
++    fprintf(f, "[%s.%03ld] ", timebuf, ts.tv_nsec / 1000000L);
++
++    va_list args;
++    va_start(args, fmt);
++    vfprintf(f, fmt, args);
++    va_end(args);
++    fprintf(f, "\n");
++    fclose(f);
++}
++
++/* Call once at the start of a new PTT-off sequence to separate log sections. */
++static inline void eoo_debug_begin()
++{
++    FILE* f = fopen("/tmp/freedv_eoo_debug.log", "a");
++    if (!f) return;
++    fprintf(f, "---\n");
++    fclose(f);
++    eoo_debug("=== EOO sequence start ===");
++}
++
++#endif // AUDIO_PIPELINE__EOO_DEBUG_H
