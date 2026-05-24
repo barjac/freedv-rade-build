@@ -218,3 +218,52 @@ index 00000000..c3ebd9d7
 +}
 +
 +#endif // AUDIO_PIPELINE__EOO_DEBUG_H
+diff --git a/src/freedv_interface.cpp b/src/freedv_interface.cpp
+--- a/src/freedv_interface.cpp
++++ b/src/freedv_interface.cpp
+@@ -41,6 +41,7 @@
+ #include "pipeline/EitherOrStep.h"
+
+ #include "util/logging/ulog.h"
++#include "pipeline/eoo_debug.h"
+
+ using namespace std::placeholders;
+
+@@ -695,19 +695,37 @@
+     ret[receivedReliableText_.size()] = 0;
+     return ret;
+ }
+
++static void eoo_self_test_cb_(rade_text_t /*ptr*/, const char* text, int /*length*/, void* state) {
++    strncpy((char*)state, text, 15);
++    ((char*)state)[15] = '\0';
++}
++
+ void FreeDVInterface::setReliableText(const char* callsign)
+ {
+     // Special case for RADE.
+     if (rade_ != nullptr && radeTextPtr_ != nullptr)
+     {
+         log_info("generating RADE text string");
+         int nsyms = rade_n_eoo_bits(rade_);
+         float* eooSyms = new float[nsyms];
+         assert(eooSyms);
+
+         rade_text_generate_tx_string(radeTextPtr_, callsign, strlen(callsign), eooSyms, nsyms);
++        eoo_debug("setReliableText: eooSyms[0..9]=%.4f,%.4f %.4f,%.4f %.4f,%.4f %.4f,%.4f %.4f,%.4f",
++                  eooSyms[0], eooSyms[1], eooSyms[2], eooSyms[3],
++                  eooSyms[4], eooSyms[5], eooSyms[6], eooSyms[7],
++                  eooSyms[8], eooSyms[9]);
++        {
++            char selfTestResult[16] = {0};
++            rade_text_t selfTestRx = rade_text_create();
++            rade_text_set_rx_callback(selfTestRx, eoo_self_test_cb_, selfTestResult);
++            rade_text_rx(selfTestRx, eooSyms, nsyms / 2);
++            rade_text_destroy(selfTestRx);
++            eoo_debug("setReliableText self-test: in='%s' out='%s' match=%d",
++                      callsign, selfTestResult, strcmp(callsign, selfTestResult) == 0);
++        }
+         rade_tx_set_eoo_bits(rade_, eooSyms);
+
+         delete[] eooSyms;
+     }
