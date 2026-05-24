@@ -46,7 +46,7 @@ index 2681679f..70a03545 100644
                      break;
                  }
 diff --git a/src/pipeline/RADETransmitStep.cpp b/src/pipeline/RADETransmitStep.cpp
-index b6f2a93d..9759bec4 100644
+index b6f2a93d..ebbe18d7 100644
 --- a/src/pipeline/RADETransmitStep.cpp
 +++ b/src/pipeline/RADETransmitStep.cpp
 @@ -38,6 +38,7 @@
@@ -70,7 +70,7 @@ index b6f2a93d..9759bec4 100644
      FREEDV_BEGIN_VERIFIED_SAFE
          rade_tx_eoo(dv_, eooOut_);
      FREEDV_END_VERIFIED_SAFE
-@@ -231,10 +238,34 @@ void RADETransmitStep::restartVocoder() FREEDV_NONBLOCKING
+@@ -231,10 +238,40 @@ void RADETransmitStep::restartVocoder() FREEDV_NONBLOCKING
          eooOutShort_[index] = eooOut_[index].real * RADE_SCALING_FACTOR;
      }
  
@@ -81,14 +81,20 @@ index b6f2a93d..9759bec4 100644
 +    eoo_debug("restartVocoder: eooOutShort[0..4] = %d %d %d %d %d",
 +              (int)eooOutShort_[0], (int)eooOutShort_[1], (int)eooOutShort_[2],
 +              (int)eooOutShort_[3], (int)eooOutShort_[4]);
-+    // Samples 192+ are data slots (after the two pilot symbols at 0..191).
-+    // If all zero here, callsign was not encoded (reporter disabled / radeTextPtr_ null).
-+    eoo_debug("restartVocoder: eooOut[192..196].real/imag = %.5f/%.5f %.5f/%.5f %.5f/%.5f %.5f/%.5f %.5f/%.5f",
-+              eooOut_[192].real, eooOut_[192].imag,
-+              eooOut_[193].real, eooOut_[193].imag,
-+              eooOut_[194].real, eooOut_[194].imag,
-+              eooOut_[195].real, eooOut_[195].imag,
-+              eooOut_[196].real, eooOut_[196].imag);
++    // Frame layout (M=160, Ncp=32, symbol_size=192):
++    //   s=0 (P pilot):    samples 0..191
++    //   s=1 (Pend pilot): samples 192..383
++    //   s=2 (data0):      samples 384..575  <- callsign starts here
++    //   s=3 (data1):      samples 576..767
++    //   s=4 (data2):      samples 768..959
++    //   s=5 (Pend pilot): samples 960..1151
++    // If data slots are all zero, callsign was not encoded.
++    eoo_debug("restartVocoder: eooOut[384..388].real/imag = %.5f/%.5f %.5f/%.5f %.5f/%.5f %.5f/%.5f %.5f/%.5f",
++              eooOut_[384].real, eooOut_[384].imag,
++              eooOut_[385].real, eooOut_[385].imag,
++              eooOut_[386].real, eooOut_[386].imag,
++              eooOut_[387].real, eooOut_[387].imag,
++              eooOut_[388].real, eooOut_[388].imag);
 +    FREEDV_END_VERIFIED_SAFE
 +
      if (outputSampleFifo_.write(eooOutShort_, numEOOSamples + NUM_SAMPLES_SILENCE) != 0)
