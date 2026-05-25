@@ -1,0 +1,13 @@
+diff --git a/src/rade_ofdm.c b/src/rade_ofdm.c
+index 74e55db..e8e38f5 100644
+--- a/src/rade_ofdm.c
++++ b/src/rade_ofdm.c
+@@ -546,7 +546,7 @@ int rade_ofdm_demod_eoo(const rade_ofdm *ofdm, float *z_hat, const RADE_COMP *rx
+         RADE_COMP sum = rade_czero();
+         sum = rade_cadd(sum, rade_cdiv(rx_sym[0][c], ofdm->P[c]));
+         sum = rade_cadd(sum, rade_cdiv(rx_sym[1][c], ofdm->Pend[c]));
+-        sum = rade_cadd(sum, rade_cdiv(rx_sym[Ns][c], ofdm->Pend[c]));
++        sum = rade_cadd(sum, rade_cdiv(rx_sym[Ns + 1][c], ofdm->Pend[c]));
+         float phase_offset = rade_cangle(sum);
+
+         /* Correct all symbols */
