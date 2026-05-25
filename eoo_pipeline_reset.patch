@@ -1,0 +1,17 @@
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -764,7 +764,13 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
+                     if (!hasEooBeenSent_)
+                     {
+                         // Special case for handling RADE EOT
++                        // Reset the pipeline before writing the EOO frame.
++                        // The output resampler (8000->44100 Hz) accumulates
++                        // voice signal in its FIR filter state.  Without this
++                        // reset the filter memory contaminates the EOO pilot
++                        // symbols, causing EOO detection to fail at the
++                        // receiver.
++                        pipeline_->reset();
+                         freedvInterface.restartTxVocoder();
+                         hasEooBeenSent_ = true;
+                     }
