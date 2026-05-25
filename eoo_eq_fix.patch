@@ -1,12 +1,19 @@
-diff --git a/build_linux/rade_src/src/rade_ofdm.c b/build_linux/rade_src/src/rade_ofdm.c
---- a/build_linux/rade_src/src/rade_ofdm.c
-+++ b/build_linux/rade_src/src/rade_ofdm.c
-@@ -546,7 +546,7 @@ int rade_ofdm_demod_eoo(const rade_ofdm *ofdm, float *z_hat, const RADE_COMP *rx
-         RADE_COMP sum = rade_czero();
-         sum = rade_cadd(sum, rade_cdiv(rx_sym[0][c], ofdm->P[c]));
-         sum = rade_cadd(sum, rade_cdiv(rx_sym[1][c], ofdm->Pend[c]));
--        sum = rade_cadd(sum, rade_cdiv(rx_sym[Ns][c], ofdm->Pend[c]));
-+        sum = rade_cadd(sum, rade_cdiv(rx_sym[Ns + 1][c], ofdm->Pend[c]));
-         float phase_offset = rade_cangle(sum);
+diff --git a/cmake/BuildRADE.cmake b/cmake/BuildRADE.cmake
+--- a/cmake/BuildRADE.cmake
++++ b/cmake/BuildRADE.cmake
+@@ -19,6 +19,15 @@
+    INSTALL_COMMAND ""
+ )
  
-         /* Correct all symbols */
++# Fix rade_ofdm_demod_eoo EQ bug from radae_nopy commit 1169de5: the third
++# pilot in the EQ sum must be rx_sym[Ns+1] (Pend E2), not rx_sym[Ns] (data2).
++ExternalProject_Add_Step(build_rade eoo_eq_fix
++    COMMAND bash "-c" "grep -qF 'rx_sym[Ns][c]' <SOURCE_DIR>/src/rade_ofdm.c && sed -i 's/rx_sym\\[Ns\\]\\[c\\]/rx_sym[Ns + 1][c]/' <SOURCE_DIR>/src/rade_ofdm.c || true"
++    DEPENDEES update
++    DEPENDERS build
++    ALWAYS 1
++)
++
+ ExternalProject_Get_Property(build_rade BINARY_DIR)
+ ExternalProject_Get_Property(build_rade SOURCE_DIR)
+ add_library(rade SHARED IMPORTED)
