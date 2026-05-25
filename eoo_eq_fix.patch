@@ -8,5 +8,5 @@ diff --git a/build_linux/rade_src/src/rade_ofdm.c b/build_linux/rade_src/src/rad
 -        sum = rade_cadd(sum, rade_cdiv(rx_sym[Ns][c], ofdm->Pend[c]));
 +        sum = rade_cadd(sum, rade_cdiv(rx_sym[Ns + 1][c], ofdm->Pend[c]));
          float phase_offset = rade_cangle(sum);
-
+ 
          /* Correct all symbols */
