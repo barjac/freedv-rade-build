@@ -7,7 +7,7 @@ diff --git a/cmake/BuildRADE.cmake b/cmake/BuildRADE.cmake
 
 +# Write the EOO acquisition diagnostic patcher at cmake configure time.
 +# The ExternalProject step below runs it at build time against the fetched RADE source.
-+file(WRITE "${CMAKE_SOURCE_DIR}/cmake/eoo_acq_diag.py" [[
++file(WRITE "${CMAKE_BINARY_DIR}/eoo_acq_diag.py" [[
 +import sys
 +src = sys.argv[1]
 +def patch(fname, old, new, guard):
@@ -35,7 +35,7 @@ diff --git a/cmake/BuildRADE.cmake b/cmake/BuildRADE.cmake
 +]])
 +
 +ExternalProject_Add_Step(build_rade eoo_acq_diag
-+    COMMAND python3 "${CMAKE_SOURCE_DIR}/cmake/eoo_acq_diag.py" <SOURCE_DIR>
++    COMMAND python3 "${CMAKE_BINARY_DIR}/eoo_acq_diag.py" <SOURCE_DIR>
 +    DEPENDEES update
 +    DEPENDERS build
 +    ALWAYS 1

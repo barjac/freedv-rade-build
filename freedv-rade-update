@@ -196,7 +196,7 @@ if (( ${#patches[@]} > 0 )); then
         exit 1
     fi
     done
-    git commit -a -m "Applied patches: ${patches[*]}"
+    git -c user.email="freedv@localhost" -c user.name="FreeDV Update" commit -a -m "Applied patches: ${patches[*]}"
     printf '%s\n' "${patches[@]}" > "/home/${user}/freedv-rade-build/.last-patches"
 fi
 
