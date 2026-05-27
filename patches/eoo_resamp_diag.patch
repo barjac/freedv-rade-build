@@ -2,7 +2,7 @@ diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
 index 93837df6..b09bd632 100644
 --- a/src/pipeline/TxRxThread.cpp
 +++ b/src/pipeline/TxRxThread.cpp
-@@ -769,6 +769,20 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
+@@ -769,6 +769,19 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
                      }
 
                      auto outputSamples = pipeline_->execute(inputPtr, 0, &nout);
