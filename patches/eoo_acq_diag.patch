@@ -23,7 +23,7 @@ diff --git a/cmake/BuildRADE.cmake b/cmake/BuildRADE.cmake
 +patch(src+'/src/rade_acq.c',
 +      '    acq->Dtmax12_eoo = Dtmax12_eoo;\n\n    *valid',
 +      '    acq->Dtmax12_eoo = Dtmax12_eoo;\n    acq->Dthresh_eoo = Dthresh_eoo;\n    acq->Dt1_eoo_abs = rade_cabs(Dt1_eoo);\n    acq->Dt2_eoo_abs = rade_cabs(Dt2_eoo);\n\n    *valid',
-+      'Dthresh_eoo')
++      'acq->Dthresh_eoo')
 +patch(src+'/src/rade_rx.c',
 +      '"Dtmax12: %8.2f %8.2f tmax: %4d fmax: %6.2f"',
 +      '"Dtmax12: %8.2f %8.2f(%.2f+%.2f/%.2f) tmax: %4d fmax: %6.2f"',
