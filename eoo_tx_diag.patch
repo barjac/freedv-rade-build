@@ -1,20 +1,11 @@
 diff --git a/src/pipeline/RADETransmitStep.cpp b/src/pipeline/RADETransmitStep.cpp
-index c2b4b314..c9ed3158 100644
+index b6f2a93d..c9ed3158 100644
 --- a/src/pipeline/RADETransmitStep.cpp
 +++ b/src/pipeline/RADETransmitStep.cpp
-@@ -225,12 +225,21 @@ void RADETransmitStep::restartVocoder() FREEDV_NONBLOCKING
-         rade_tx_eoo(dv_, eooOut_);
-     FREEDV_END_VERIFIED_SAFE
+@@ -231,6 +231,17 @@ void RADETransmitStep::restartVocoder() FREEDV_NONBLOCKING
+         eooOutShort_[index] = eooOut_[index].real * RADE_SCALING_FACTOR;
+     }
  
--    // Silence first so the resampler startup transient (from pipeline_->reset())
--    // affects only silence, not the EOO pilots.
-     memset(eooOutShort_, 0, sizeof(short) * (numEOOSamples + NUM_SAMPLES_SILENCE));
-     for (int index = 0; index < numEOOSamples; index++)
-     {
--        eooOutShort_[NUM_SAMPLES_SILENCE + index] = eooOut_[index].real * RADE_SCALING_FACTOR;
-+        eooOutShort_[index] = eooOut_[index].real * RADE_SCALING_FACTOR;
-+    }
-+
 +    // Diagnostic: log RMS of s=2 and s=3 windows of the generated EOO frame
 +    // to determine if the problem is in EOO generation or downstream audio output.
 +    {
@@ -24,6 +15,8 @@ index c2b4b314..c9ed3158 100644
 +        FREEDV_BEGIN_VERIFIED_SAFE
 +        log_warn("TX EOO diag: s=2 RMS=%.4f s=3 RMS=%.4f", sqrtf(rms2/192.0f), sqrtf(rms3/192.0f));
 +        FREEDV_END_VERIFIED_SAFE
-     }
- 
++    }
++
      if (outputSampleFifo_.write(eooOutShort_, numEOOSamples + NUM_SAMPLES_SILENCE) != 0)
+     {
+         FREEDV_BEGIN_VERIFIED_SAFE
