@@ -1,7 +1,7 @@
 diff --git a/cmake/BuildRADE.cmake b/cmake/BuildRADE.cmake
 --- a/cmake/BuildRADE.cmake
 +++ b/cmake/BuildRADE.cmake
-@@ -19,6 +19,40 @@
+@@ -19,4 +19,40 @@
     INSTALL_COMMAND ""
  )
 
