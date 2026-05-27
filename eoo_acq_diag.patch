@@ -1,0 +1,44 @@
+diff --git a/cmake/BuildRADE.cmake b/cmake/BuildRADE.cmake
+--- a/cmake/BuildRADE.cmake
++++ b/cmake/BuildRADE.cmake
+@@ -19,6 +19,40 @@
+    INSTALL_COMMAND ""
+ )
+
++# Write the EOO acquisition diagnostic patcher at cmake configure time.
++# The ExternalProject step below runs it at build time against the fetched RADE source.
++file(WRITE "${CMAKE_SOURCE_DIR}/cmake/eoo_acq_diag.py" [[
++import sys
++src = sys.argv[1]
++def patch(fname, old, new, guard):
++    c = open(fname).read()
++    if guard not in c:
++        c = c.replace(old, new)
++        open(fname, 'w').write(c)
++        print('eoo_acq_diag: patched', fname)
++patch(src+'/src/rade_acq.h',
++      '    float Dtmax12_eoo;\n    int f_ind_max;',
++      '    float Dtmax12_eoo;\n    float Dthresh_eoo;\n    float Dt1_eoo_abs;\n    float Dt2_eoo_abs;\n    int f_ind_max;',
++      'Dthresh_eoo')
++patch(src+'/src/rade_acq.c',
++      '    acq->Dtmax12_eoo = Dtmax12_eoo;\n\n    *valid',
++      '    acq->Dtmax12_eoo = Dtmax12_eoo;\n    acq->Dthresh_eoo = Dthresh_eoo;\n    acq->Dt1_eoo_abs = rade_cabs(Dt1_eoo);\n    acq->Dt2_eoo_abs = rade_cabs(Dt2_eoo);\n\n    *valid',
++      'Dthresh_eoo')
++patch(src+'/src/rade_rx.c',
++      '"Dtmax12: %8.2f %8.2f tmax: %4d fmax: %6.2f"',
++      '"Dtmax12: %8.2f %8.2f(%.2f+%.2f/%.2f) tmax: %4d fmax: %6.2f"',
++      'Dt1_eoo_abs')
++patch(src+'/src/rade_rx.c',
++      'rx->acq.Dtmax12, rx->acq.Dtmax12_eoo, rx->tmax, rx->fmax',
++      'rx->acq.Dtmax12, rx->acq.Dtmax12_eoo, rx->acq.Dt1_eoo_abs, rx->acq.Dt2_eoo_abs, rx->acq.Dthresh_eoo, rx->tmax, rx->fmax',
++      'Dt1_eoo_abs')
++]])
++
++ExternalProject_Add_Step(build_rade eoo_acq_diag
++    COMMAND python3 "${CMAKE_SOURCE_DIR}/cmake/eoo_acq_diag.py" <SOURCE_DIR>
++    DEPENDEES update
++    DEPENDERS build
++    ALWAYS 1
++)
++
+ ExternalProject_Get_Property(build_rade BINARY_DIR)
