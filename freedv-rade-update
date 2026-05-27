@@ -197,6 +197,7 @@ if (( ${#patches[@]} > 0 )); then
     fi
     done
     git commit -a -m "Applied patches: ${patches[*]}"
+    printf '%s\n' "${patches[@]}" > "/home/${user}/freedv-rade-build/.last-patches"
 fi
 
 # Use a specific commit
@@ -356,21 +357,62 @@ if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch, tag or PR(s)?" "[N
 fi
 
 if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
-    echo -e  "\n NOTE: Patch files must be in /home/$user/freedv-rade-build/ folder"
     patches=()
-        while true; do
-            read -rp "Enter a patch filename (or press Enter to finish): " file
-            [[ -z "$file" ]] && break
-            if [[ ! -f "/home/${user}/freedv-rade-build/$file" ]]; then
-                echo -e "\nERROR: Patch file '$file' not found in /home/$user/freedv-rade-build/"
-                if confirm "Continue without this patch?" "[Y/n]" "yY" "nN"; then
-                    continue
-                else
-                    exit 1
-                fi
+    _bdir="/home/${user}/freedv-rade-build"
+    _last_file="${_bdir}/.last-patches"
+    _patch_dir="${_bdir}/patches"
+
+    # Offer to reuse recent patches
+    if [[ -f "$_last_file" ]] && [[ -s "$_last_file" ]]; then
+        mapfile -t _last_patches < "$_last_file"
+        echo -e "\nRecent patches: ${_last_patches[*]}"
+        if confirm "Use these?" "[Y/n]" "yY" "nN"; then
+            patches=("${_last_patches[@]}")
+        fi
+    fi
+
+    # Pick list from patches/ subdirectory
+    if (( ${#patches[@]} == 0 )); then
+        _available=()
+        if [[ -d "$_patch_dir" ]]; then
+            while IFS= read -r _f; do
+                _available+=("$(basename "$_f")")
+            done < <(find "$_patch_dir" -maxdepth 1 -name '*.patch' | sort)
+        fi
+        if (( ${#_available[@]} > 0 )); then
+            echo -e "\nAvailable patches:"
+            for _i in "${!_available[@]}"; do
+                printf "  %2d) %s\n" "$((_i+1))" "${_available[$_i]}"
+            done
+            echo -e "Enter numbers (space-separated), or 0 for manual entry:"
+            read -r _sel
+            if [[ "$_sel" != "0" ]]; then
+                for _num in $_sel; do
+                    if [[ "$_num" =~ ^[0-9]+$ ]] && (( _num >= 1 && _num <= ${#_available[@]} )); then
+                        patches+=("patches/${_available[$((_num-1))]}")
+                    fi
+                done
             fi
-            patches+=("$file")
-        done
+        fi
+
+        # Manual fallback (if no patches/ dir, empty, or user chose 0)
+        if (( ${#patches[@]} == 0 )); then
+            echo -e "\n NOTE: Patch files must be in ${_bdir}/ or ${_bdir}/patches/"
+            while true; do
+                read -rp "Enter a patch filename (or press Enter to finish): " file
+                [[ -z "$file" ]] && break
+                if [[ ! -f "${_bdir}/$file" ]]; then
+                    echo -e "\nERROR: Patch file '$file' not found in ${_bdir}/"
+                    if confirm "Continue without this patch?" "[Y/n]" "yY" "nN"; then
+                        continue
+                    else
+                        exit 1
+                    fi
+                fi
+                patches+=("$file")
+            done
+        fi
+    fi
 fi
 
 if (( fastupdt == 1 )) && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
