@@ -1,5 +1,5 @@
 diff --git a/src/pipeline/RADETransmitStep.cpp b/src/pipeline/RADETransmitStep.cpp
-index b6f2a93d..3accfe77 100644
+index b6f2a93d..95da3f76 100644
 --- a/src/pipeline/RADETransmitStep.cpp
 +++ b/src/pipeline/RADETransmitStep.cpp
 @@ -153,7 +153,14 @@ short* RADETransmitStep::execute(short* inputSamples, int numInputSamples, int*
@@ -18,7 +18,7 @@ index b6f2a93d..3accfe77 100644
          }
  
          return outputSamples_.get();
-@@ -231,6 +238,17 @@ void RADETransmitStep::restartVocoder() FREEDV_NONBLOCKING
+@@ -231,6 +238,19 @@ void RADETransmitStep::restartVocoder() FREEDV_NONBLOCKING
          eooOutShort_[index] = eooOut_[index].real * RADE_SCALING_FACTOR;
      }
  
@@ -29,7 +29,9 @@ index b6f2a93d..3accfe77 100644
 +        for (int n = 384; n < 576; n++) { rms2 += eooOut_[n].real * eooOut_[n].real; }
 +        for (int n = 576; n < 768; n++) { rms3 += eooOut_[n].real * eooOut_[n].real; }
 +        FREEDV_BEGIN_VERIFIED_SAFE
-+        log_warn("TX EOO diag: s=2 RMS=%.4f s=3 RMS=%.4f", sqrtf(rms2/192.0f), sqrtf(rms3/192.0f));
++        log_warn("TX EOO diag: s=2 RMS=%.4f s=3 RMS=%.4f eooShort[0]=%d eooShort[384]=%d eooShort[576]=%d",
++                 sqrtf(rms2/192.0f), sqrtf(rms3/192.0f),
++                 (int)eooOutShort_[0], (int)eooOutShort_[384], (int)eooOutShort_[576]);
 +        FREEDV_END_VERIFIED_SAFE
 +    }
 +
