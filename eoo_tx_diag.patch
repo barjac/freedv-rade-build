@@ -1,8 +1,24 @@
 diff --git a/src/pipeline/RADETransmitStep.cpp b/src/pipeline/RADETransmitStep.cpp
-index b6f2a93d..c9ed3158 100644
+index b6f2a93d..3accfe77 100644
 --- a/src/pipeline/RADETransmitStep.cpp
 +++ b/src/pipeline/RADETransmitStep.cpp
-@@ -231,6 +231,17 @@ void RADETransmitStep::restartVocoder() FREEDV_NONBLOCKING
+@@ -153,7 +153,14 @@ short* RADETransmitStep::execute(short* inputSamples, int numInputSamples, int*
+         *numOutputSamples = outputSampleFifo_.numUsed();
+         if (*numOutputSamples > 0)
+         {
+-            outputSampleFifo_.read(outputSamples_.get(), *numOutputSamples);
++            int readResult = outputSampleFifo_.read(outputSamples_.get(), *numOutputSamples);
++            FREEDV_BEGIN_VERIFIED_SAFE
++            log_warn("TX EOO exec diag: fifoUsed=%d readResult=%d s0=%d s384=%d s576=%d",
++                     *numOutputSamples, readResult,
++                     (int)outputSamples_.get()[0],
++                     (int)outputSamples_.get()[384],
++                     (int)outputSamples_.get()[576]);
++            FREEDV_END_VERIFIED_SAFE
+         }
+ 
+         return outputSamples_.get();
+@@ -231,6 +238,17 @@ void RADETransmitStep::restartVocoder() FREEDV_NONBLOCKING
          eooOutShort_[index] = eooOut_[index].real * RADE_SCALING_FACTOR;
      }
  
