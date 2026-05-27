@@ -386,6 +386,7 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
             done
             echo -e "Enter numbers (space-separated), or 0 for manual entry:"
             read -r _sel
+            echo "Patch numbers entered: $_sel"
             if [[ "$_sel" != "0" ]]; then
                 for _num in $_sel; do
                     if [[ "$_num" =~ ^[0-9]+$ ]] && (( _num >= 1 && _num <= ${#_available[@]} )); then
