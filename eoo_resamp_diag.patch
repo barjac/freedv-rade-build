@@ -1,19 +1,21 @@
 diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
-index 93837df6..32e29909 100644
+index 93837df6..b09bd632 100644
 --- a/src/pipeline/TxRxThread.cpp
 +++ b/src/pipeline/TxRxThread.cpp
-@@ -769,6 +769,16 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
+@@ -769,6 +769,18 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
                      }
  
                      auto outputSamples = pipeline_->execute(inputPtr, 0, &nout);
 +                    if (nout >= 4234 && outputSamples != nullptr)
 +                    {
-+                        float rms2 = 0.0f, rms3 = 0.0f;
++                        float rms0 = 0.0f, rms2 = 0.0f, rms3 = 0.0f;
++                        for (int n = 0; n < 1056; n++) { rms0 += (float)outputSamples[n] * outputSamples[n]; }
 +                        for (int n = 2116; n < 3175; n++) { rms2 += (float)outputSamples[n] * outputSamples[n]; }
 +                        for (int n = 3175; n < 4234; n++) { rms3 += (float)outputSamples[n] * outputSamples[n]; }
 +                        FREEDV_BEGIN_VERIFIED_SAFE
-+                        log_warn("TX EOO resamp diag: nout=%d s2 RMS=%.2f s3 RMS=%.2f",
-+                                 nout, sqrtf(rms2/1059.0f), sqrtf(rms3/1059.0f));
++                        log_warn("TX EOO resamp diag: nout=%d s0 RMS=%.2f s2 RMS=%.2f s3 RMS=%.2f samp[0]=%d samp[500]=%d samp[5000]=%d",
++                                 nout, sqrtf(rms0/1056.0f), sqrtf(rms2/1059.0f), sqrtf(rms3/1059.0f),
++                                 (int)outputSamples[0], (int)outputSamples[500], (int)outputSamples[5000]);
 +                        FREEDV_END_VERIFIED_SAFE
 +                    }
                      if (nout > 0 && outputSamples != nullptr)
