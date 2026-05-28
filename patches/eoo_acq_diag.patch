@@ -1,7 +1,7 @@
 diff --git a/cmake/BuildRADE.cmake b/cmake/BuildRADE.cmake
 --- a/cmake/BuildRADE.cmake
 +++ b/cmake/BuildRADE.cmake
-@@ -19,4 +19,40 @@
+@@ -19,4 +19,56 @@
     INSTALL_COMMAND ""
  )
 
@@ -32,6 +32,22 @@ diff --git a/cmake/BuildRADE.cmake b/cmake/BuildRADE.cmake
 +      'rx->acq.Dtmax12, rx->acq.Dtmax12_eoo, rx->tmax, rx->fmax',
 +      'rx->acq.Dtmax12, rx->acq.Dtmax12_eoo, rx->acq.Dt1_eoo_abs, rx->acq.Dt2_eoo_abs, rx->acq.Dthresh_eoo, rx->tmax, rx->fmax',
 +      'Dt1_eoo_abs')
++patch(src+'/src/rade_acq.h',
++      '    float Dt2_eoo_abs;\n    int f_ind_max;',
++      '    float Dt2_eoo_abs;\n    float pwr_eoo1;\n    float pwr_eoo2;\n    int f_ind_max;',
++      'pwr_eoo1')
++patch(src+'/src/rade_acq.c',
++      '    acq->Dt2_eoo_abs = rade_cabs(Dt2_eoo);\n\n    *valid',
++      '    acq->Dt2_eoo_abs = rade_cabs(Dt2_eoo);\n    {int _n;float _p1=0.0f,_p2=0.0f;for(_n=0;_n<M;_n++){RADE_COMP _s1=rx[tmax+M+Ncp+_n];RADE_COMP _s2=rx[tmax+Nmf+_n];_p1+=_s1.real*_s1.real+_s1.imag*_s1.imag;_p2+=_s2.real*_s2.real+_s2.imag*_s2.imag;}acq->pwr_eoo1=_p1/M;acq->pwr_eoo2=_p2/M;}\n\n    *valid',
++      'pwr_eoo1')
++patch(src+'/src/rade_rx.c',
++      '"Dtmax12: %8.2f %8.2f(%.2f+%.2f/%.2f) tmax: %4d fmax: %6.2f"',
++      '"Dtmax12: %8.2f %8.2f(%.2f+%.2f/%.2f) p1=%.3f p2=%.3f tmax: %4d fmax: %6.2f"',
++      'p1=%.3f')
++patch(src+'/src/rade_rx.c',
++      'rx->acq.Dt1_eoo_abs, rx->acq.Dt2_eoo_abs, rx->acq.Dthresh_eoo, rx->tmax, rx->fmax',
++      'rx->acq.Dt1_eoo_abs, rx->acq.Dt2_eoo_abs, rx->acq.Dthresh_eoo, rx->acq.pwr_eoo1, rx->acq.pwr_eoo2, rx->tmax, rx->fmax',
++      'pwr_eoo1')
 +]])
 +
 +ExternalProject_Add_Step(build_rade eoo_acq_diag
