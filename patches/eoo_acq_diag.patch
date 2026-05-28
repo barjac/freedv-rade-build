@@ -42,8 +42,8 @@ diff --git a/cmake/BuildRADE.cmake b/cmake/BuildRADE.cmake
 +      'pwr_eoo1')
 +patch(src+'/src/rade_rx.c',
 +      '"Dtmax12: %8.2f %8.2f(%.2f+%.2f/%.2f) tmax: %4d fmax: %6.2f"',
-+      '"Dtmax12: %8.2f %8.2f(%.2f+%.2f/%.2f) p1=%.3f p2=%.3f tmax: %4d fmax: %6.2f"',
-+      'p1=%.3f')
++      '"Dtmax12: %8.2f %8.2f(%.2f+%.2f/%.2f) p1=%.6f p2=%.6f tmax: %4d fmax: %6.2f"',
++      'p1=%.6f')
 +patch(src+'/src/rade_rx.c',
 +      'rx->acq.Dt1_eoo_abs, rx->acq.Dt2_eoo_abs, rx->acq.Dthresh_eoo, rx->tmax, rx->fmax',
 +      'rx->acq.Dt1_eoo_abs, rx->acq.Dt2_eoo_abs, rx->acq.Dthresh_eoo, rx->acq.pwr_eoo1, rx->acq.pwr_eoo2, rx->tmax, rx->fmax',
