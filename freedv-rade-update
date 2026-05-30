@@ -131,6 +131,7 @@ cd ${basedir}/freedv-rade/freedv-gui || exit 1
 
 # Remove any patched/edited files and sync to origin
 echo "Resetting any patches or edits"
+git reset --hard HEAD
 git clean -fd
 
 echo "Switching to $default and syncing with origin"
