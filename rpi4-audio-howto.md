@@ -144,13 +144,14 @@ context.properties = {
 EOF
 echo "    Created ~/.config/pipewire/pipewire.conf.d/10-clock-rate.conf"
 
-# --- Step 2: Ensure onboard/HDMI audio is enabled ---
+# --- Step 2: Ensure BCM2835 headphone jack is enabled, HDMI audio stays disabled ---
 echo "[2/4] Checking boot audio config..."
 for cfg in /boot/firmware/config.txt /boot/config.txt; do
     if [ -f "$cfg" ]; then
         echo "    Found: $cfg"
         sudo sed -i 's/dtparam=audio=off/dtparam=audio=on/' "$cfg"
-        sudo sed -i 's/dtoverlay=vc4-kms-v3d,noaudio/dtoverlay=vc4-kms-v3d/' "$cfg"
+        # Leave vc4-kms-v3d,noaudio unchanged — HDMI audio stays disabled so
+        # PipeWire only sees the BCM2835 device (one clock source).
         break
     fi
 done
