@@ -8,7 +8,7 @@ set -e
 echo "=== FreeDV RPi4 Audio Setup (48000 Hz) ==="
 
 # --- Step 1: PipeWire 48000 Hz ---
-echo "[1/4] Configuring PipeWire for 48000 Hz..."
+echo "[1/5] Configuring PipeWire for 48000 Hz..."
 mkdir -p ~/.config/pipewire/pipewire.conf.d
 cat > ~/.config/pipewire/pipewire.conf.d/10-clock-rate.conf << 'EOF'
 context.properties = {
@@ -19,7 +19,7 @@ EOF
 echo "    Created ~/.config/pipewire/pipewire.conf.d/10-clock-rate.conf"
 
 # --- Step 2: Ensure BCM2835 headphone jack is enabled, HDMI audio stays disabled ---
-echo "[2/4] Checking boot audio config..."
+echo "[2/5] Checking boot audio config..."
 for cfg in /boot/firmware/config.txt /boot/config.txt; do
     if [ -f "$cfg" ]; then
         echo "    Found: $cfg"
@@ -31,7 +31,7 @@ for cfg in /boot/firmware/config.txt /boot/config.txt; do
 done
 
 # --- Step 3: RTKit ---
-echo "[3/4] Enabling RTKit real-time daemon..."
+echo "[3/5] Enabling RTKit real-time daemon..."
 if systemctl list-unit-files rtkit-daemon.service &>/dev/null; then
     sudo systemctl enable rtkit-daemon
     sudo systemctl start rtkit-daemon
@@ -41,7 +41,7 @@ else
 fi
 
 # --- Step 4: FreeDV config ---
-echo "[4/4] Updating FreeDV sample rates to 48000..."
+echo "[4/5] Updating FreeDV sample rates to 48000..."
 freedv_conf="${HOME}/.config/freedv/freedv.conf"
 
 if [ -f "$freedv_conf" ]; then
@@ -57,6 +57,16 @@ if [ -f "$freedv_conf" ]; then
 else
     echo "    $freedv_conf not found — run FreeDV once, then re-run this script,"
     echo "    or set sample rates to 48000 manually in Tools → Audio Configuration."
+fi
+
+# --- Step 5: freedv-main-sinks null sink rate ---
+echo "[5/5] Checking freedv-main-sinks null sink rate..."
+main_sinks=/usr/local/bin/freedv-main-sinks
+if [ -f "$main_sinks" ]; then
+    sudo sed -i 's/rate=44100/rate=48000/' "$main_sinks"
+    echo "    Updated null sink rate to 48000 in $main_sinks"
+else
+    echo "    $main_sinks not found — skipping"
 fi
 
 echo ""
