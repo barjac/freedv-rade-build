@@ -227,7 +227,12 @@ else
 fi
 make_exit=$?
 if (( make_exit != 0 )); then
-    bad_file=$(grep -o 'for file: \[.*\]' "$LOGFILE" | tail -1 | sed 's/for file: \[//;s/\]//')
+    bad_filename=$(grep -o 'Consider deleting local copy of [^ ]*' "$LOGFILE" | tail -1 | awk '{print $NF}')
+    if [[ -z "$bad_filename" ]]; then
+        bad_file=$(grep -o 'for file: \[.*\]' "$LOGFILE" | tail -1 | sed 's/for file: \[//;s/\]//')
+    else
+        bad_file=$(find "${basedir}/freedv-rade/freedv-gui/build_linux" -name "$bad_filename" 2>/dev/null | head -1)
+    fi
     if [[ -n "$bad_file" && -f "$bad_file" ]]; then
         echo ""
         echo "Checksum error on cached download: $bad_file"
