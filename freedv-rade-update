@@ -225,7 +225,24 @@ if [[ $DEBUG == true ]]; then
 else
     make
 fi
+make_exit=$?
+if (( make_exit != 0 )); then
+    bad_file=$(grep -o 'for file: \[.*\]' "$LOGFILE" | tail -1 | sed 's/for file: \[//;s/\]//')
+    if [[ -n "$bad_file" && -f "$bad_file" ]]; then
+        echo ""
+        echo "Checksum error on cached download: $bad_file"
+        echo "Deleting and retrying..."
+        rm -f "$bad_file"
+        if [[ $DEBUG == true ]]; then
+            make VERBOSE=1
+        else
+            make
+        fi
+        make_exit=$?
+    fi
+fi
 cd || exit 1
+return $make_exit
 }
 
 bye() {
