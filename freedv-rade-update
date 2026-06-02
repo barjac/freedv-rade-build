@@ -139,6 +139,14 @@ git fetch origin
 git checkout -B $default origin/$default || { echo "ERROR: failed to reset $default to origin/$default"; exit 1; }
 git reset --hard origin/$default
 
+# Ensure git has an identity for merge commits; use a fallback if not configured
+if ! git config user.email >/dev/null 2>&1; then
+    export GIT_AUTHOR_NAME="freedv-rade-update"
+    export GIT_AUTHOR_EMAIL="freedv-rade-update@localhost"
+    export GIT_COMMITTER_NAME="freedv-rade-update"
+    export GIT_COMMITTER_EMAIL="freedv-rade-update@localhost"
+fi
+
 if (( ${#prbranches[@]} == 0 )); then
         echo "Using branch $default"
     elif (( ${#prbranches[@]} == 1 )); then
