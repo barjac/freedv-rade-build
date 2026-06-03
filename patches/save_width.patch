@@ -1,0 +1,70 @@
+diff --git a/src/config/FreeDVConfiguration.cpp b/src/config/FreeDVConfiguration.cpp
+index 244a632e..81c8d804 100644
+--- a/src/config/FreeDVConfiguration.cpp
++++ b/src/config/FreeDVConfiguration.cpp
+@@ -48,6 +48,7 @@ FreeDVConfiguration::FreeDVConfiguration()
+     , reporterWindowWidth("/Windows/FreeDVReporter/width", -1)
+     , reporterWindowHeight("/Windows/FreeDVReporter/height", -1)
+     , reporterWindowVisible("/Windows/FreeDVReporter/visible", false)
++    , msgEditDialogWidth("/Windows/FreeDVReporter/msgEditDialogWidth", -1)
+     , reporterWindowCurrentSort("/Windows/FreeDVReporter/currentSort", 5) /* FREQUENCY_COL */
+     , reporterWindowCurrentSortDirection("/Windows/FreeDVReporter/currentSortDirection", true)
+         
+@@ -144,6 +145,7 @@ void FreeDVConfiguration::load(wxConfigBase* config)
+     load_(config, reporterWindowWidth);
+     load_(config, reporterWindowHeight);
+     load_(config, reporterWindowVisible);
++    load_(config, msgEditDialogWidth);
+     load_(config, reporterWindowCurrentSort);
+     load_(config, reporterWindowCurrentSortDirection);
+     
+@@ -273,6 +275,7 @@ void FreeDVConfiguration::save(wxConfigBase* config)
+     save_(config, reporterWindowWidth);
+     save_(config, reporterWindowHeight);
+     save_(config, reporterWindowVisible);
++    save_(config, msgEditDialogWidth);
+     save_(config, reporterWindowCurrentSort);
+     save_(config, reporterWindowCurrentSortDirection);
+     
+diff --git a/src/config/FreeDVConfiguration.h b/src/config/FreeDVConfiguration.h
+index d6cd9ae2..c28ca8d1 100644
+--- a/src/config/FreeDVConfiguration.h
++++ b/src/config/FreeDVConfiguration.h
+@@ -59,6 +59,7 @@ public:
+     ConfigurationDataElement<long> reporterWindowWidth;
+     ConfigurationDataElement<long> reporterWindowHeight;
+     ConfigurationDataElement<bool> reporterWindowVisible;
++    ConfigurationDataElement<long> msgEditDialogWidth;
+     ConfigurationDataElement<int> reporterWindowCurrentSort;
+     ConfigurationDataElement<bool> reporterWindowCurrentSortDirection;
+     
+diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
+index 09103c8f..063ea88e 100644
+--- a/src/gui/dialogs/freedv_reporter.cpp
++++ b/src/gui/dialogs/freedv_reporter.cpp
+@@ -2082,8 +2082,12 @@ void FreeDVReporterDialog::OnStatusMessageContextMenuEdit(wxCommandEvent&)
+ 
+     auto oldText = popup->GetString(contextMenuSelectedIndex_);
+     wxTextEntryDialog dlg(this, _("Edit the saved message:"), _("Edit Message"), oldText);
++    long savedW = wxGetApp().appConfiguration.msgEditDialogWidth;
++    if (savedW > 0)
++        dlg.SetSize(wxSize(savedW, dlg.GetSize().GetHeight()));
+     if (dlg.ShowModal() != wxID_OK)
+         return;
++    wxGetApp().appConfiguration.msgEditDialogWidth = dlg.GetSize().GetWidth();
+ 
+     auto newText = dlg.GetValue().Trim();
+     if (newText.IsEmpty() || newText == oldText)
+@@ -2128,8 +2132,12 @@ void FreeDVReporterDialog::OnStatusMessageContextMenuDelete(wxCommandEvent&)
+ void FreeDVReporterDialog::OnStatusMessageContextMenuAdd(wxCommandEvent&)
+ {
+     wxTextEntryDialog dlg(this, _("Enter new message:"), _("Add Message"), wxEmptyString);
++    long savedW = wxGetApp().appConfiguration.msgEditDialogWidth;
++    if (savedW > 0)
++        dlg.SetSize(wxSize(savedW, dlg.GetSize().GetHeight()));
+     if (dlg.ShowModal() != wxID_OK)
+         return;
++    wxGetApp().appConfiguration.msgEditDialogWidth = dlg.GetSize().GetWidth();
+ 
+     auto newText = dlg.GetValue().Trim();
+     if (newText.IsEmpty())

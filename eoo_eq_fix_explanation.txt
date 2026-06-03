@@ -1,0 +1,54 @@
+Bug: rade_ofdm_demod_eoo uses wrong pilot symbol for channel equalisation
+File: src/rade_ofdm.c, function rade_ofdm_demod_eoo()
+Introduced: radae_nopy commit 1169de5
+
+--- EOO Frame Structure ---
+
+The RADE EOO frame contains Ns+2 = 6 OFDM symbols (Ns=4):
+
+  Index  Symbol
+  -----  ------
+  [0]    P      (regular pilot)
+  [1]    Pend   (end-of-over pilot, E1)
+  [2..4] data   (3 symbols of QPSK callsign data)
+  [5]    Pend   (end-of-over pilot, E2)
+
+--- The Bug ---
+
+rade_ofdm_demod_eoo() estimates the channel at each OFDM carrier by
+averaging the correlations at the three known pilot positions:
+
+  sum += rx_sym[0][c]    / P[c]       // P pilot     -- correct
+  sum += rx_sym[1][c]    / Pend[c]    // Pend E1     -- correct
+  sum += rx_sym[Ns][c]   / Pend[c]    // BUG: Ns=4, so this is the last
+                                       // callsign DATA symbol, not Pend E2
+
+The fix (already applied via eoo_eq_fix.patch):
+
+  sum += rx_sym[Ns+1][c] / Pend[c]    // Pend E2 (symbol [5]) -- correct
+
+--- Effect ---
+
+Using a random QPSK data symbol divided by the Pend pilot reference gives
+a meaningless channel estimate for the third pilot position. The resulting
+EQ is effectively computed from only two pilots instead of three.
+
+At high SNR this degrades callsign decode quality but does not necessarily
+cause failure. At lower SNR or with a weaker signal path the corrupted EQ
+causes callsign decode to fail more often than it should.
+
+--- Practical Impact ---
+
+Callsign reporting via EOO in RADE V1 is already unreliable due to a
+separate issue (Pend E2 detection margin is low). This EQ bug makes it
+worse but is not the primary cause of failures. At the SNR levels typical
+of voice QSOs (-2 to +5 dB) it is unlikely to be noticed in practice.
+
+RADE V2 will interleave callsign data in the main voice channel and the
+EOO mechanism will not exist, so this bug will become moot.
+
+--- Patch ---
+
+eoo_eq_fix.patch in ~/freedv-rade-build/patches/ applies the one-line fix
+via the ExternalProject build mechanism. It is idempotent (checks for the
+buggy string before applying).

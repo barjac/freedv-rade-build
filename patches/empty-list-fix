@@ -1,0 +1,127 @@
+diff --git a/src/gui/controls/MsgListPopup.cpp b/src/gui/controls/MsgListPopup.cpp
+index 06d9e2a1..3841a361 100644
+--- a/src/gui/controls/MsgListPopup.cpp
++++ b/src/gui/controls/MsgListPopup.cpp
+@@ -22,6 +22,9 @@
+ #include "MsgListPopup.h"
+ #include <algorithm>
+ #include <wx/textctrl.h>
++#ifdef __WXGTK__
++#include <gtk-3.0/gtk/gtk.h>
++#endif
+ 
+ MsgListPopup::MsgListPopup(ContextMenuCallback onRightClick)
+     : onRightClick_(std::move(onRightClick)), deselTimer_(this)
+@@ -39,6 +42,28 @@ bool MsgListPopup::Create(wxWindow* parent)
+     Connect(wxEVT_RIGHT_DOWN, wxMouseEventHandler(MsgListPopup::OnRightDown), nullptr, this);
+     Connect(wxEVT_RIGHT_UP,   wxMouseEventHandler(MsgListPopup::OnRightUp),   nullptr, this);
+     SetToolTip(_("Right click for more options"));
++#ifdef __WXGTK__
++    // GTK tree view columns default to GROW_ONLY sizing: once a wide item
++    // has been shown the scrollbar never disappears even after it is deleted.
++    // Switch to AUTOSIZE so the column always fits its current contents.
++    {
++        auto* scrolled = static_cast<GtkWidget*>(GetHandle());
++        if (scrolled)
++        {
++#if GTK_CHECK_VERSION(4, 0, 0)
++            auto* tv = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(scrolled));
++#else
++            auto* tv = gtk_bin_get_child(GTK_BIN(scrolled));
++#endif
++            if (tv && GTK_IS_TREE_VIEW(tv))
++            {
++                auto* col = gtk_tree_view_get_column(GTK_TREE_VIEW(tv), 0);
++                if (col)
++                    gtk_tree_view_column_set_sizing(col, GTK_TREE_VIEW_COLUMN_AUTOSIZE);
++            }
++        }
++    }
++#endif
+     return true;
+ }
+ 
+diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
+index 063ea88e..cdcce114 100644
+--- a/src/gui/dialogs/freedv_reporter.cpp
++++ b/src/gui/dialogs/freedv_reporter.cpp
+@@ -41,6 +41,18 @@
+ #include "freedv_reporter.h"
+ #include "freedv_interface.h"
+ 
++namespace {
++    struct MsgComboCtrl : wxComboCtrl {
++        using wxComboCtrl::wxComboCtrl;
++        std::function<bool()> onEmptyButtonClick;
++        void OnButtonClick() override {
++            if (onEmptyButtonClick && onEmptyButtonClick())
++                return;
++            wxComboCtrl::OnButtonClick();
++        }
++    };
++}
++
+ extern FreeDVInterface freedvInterface;
+ extern wxConfigBase* pConfig;
+ 
+@@ -371,7 +383,15 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
+     auto statusMessageLabel = new wxStaticText(this, wxID_ANY, _("Message:"), wxDefaultPosition, wxDefaultSize);
+     statusMessageSizer->Add(statusMessageLabel, 0, wxALL | wxALIGN_LEFT | wxALIGN_CENTER_VERTICAL, 5);
+ 
+-    m_statusMessage = new wxComboCtrl(this, wxID_ANY, _(""), wxDefaultPosition, wxSize(180, -1), wxTE_PROCESS_ENTER);
++    auto* msgCombo = new MsgComboCtrl(this, wxID_ANY, _(""), wxDefaultPosition, wxSize(180, -1), wxTE_PROCESS_ENTER);
++    msgCombo->onEmptyButtonClick = [this]() -> bool {
++        if (getMsgPopup() && getMsgPopup()->GetCount() == 0) {
++            ShowMsgItemContextMenu(wxNOT_FOUND);
++            return true;
++        }
++        return false;
++    };
++    m_statusMessage = msgCombo;
+     m_statusMessage->SetPopupControl(new MsgListPopup([this](int idx){ ShowMsgItemContextMenu(idx); }));
+     statusMessageSizer->Add(m_statusMessage, 0, wxALL | wxALIGN_LEFT | wxALIGN_CENTER_VERTICAL, 5);
+ 
+@@ -542,16 +562,16 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
+     assert(msgItemPopupMenu_ != nullptr);
+     contextMenuSelectedIndex_ = wxNOT_FOUND;
+ 
+-    auto editMsgMenuItem = msgItemPopupMenu_->Append(wxID_ANY, _("Edit message"));
++    editMsgMenuItem_ = msgItemPopupMenu_->Append(wxID_ANY, _("Edit message"));
+     msgItemPopupMenu_->Connect(
+-        editMsgMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED,
++        editMsgMenuItem_->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+         wxCommandEventHandler(FreeDVReporterDialog::OnStatusMessageContextMenuEdit),
+         NULL,
+         this);
+ 
+-    auto deleteMsgMenuItem = msgItemPopupMenu_->Append(wxID_ANY, _("Delete message"));
++    deleteMsgMenuItem_ = msgItemPopupMenu_->Append(wxID_ANY, _("Delete message"));
+     msgItemPopupMenu_->Connect(
+-        deleteMsgMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED,
++        deleteMsgMenuItem_->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+         wxCommandEventHandler(FreeDVReporterDialog::OnStatusMessageContextMenuDelete),
+         NULL,
+         this);
+@@ -2066,6 +2086,9 @@ wxListBox* FreeDVReporterDialog::getMsgPopup() const
+ void FreeDVReporterDialog::ShowMsgItemContextMenu(int itemIdx)
+ {
+     contextMenuSelectedIndex_ = itemIdx;
++    bool hasItem = (itemIdx != wxNOT_FOUND);
++    msgItemPopupMenu_->Enable(editMsgMenuItem_->GetId(), hasItem);
++    msgItemPopupMenu_->Enable(deleteMsgMenuItem_->GetId(), hasItem);
+     msgItemPopupMenu_->Enable(addMsgMenuItem_->GetId(),
+         getMsgPopup()->GetCount() < STATUS_MESSAGE_MRU_MAX_SIZE);
+     m_statusMessage->PopupMenu(msgItemPopupMenu_);
+diff --git a/src/gui/dialogs/freedv_reporter.h b/src/gui/dialogs/freedv_reporter.h
+index 51784700..0f0c6343 100644
+--- a/src/gui/dialogs/freedv_reporter.h
++++ b/src/gui/dialogs/freedv_reporter.h
+@@ -200,6 +200,8 @@ class FreeDVReporterDialog : public wxFrame
+         wxMenuItem* saveMenuItem_;
+         wxMenu* clearPopupMenu_;
+         wxMenu* msgItemPopupMenu_;
++        wxMenuItem* editMsgMenuItem_;
++        wxMenuItem* deleteMsgMenuItem_;
+         wxMenuItem* addMsgMenuItem_;
+         int contextMenuSelectedIndex_;
+         

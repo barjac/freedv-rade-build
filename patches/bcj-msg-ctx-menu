@@ -1,0 +1,166 @@
+diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
+index 739955f3..7bdd852d 100644
+--- a/src/gui/dialogs/freedv_reporter.cpp
++++ b/src/gui/dialogs/freedv_reporter.cpp
+@@ -43,6 +43,7 @@
+ #include "freedv_interface.h"
+ 
+ extern FreeDVInterface freedvInterface;
++extern wxConfigBase* pConfig;
+ 
+ #define CALLSIGN_COL (0)
+ #define GRID_SQUARE_COL (1)
+@@ -67,7 +68,7 @@ extern FreeDVInterface freedvInterface;
+ #define RX_COLORING_LONG_TIMEOUT_SEC (20)
+ #define RX_COLORING_SHORT_TIMEOUT_SEC (5)
+ #define MSG_COLORING_TIMEOUT_SEC (5)
+-#define STATUS_MESSAGE_MRU_MAX_SIZE (10)
++#define STATUS_MESSAGE_MRU_MAX_SIZE (15)
+ #define MESSAGE_COLUMN_ID (6)
+ 
+ using namespace std::placeholders;
+@@ -88,6 +89,7 @@ public:
+         Connect(wxEVT_MOTION,    wxMouseEventHandler(MsgListPopup::OnMouseMove),  nullptr, this);
+         Connect(wxEVT_RIGHT_DOWN, wxMouseEventHandler(MsgListPopup::OnRightDown), nullptr, this);
+         Connect(wxEVT_RIGHT_UP,   wxMouseEventHandler(MsgListPopup::OnRightUp),   nullptr, this);
++        SetToolTip(_("Right click for more options"));
+         return true;
+     }
+ 
+@@ -617,16 +619,16 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
+     setPopupMenu_ = new wxMenu();
+     assert(setPopupMenu_ != nullptr);
+     
+-    auto setSaveMenuItem = setPopupMenu_->Append(wxID_ANY, _("Send and save message"));
++    setSaveMenuItem_ = setPopupMenu_->Append(wxID_ANY, _("Send and save message"));
+     setPopupMenu_->Connect(
+-        setSaveMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED, 
++        setSaveMenuItem_->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+         wxCommandEventHandler(FreeDVReporterDialog::OnStatusTextSendAndSaveMessage),
+         NULL,
+         this);
+ 
+-    auto saveMenuItem = setPopupMenu_->Append(wxID_ANY, _("Only save message"));
++    saveMenuItem_ = setPopupMenu_->Append(wxID_ANY, _("Only save message"));
+     setPopupMenu_->Connect(
+-        saveMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED, 
++        saveMenuItem_->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+         wxCommandEventHandler(FreeDVReporterDialog::OnStatusTextSaveMessage),
+         NULL,
+         this);
+@@ -672,9 +674,9 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
+ 
+     msgItemPopupMenu_->AppendSeparator();
+ 
+-    auto addMsgMenuItem = msgItemPopupMenu_->Append(wxID_ANY, _("Add new message"));
++    addMsgMenuItem_ = msgItemPopupMenu_->Append(wxID_ANY, _("Add new message"));
+     msgItemPopupMenu_->Connect(
+-        addMsgMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED,
++        addMsgMenuItem_->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+         wxCommandEventHandler(FreeDVReporterDialog::OnStatusMessageContextMenuAdd),
+         NULL,
+         this);
+@@ -2089,6 +2091,13 @@ void FreeDVReporterDialog::OnStatusTextSend(wxCommandEvent&)
+ void FreeDVReporterDialog::OnStatusTextSendContextMenu(wxContextMenuEvent&)
+ {
+     DeselectItem();
++    auto popup = getMsgPopup();
++    auto statusMsg = m_statusMessage->GetValue();
++    bool canSave = !statusMsg.IsEmpty()
++                   && popup->FindString(statusMsg) == wxNOT_FOUND
++                   && (int)popup->GetCount() < STATUS_MESSAGE_MRU_MAX_SIZE;
++    setPopupMenu_->Enable(setSaveMenuItem_->GetId(), canSave);
++    setPopupMenu_->Enable(saveMenuItem_->GetId(), canSave);
+     m_buttonSend->PopupMenu(setPopupMenu_);
+ }
+ 
+@@ -2111,14 +2120,6 @@ void FreeDVReporterDialog::OnStatusTextSaveMessage(wxCommandEvent&)
+             return;
+         }
+         popup->Append(statusMsg);
+-
+-        // If we have more than the maximum number in the list,
+-        // remove from bottom (alphabetically last).
+-        while (popup->GetCount() > STATUS_MESSAGE_MRU_MAX_SIZE)
+-        {
+-            popup->Delete(popup->GetCount() - 1);
+-        }
+-
+         popup->SetSelection(popup->FindString(statusMsg));
+ 
+         // Preserve current state of the MRU list.
+@@ -2181,6 +2182,8 @@ wxListBox* FreeDVReporterDialog::getMsgPopup() const
+ void FreeDVReporterDialog::ShowMsgItemContextMenu(int itemIdx)
+ {
+     contextMenuSelectedIndex_ = itemIdx;
++    msgItemPopupMenu_->Enable(addMsgMenuItem_->GetId(),
++        getMsgPopup()->GetCount() < STATUS_MESSAGE_MRU_MAX_SIZE);
+     m_statusMessage->PopupMenu(msgItemPopupMenu_);
+ }
+ 
+@@ -2198,7 +2201,7 @@ void FreeDVReporterDialog::OnStatusMessageContextMenuEdit(wxCommandEvent&)
+     if (dlg.ShowModal() != wxID_OK)
+         return;
+ 
+-    auto newText = dlg.GetValue().Trim().Trim(false);
++    auto newText = dlg.GetValue().Trim();
+     if (newText.IsEmpty() || newText == oldText)
+         return;
+ 
+@@ -2215,6 +2218,7 @@ void FreeDVReporterDialog::OnStatusMessageContextMenuEdit(wxCommandEvent&)
+     {
+         wxGetApp().appConfiguration.reportingConfiguration.freedvReporterRecentStatusTexts->push_back(popup->GetString(index));
+     }
++    wxGetApp().appConfiguration.save(pConfig);
+ }
+ 
+ void FreeDVReporterDialog::OnStatusMessageContextMenuDelete(wxCommandEvent&)
+@@ -2234,6 +2238,7 @@ void FreeDVReporterDialog::OnStatusMessageContextMenuDelete(wxCommandEvent&)
+     {
+         wxGetApp().appConfiguration.reportingConfiguration.freedvReporterRecentStatusTexts->push_back(popup->GetString(index));
+     }
++    wxGetApp().appConfiguration.save(pConfig);
+ }
+ 
+ void FreeDVReporterDialog::OnStatusMessageContextMenuAdd(wxCommandEvent&)
+@@ -2242,7 +2247,7 @@ void FreeDVReporterDialog::OnStatusMessageContextMenuAdd(wxCommandEvent&)
+     if (dlg.ShowModal() != wxID_OK)
+         return;
+ 
+-    auto newText = dlg.GetValue().Trim().Trim(false);
++    auto newText = dlg.GetValue().Trim();
+     if (newText.IsEmpty())
+         return;
+ 
+@@ -2252,14 +2257,12 @@ void FreeDVReporterDialog::OnStatusMessageContextMenuAdd(wxCommandEvent&)
+ 
+     popup->Append(newText);
+ 
+-    while (popup->GetCount() > STATUS_MESSAGE_MRU_MAX_SIZE)
+-        popup->Delete(popup->GetCount() - 1);
+-
+     wxGetApp().appConfiguration.reportingConfiguration.freedvReporterRecentStatusTexts->clear();
+     for (unsigned int index = 0; index < popup->GetCount(); index++)
+     {
+         wxGetApp().appConfiguration.reportingConfiguration.freedvReporterRecentStatusTexts->push_back(popup->GetString(index));
+     }
++    wxGetApp().appConfiguration.save(pConfig);
+ }
+ 
+ void FreeDVReporterDialog::refreshQSYButtonState()
+diff --git a/src/gui/dialogs/freedv_reporter.h b/src/gui/dialogs/freedv_reporter.h
+index 9160e423..ca4d1161 100644
+--- a/src/gui/dialogs/freedv_reporter.h
++++ b/src/gui/dialogs/freedv_reporter.h
+@@ -194,8 +194,11 @@ class FreeDVReporterDialog : public wxFrame
+         wxButton* m_buttonSend;
+         wxButton* m_buttonClear;
+         wxMenu* setPopupMenu_;
++        wxMenuItem* setSaveMenuItem_;
++        wxMenuItem* saveMenuItem_;
+         wxMenu* clearPopupMenu_;
+         wxMenu* msgItemPopupMenu_;
++        wxMenuItem* addMsgMenuItem_;
+         int contextMenuSelectedIndex_;
+         
+         // Step 4: test/save/cancel setup

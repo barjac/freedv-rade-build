@@ -1,0 +1,18 @@
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index f51adece..d2f2bce0 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1571,7 +1571,12 @@ void MainFrame::OnLogQSO(wxCommandEvent&)
+         
+         wxString::const_iterator end;
+         logTimeObj.ParseDateTime(logTime, &end);
+-        
++        if (wxGetApp().appConfiguration.reportingConfiguration.useUTCForReporting)
++        {
++            // The string was stored as UTC but ParseDateTime assumes local time; reinterpret.
++            logTimeObj.MakeFromTimezone(wxDateTime::UTC);
++        }
++
+         if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
+         {
+             dxFreqDouble *= 1000;
