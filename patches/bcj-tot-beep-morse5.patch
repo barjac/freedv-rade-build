@@ -1,5 +1,5 @@
 diff --git a/src/pipeline/BeepStep.cpp b/src/pipeline/BeepStep.cpp
-index 681c25e5..243e275d 100644
+index 681c25e5..be7abe5f 100644
 --- a/src/pipeline/BeepStep.cpp
 +++ b/src/pipeline/BeepStep.cpp
 @@ -32,36 +32,67 @@
@@ -82,7 +82,7 @@ index 681c25e5..243e275d 100644
  int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
  {
      return sampleRate_;
-@@ -70,37 +101,63 @@ int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
+@@ -70,37 +101,68 @@ int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
  int BeepStep::getOutputSampleRate() const FREEDV_NONBLOCKING
  {
      return sampleRate_;
@@ -109,25 +109,30 @@ index 681c25e5..243e275d 100644
          {
 -            constexpr int TONE_AMPLITUDE = 8192; // TBD
 -            outPtr[index] = TONE_AMPLITUDE * cosf((2.0 * M_PI * frequency_ * sampleCtr_) / sampleRate_);
-+            short genSample = pregenSamples_[sampleCtr_];
++            short outSample;
 +
-+            // Crossfade with live input at start and end of the whole pattern to
-+            // avoid a click at the EitherOrStep buffer boundary where the bypass
-+            // path (arbitrary audio level) hands off to the pre-generated tone.
 +            if (sampleCtr_ < globalRampSamples_)
 +            {
-+                int blend = sampleCtr_ * 32767 / globalRampSamples_;
-+                genSample = static_cast<short>(
-+                    ((int)inputSamples[index] * (32767 - blend) + (int)genSample * blend) / 32767);
++                // Mute pre-roll: fade the live input to silence before the beep
++                // starts. At sampleCtr_=0 output equals input[0], continuous with
++                // the bypass path, so there is no click at the buffer boundary.
++                int scale = 32767 - sampleCtr_ * 32767 / globalRampSamples_;
++                outSample = static_cast<short>((int)inputSamples[index] * scale / 32767);
 +            }
 +            else if (sampleCtr_ >= samplesToGenerate_ - globalRampSamples_)
 +            {
-+                int blend = (samplesToGenerate_ - 1 - sampleCtr_) * 32767 / globalRampSamples_;
-+                genSample = static_cast<short>(
-+                    ((int)inputSamples[index] * (32767 - blend) + (int)genSample * blend) / 32767);
++                // Mute post-roll: fade the live input back in from silence so the
++                // handoff back to the bypass path is seamless.
++                int scale = (sampleCtr_ - (samplesToGenerate_ - globalRampSamples_))
++                            * 32767 / globalRampSamples_;
++                outSample = static_cast<short>((int)inputSamples[index] * scale / 32767);
++            }
++            else
++            {
++                outSample = pregenSamples_[sampleCtr_];
 +            }
 +
-+            execOutput_[index] = genSample;
++            execOutput_[index] = outSample;
 +            sampleCtr_++;
          }
          else
@@ -210,10 +215,10 @@ index 573dd488..dd47b78f 100644
  
  #endif // AUDIO_PIPELINE__BEEP_STEP_H
 diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
-index 20108537..1025135d 100644
+index 20108537..3956c4c2 100644
 --- a/src/pipeline/TxRxThread.cpp
 +++ b/src/pipeline/TxRxThread.cpp
-@@ -516,10 +516,14 @@ void TxRxThread::initializePipeline_()
+@@ -516,10 +516,16 @@ void TxRxThread::initializePipeline_()
          // TOT beep step: replaces speaker audio with a warning beep during countdown
          auto totBeepBypass = new AudioPipeline(outputSampleRate_, outputSampleRate_);
          auto totBeepActivePath = new AudioPipeline(outputSampleRate_, outputSampleRate_);
@@ -221,10 +226,12 @@ index 20108537..1025135d 100644
 -            g_totBeepActive.store(false, std::memory_order_release);
 -            thisStep.reset();
 -        });
-+        // Morse '5' (. . . . .) at 15 WPM, 750 Hz: dit=80ms, inter-element gap=80ms
++        // Morse '5' (. . . . .) at 15 WPM, 750 Hz: dit=80ms, inter-element gap=80ms.
++        // 10ms silent pre/post-roll gives the mute ramp (5ms) room before the
++        // first dit and after the last dit.
 +        auto totBeepPlayback = new BeepStep(outputSampleRate_, 750,
-+            {{80,true},{80,false},{80,true},{80,false},{80,true},
-+             {80,false},{80,true},{80,false},{80,true}},
++            {{10,false},{80,true},{80,false},{80,true},{80,false},{80,true},
++             {80,false},{80,true},{80,false},{80,true},{10,false}},
 +            +[](BeepStep& thisStep) FREEDV_NONBLOCKING {
 +                g_totBeepActive.store(false, std::memory_order_release);
 +                thisStep.reset();
