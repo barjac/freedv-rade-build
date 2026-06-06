@@ -1,0 +1,213 @@
+diff --git a/src/pipeline/BeepStep.cpp b/src/pipeline/BeepStep.cpp
+index 681c25e5..4721a115 100644
+--- a/src/pipeline/BeepStep.cpp
++++ b/src/pipeline/BeepStep.cpp
+@@ -32,36 +32,66 @@
+ //
+ //=========================================================================
+ 
+-#include <cmath>
++#include <algorithm>
+ #include <cassert>
++#include <cmath>
+ 
+ #include "BeepStep.h"
+ 
+-// M_PI is not available on some compilers, so define it here just in case.
+ #ifndef M_PI
+     #define M_PI 3.1415926535897932384626433832795
+ #endif
+ 
+-BeepStep::BeepStep(int sampleRate, int frequency, int durationMs, realtime_fp<void(BeepStep&)> const& onCompleteFn)
++BeepStep::BeepStep(int sampleRate, int frequency, std::initializer_list<BeepSegment> pattern,
++                   realtime_fp<void(BeepStep&)> const& onCompleteFn)
+     : sampleRate_(sampleRate)
+-    , frequency_(frequency)
+     , onCompleteFn_(onCompleteFn)
+-    
+-    // SR = (samples / 1s) * (1s / 1000ms) = samples / msec
+-    , samplesToGenerate_((sampleRate * durationMs) / 1000)
+-
+     , sampleCtr_(0)
++    , pendingReset_(false)
+ {
+-    // Pre-allocate buffers so we don't have to do so during real-time operation.
+-    outputSamples_ = std::make_unique<short[]>(sampleRate);
+-    assert(outputSamples_ != nullptr);
++    int totalSamples = 0;
++    for (auto& seg : pattern)
++        totalSamples += (sampleRate * seg.durationMs) / 1000;
++
++    samplesToGenerate_ = totalSamples;
++    pregenSamples_ = std::make_unique<short[]>(totalSamples);
++    execOutput_ = std::make_unique<short[]>(sampleRate); // sized for up to 1s per execute() call
++
++    // 5ms raised-cosine (Hann) attack/release on each tone segment to avoid hard clicks.
++    const int rampSamples = (sampleRate * 5) / 1000;
++    constexpr int TONE_AMPLITUDE = 8192;
++    double phase = 0.0;
++    int idx = 0;
++
++    for (auto& seg : pattern) {
++        int segSamples = (sampleRate * seg.durationMs) / 1000;
++        int ramp = std::min(rampSamples, segSamples / 2);
++
++        for (int i = 0; i < segSamples; i++) {
++            if (seg.isTone) {
++                double env = 1.0;
++                if (i < ramp)
++                    env = 0.5 * (1.0 - std::cos(M_PI * i / ramp));
++                else if (i >= segSamples - ramp)
++                    env = 0.5 * (1.0 + std::cos(M_PI * (i - (segSamples - ramp)) / ramp));
++                pregenSamples_[idx] = static_cast<short>(TONE_AMPLITUDE * env * std::cos(phase));
++            } else {
++                pregenSamples_[idx] = 0;
++            }
++            // Advance phase even during gaps so the next tone resumes at a continuous phase.
++            phase += 2.0 * M_PI * frequency / sampleRate;
++            idx++;
++        }
++    }
++
++    assert(idx == totalSamples);
+ }
+ 
+ BeepStep::~BeepStep()
+ {
+     // empty
+ }
+-    
++
+ int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
+ {
+     return sampleRate_;
+@@ -70,37 +100,44 @@ int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
+ int BeepStep::getOutputSampleRate() const FREEDV_NONBLOCKING
+ {
+     return sampleRate_;
+-}    
++}
+ 
+ short* BeepStep::execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING
+ {
++    // Apply a deferred reset (set by reset() called from onCompleteFn_) at the
++    // entry point so it never triggers a mid-buffer restart.
++    if (pendingReset_)
++    {
++        sampleCtr_ = 0;
++        pendingReset_ = false;
++    }
++
+     *numOutputSamples = numInputSamples;
+ 
+-    short* outPtr = outputSamples_.get();
++    bool completed = false;
+     for (int index = 0; index < numInputSamples; index++)
+     {
+         if (sampleCtr_ < samplesToGenerate_)
+         {
+-            constexpr int TONE_AMPLITUDE = 8192; // TBD
+-            outPtr[index] = TONE_AMPLITUDE * cosf((2.0 * M_PI * frequency_ * sampleCtr_) / sampleRate_);
++            execOutput_[index] = pregenSamples_[sampleCtr_++];
+         }
+         else
+         {
+-            outPtr[index] = inputSamples[index];
++            execOutput_[index] = inputSamples[index];
++            if (!completed)
++            {
++                completed = true;
++                onCompleteFn_(*this); // sets g_totBeepActive=false; calls reset() -> pendingReset_=true
++            }
+         }
+-
+-        if (sampleCtr_ == samplesToGenerate_)
+-        {
+-            onCompleteFn_(*this);
+-        }
+-
+-        sampleCtr_++;
+     }
+ 
+-    return outPtr;
++    return execOutput_.get();
+ }
+ 
+ void BeepStep::reset() FREEDV_NONBLOCKING
+ {
+-    sampleCtr_ = 0;
++    // Defer the actual reset to the next execute() entry so we never restart
++    // mid-buffer when called from within onCompleteFn_.
++    pendingReset_ = true;
+ }
+diff --git a/src/pipeline/BeepStep.h b/src/pipeline/BeepStep.h
+index 573dd488..1395ccbc 100644
+--- a/src/pipeline/BeepStep.h
++++ b/src/pipeline/BeepStep.h
+@@ -35,29 +35,38 @@
+ #ifndef AUDIO_PIPELINE__BEEP_STEP_H
+ #define AUDIO_PIPELINE__BEEP_STEP_H
+ 
++#include <initializer_list>
+ #include <memory>
+ #include "IPipelineStep.h"
+ #include "realtime_fp.h"
+ 
++struct BeepSegment {
++    int durationMs;
++    bool isTone;
++};
++
+ class BeepStep : public IPipelineStep
+ {
+ public:
+-    BeepStep(int sampleRate, int frequency, int durationMs, realtime_fp<void(BeepStep&)> const& onCompleteFn);
++    BeepStep(int sampleRate, int frequency, std::initializer_list<BeepSegment> pattern,
++             realtime_fp<void(BeepStep&)> const& onCompleteFn);
+     virtual ~BeepStep();
+-    
++
+     virtual int getInputSampleRate() const FREEDV_NONBLOCKING override;
+-    virtual int getOutputSampleRate() const FREEDV_NONBLOCKING override;    
++    virtual int getOutputSampleRate() const FREEDV_NONBLOCKING override;
+     virtual short* execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING override;
+     virtual void reset() FREEDV_NONBLOCKING override;
+ 
+ private:
+     int sampleRate_;
+-    int frequency_;
+     realtime_fp<void(BeepStep&)> onCompleteFn_;
+ 
+     int samplesToGenerate_;
+     int sampleCtr_;
+-    std::unique_ptr<short[]> outputSamples_;
++    bool pendingReset_;
++
++    std::unique_ptr<short[]> pregenSamples_;
++    std::unique_ptr<short[]> execOutput_;
+ };
+ 
+ #endif // AUDIO_PIPELINE__BEEP_STEP_H
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index 20108537..1025135d 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -516,10 +516,14 @@ void TxRxThread::initializePipeline_()
+         // TOT beep step: replaces speaker audio with a warning beep during countdown
+         auto totBeepBypass = new AudioPipeline(outputSampleRate_, outputSampleRate_);
+         auto totBeepActivePath = new AudioPipeline(outputSampleRate_, outputSampleRate_);
+-        auto totBeepPlayback = new BeepStep(outputSampleRate_, 1000, 250, +[](BeepStep& thisStep) FREEDV_NONBLOCKING {
+-            g_totBeepActive.store(false, std::memory_order_release);
+-            thisStep.reset();
+-        });
++        // Morse '5' (. . . . .) at 15 WPM, 750 Hz: dit=80ms, inter-element gap=80ms
++        auto totBeepPlayback = new BeepStep(outputSampleRate_, 750,
++            {{80,true},{80,false},{80,true},{80,false},{80,true},
++             {80,false},{80,true},{80,false},{80,true}},
++            +[](BeepStep& thisStep) FREEDV_NONBLOCKING {
++                g_totBeepActive.store(false, std::memory_order_release);
++                thisStep.reset();
++            });
+         totBeepActivePath->appendPipelineStep(totBeepPlayback);
+         auto totBeepEitherOr = new EitherOrStep(
+             +[]() FREEDV_NONBLOCKING {
