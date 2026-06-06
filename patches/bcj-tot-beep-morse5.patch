@@ -1,8 +1,8 @@
 diff --git a/src/pipeline/BeepStep.cpp b/src/pipeline/BeepStep.cpp
-index 681c25e5..4721a115 100644
+index 681c25e5..243e275d 100644
 --- a/src/pipeline/BeepStep.cpp
 +++ b/src/pipeline/BeepStep.cpp
-@@ -32,36 +32,66 @@
+@@ -32,36 +32,67 @@
  //
  //=========================================================================
  
@@ -39,11 +39,12 @@ index 681c25e5..4721a115 100644
 +        totalSamples += (sampleRate * seg.durationMs) / 1000;
 +
 +    samplesToGenerate_ = totalSamples;
++    globalRampSamples_ = (sampleRate * 5) / 1000;
 +    pregenSamples_ = std::make_unique<short[]>(totalSamples);
 +    execOutput_ = std::make_unique<short[]>(sampleRate); // sized for up to 1s per execute() call
 +
 +    // 5ms raised-cosine (Hann) attack/release on each tone segment to avoid hard clicks.
-+    const int rampSamples = (sampleRate * 5) / 1000;
++    const int rampSamples = globalRampSamples_;
 +    constexpr int TONE_AMPLITUDE = 8192;
 +    double phase = 0.0;
 +    int idx = 0;
@@ -81,7 +82,7 @@ index 681c25e5..4721a115 100644
  int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
  {
      return sampleRate_;
-@@ -70,37 +100,44 @@ int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
+@@ -70,37 +101,63 @@ int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
  int BeepStep::getOutputSampleRate() const FREEDV_NONBLOCKING
  {
      return sampleRate_;
@@ -108,7 +109,26 @@ index 681c25e5..4721a115 100644
          {
 -            constexpr int TONE_AMPLITUDE = 8192; // TBD
 -            outPtr[index] = TONE_AMPLITUDE * cosf((2.0 * M_PI * frequency_ * sampleCtr_) / sampleRate_);
-+            execOutput_[index] = pregenSamples_[sampleCtr_++];
++            short genSample = pregenSamples_[sampleCtr_];
++
++            // Crossfade with live input at start and end of the whole pattern to
++            // avoid a click at the EitherOrStep buffer boundary where the bypass
++            // path (arbitrary audio level) hands off to the pre-generated tone.
++            if (sampleCtr_ < globalRampSamples_)
++            {
++                int blend = sampleCtr_ * 32767 / globalRampSamples_;
++                genSample = static_cast<short>(
++                    ((int)inputSamples[index] * (32767 - blend) + (int)genSample * blend) / 32767);
++            }
++            else if (sampleCtr_ >= samplesToGenerate_ - globalRampSamples_)
++            {
++                int blend = (samplesToGenerate_ - 1 - sampleCtr_) * 32767 / globalRampSamples_;
++                genSample = static_cast<short>(
++                    ((int)inputSamples[index] * (32767 - blend) + (int)genSample * blend) / 32767);
++            }
++
++            execOutput_[index] = genSample;
++            sampleCtr_++;
          }
          else
          {
@@ -141,10 +161,10 @@ index 681c25e5..4721a115 100644
 +    pendingReset_ = true;
  }
 diff --git a/src/pipeline/BeepStep.h b/src/pipeline/BeepStep.h
-index 573dd488..1395ccbc 100644
+index 573dd488..dd47b78f 100644
 --- a/src/pipeline/BeepStep.h
 +++ b/src/pipeline/BeepStep.h
-@@ -35,29 +35,38 @@
+@@ -35,29 +35,39 @@
  #ifndef AUDIO_PIPELINE__BEEP_STEP_H
  #define AUDIO_PIPELINE__BEEP_STEP_H
  
@@ -179,6 +199,7 @@ index 573dd488..1395ccbc 100644
      realtime_fp<void(BeepStep&)> onCompleteFn_;
  
      int samplesToGenerate_;
++    int globalRampSamples_;
      int sampleCtr_;
 -    std::unique_ptr<short[]> outputSamples_;
 +    bool pendingReset_;
