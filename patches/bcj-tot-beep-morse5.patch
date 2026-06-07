@@ -1,31 +1,793 @@
+From 8caaccd567fcbbe59ac12a4e5b469e103cc618cb Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Sat, 6 Jun 2026 09:29:44 -0700
+Subject: [PATCH 1/6] Create BeepStep pipeline step to improve audio quality of
+ warning beep.
+
+---
+ src/ongui.cpp               |  86 +-----------------------------
+ src/pipeline/BeepStep.cpp   | 101 ++++++++++++++++++++++++++++++++++++
+ src/pipeline/BeepStep.h     |  63 ++++++++++++++++++++++
+ src/pipeline/CMakeLists.txt |   1 +
+ src/pipeline/TxRxThread.cpp |  26 +++-------
+ src/playrec.cpp             |   3 +-
+ 6 files changed, 173 insertions(+), 107 deletions(-)
+ create mode 100644 src/pipeline/BeepStep.cpp
+ create mode 100644 src/pipeline/BeepStep.h
+
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index e5282ffc..56306ded 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -62,75 +62,7 @@ extern SNDFILE            *g_sfRecMicFile;
+ 
+ extern wxMutex g_mutexProtectingCallbackData;
+ 
+-extern std::atomic<SNDFILE*> g_sfTotBeep;
+ extern std::atomic<bool>     g_totBeepActive;
+-extern int                   g_totBeepFs;
+-
+-// Virtual-file state for the pre-generated TOT beep (1000 Hz, 250 ms, 8000 Hz mono PCM).
+-namespace {
+-
+-struct TotBeepMemFile {
+-    std::vector<int16_t> samples;
+-    sf_count_t bytePos = 0;
+-
+-    TotBeepMemFile() {
+-        constexpr int kSampleRate = 8000;
+-        constexpr int kNumSamples = kSampleRate / 4; // 250 ms
+-        samples.resize(kNumSamples);
+-        for (int i = 0; i < kNumSamples; i++) {
+-            samples[i] = static_cast<int16_t>(
+-                16000.0 * std::sin(2.0 * M_PI * 1000.0 * i / kSampleRate));
+-        }
+-    }
+-};
+-
+-static TotBeepMemFile g_totBeepMemFile_;
+-
+-static sf_count_t totBeepGetFilelen_(void* ud) {
+-    auto* f = static_cast<TotBeepMemFile*>(ud);
+-    return static_cast<sf_count_t>(f->samples.size() * sizeof(int16_t));
+-}
+-
+-static sf_count_t totBeepSeek_(sf_count_t offset, int whence, void* ud) {
+-    auto* f = static_cast<TotBeepMemFile*>(ud);
+-    sf_count_t sz = static_cast<sf_count_t>(f->samples.size() * sizeof(int16_t));
+-    switch (whence) {
+-        case SEEK_SET: f->bytePos = offset; break;
+-        case SEEK_CUR: f->bytePos += offset; break;
+-        case SEEK_END: f->bytePos = sz + offset; break;
+-    }
+-    if (f->bytePos < 0) f->bytePos = 0;
+-    if (f->bytePos > sz) f->bytePos = sz;
+-    return f->bytePos;
+-}
+-
+-static sf_count_t totBeepRead_(void* ptr, sf_count_t count, void* ud) {
+-    auto* f = static_cast<TotBeepMemFile*>(ud);
+-    sf_count_t sz = static_cast<sf_count_t>(f->samples.size() * sizeof(int16_t));
+-    sf_count_t avail = sz - f->bytePos;
+-    sf_count_t toRead = std::min(count, avail);
+-    if (toRead > 0) {
+-        std::memcpy(ptr, reinterpret_cast<uint8_t*>(f->samples.data()) + f->bytePos, toRead);
+-        f->bytePos += toRead;
+-    }
+-    return toRead;
+-}
+-
+-static sf_count_t totBeepWrite_(const void*, sf_count_t, void*) { return 0; }
+-
+-static sf_count_t totBeepTell_(void* ud) {
+-    return static_cast<TotBeepMemFile*>(ud)->bytePos;
+-}
+-
+-static SF_VIRTUAL_IO g_totBeepVio_ = {
+-    totBeepGetFilelen_,
+-    totBeepSeek_,
+-    totBeepRead_,
+-    totBeepWrite_,
+-    totBeepTell_
+-};
+-
+-} // namespace
+ 
+ static wxString bandNameForFilter(FilterFrequency band);
+ 
+@@ -1223,19 +1155,7 @@ void MainFrame::playTotBeep_()
+     if (g_totBeepActive.load(std::memory_order_acquire))
+         return;
+ 
+-    g_totBeepMemFile_.bytePos = 0;
+-
+-    SF_INFO sfInfo = {};
+-    sfInfo.samplerate = 8000;
+-    sfInfo.channels = 1;
+-    sfInfo.format = SF_FORMAT_RAW | SF_FORMAT_PCM_16 | SF_ENDIAN_CPU;
+-
+-    auto sndFile = sf_open_virtual(&g_totBeepVio_, SFM_READ, &sfInfo, &g_totBeepMemFile_);
+-    if (sndFile) {
+-        g_totBeepFs = 8000;
+-        g_sfTotBeep.store(sndFile, std::memory_order_release);
+-        g_totBeepActive.store(true, std::memory_order_release);
+-    }
++    g_totBeepActive.store(true, std::memory_order_release);
+ }
+ 
+ void MainFrame::stopTotBeep_()
+@@ -1245,11 +1165,7 @@ void MainFrame::stopTotBeep_()
+     if (!g_totBeepActive.load(std::memory_order_acquire))
+         return;
+ 
+-    g_mutexProtectingCallbackData.Lock();
+     g_totBeepActive.store(false, std::memory_order_release);
+-    auto tmp = g_sfTotBeep.exchange(nullptr, std::memory_order_acq_rel);
+-    if (tmp) sf_close(tmp);
+-    g_mutexProtectingCallbackData.Unlock();
+ }
+ 
+ //-------------------------------------------------------------------------
 diff --git a/src/pipeline/BeepStep.cpp b/src/pipeline/BeepStep.cpp
 new file mode 100644
-index 00000000..8249dc4b
+index 00000000..e0bb0612
 --- /dev/null
 +++ b/src/pipeline/BeepStep.cpp
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,101 @@
++//=========================================================================
++// Name:            BeepStep.cpp
++// Purpose:         Describes a beep generator step in the audio pipeline.
++//
++// Authors:         Mooneer Salem
++// License:
++//
++// All rights reserved.
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions
++// are met:
++//
++// - Redistributions of source code must retain the above copyright
++// notice, this list of conditions and the following disclaimer.
++//
++// - Redistributions in binary form must reproduce the above copyright
++// notice, this list of conditions and the following disclaimer in the
++// documentation and/or other materials provided with the distribution.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++// ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
++// OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
++// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
++// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
++// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
++// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
++// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++//
++//=========================================================================
++
 +#include <cmath>
++#include <cassert>
++
 +#include "BeepStep.h"
 +
++BeepStep::BeepStep(int sampleRate, int frequency, int durationMs, realtime_fp<void(BeepStep&)> const& onCompleteFn)
++    : sampleRate_(sampleRate)
++    , frequency_(frequency)
++    , onCompleteFn_(onCompleteFn)
++    
++    // SR = (samples / 1s) * (1s / 1000ms) = samples / msec
++    , samplesToGenerate_((sampleRate * durationMs) / 1000)
++
++    , sampleCtr_(0)
++{
++    // Pre-allocate buffers so we don't have to do so during real-time operation.
++    outputSamples_ = std::make_unique<short[]>(sampleRate);
++    assert(outputSamples_ != nullptr);
++}
++
++BeepStep::~BeepStep()
++{
++    // empty
++}
++    
++int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
++{
++    return sampleRate_;
++}
++
++int BeepStep::getOutputSampleRate() const FREEDV_NONBLOCKING
++{
++    return sampleRate_;
++}    
++
++short* BeepStep::execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING
++{
++    *numOutputSamples = numInputSamples;
++
++    short* outPtr = outputSamples_.get();
++    for (int index = 0; index < numInputSamples; index++)
++    {
++        if (sampleCtr_ < samplesToGenerate_)
++        {
++            constexpr int TONE_AMPLITUDE = 8192; // TBD
++            outPtr[index] = TONE_AMPLITUDE * cosf((2.0 * M_PI * frequency_ * sampleCtr_) / sampleRate_);
++        }
++        else
++        {
++            outPtr[index] = inputSamples[index];
++        }
++
++        if (sampleCtr_ == samplesToGenerate_)
++        {
++            onCompleteFn_(*this);
++        }
++
++        sampleCtr_++;
++    }
++
++    return outPtr;
++}
++
++void BeepStep::reset() FREEDV_NONBLOCKING
++{
++    sampleCtr_ = 0;
++}
+\ No newline at end of file
+diff --git a/src/pipeline/BeepStep.h b/src/pipeline/BeepStep.h
+new file mode 100644
+index 00000000..573dd488
+--- /dev/null
++++ b/src/pipeline/BeepStep.h
+@@ -0,0 +1,63 @@
++//=========================================================================
++// Name:            BeepStep.h
++// Purpose:         Describes a beep generator step in the audio pipeline.
++//
++// Authors:         Mooneer Salem
++// License:
++//
++// All rights reserved.
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions
++// are met:
++//
++// - Redistributions of source code must retain the above copyright
++// notice, this list of conditions and the following disclaimer.
++//
++// - Redistributions in binary form must reproduce the above copyright
++// notice, this list of conditions and the following disclaimer in the
++// documentation and/or other materials provided with the distribution.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++// ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
++// OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
++// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
++// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
++// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
++// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
++// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++//
++//=========================================================================
++
++#ifndef AUDIO_PIPELINE__BEEP_STEP_H
++#define AUDIO_PIPELINE__BEEP_STEP_H
++
++#include <memory>
++#include "IPipelineStep.h"
++#include "realtime_fp.h"
++
++class BeepStep : public IPipelineStep
++{
++public:
++    BeepStep(int sampleRate, int frequency, int durationMs, realtime_fp<void(BeepStep&)> const& onCompleteFn);
++    virtual ~BeepStep();
++    
++    virtual int getInputSampleRate() const FREEDV_NONBLOCKING override;
++    virtual int getOutputSampleRate() const FREEDV_NONBLOCKING override;    
++    virtual short* execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING override;
++    virtual void reset() FREEDV_NONBLOCKING override;
++
++private:
++    int sampleRate_;
++    int frequency_;
++    realtime_fp<void(BeepStep&)> onCompleteFn_;
++
++    int samplesToGenerate_;
++    int sampleCtr_;
++    std::unique_ptr<short[]> outputSamples_;
++};
++
++#endif // AUDIO_PIPELINE__BEEP_STEP_H
+diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
+index 4cc9cabe..3c35a496 100644
+--- a/src/pipeline/CMakeLists.txt
++++ b/src/pipeline/CMakeLists.txt
+@@ -1,4 +1,5 @@
+ add_library(fdv_audio_pipeline_extra STATIC
++    BeepStep.cpp
+     ComputeRfSpectrumStep.cpp
+     EqualizerStep.cpp
+     FreeDVReceiveStep.cpp
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index 5c1049db..20108537 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -63,6 +63,7 @@ using namespace std::chrono_literals;
+ #include "FreeDVReceiveStep.h"
+ #include "MuteStep.h"
+ #include "LinkStep.h"
++#include "BeepStep.h"
+ 
+ #include "util/logging/ulog.h"
+ #include "os/os_interface.h"
+@@ -105,9 +106,7 @@ extern bool g_recFileFromRadio;
+ extern unsigned int g_recFromRadioSamples;
+ extern std::atomic<bool> g_playFileFromRadio;
+ extern int g_sfFs;
+-extern std::atomic<SNDFILE*> g_sfTotBeep;
+ extern std::atomic<bool>     g_totBeepActive;
+-extern int                   g_totBeepFs;
+ extern bool g_loopPlayFileFromRadio;
+ extern int g_SquelchActive;
+ extern float g_SquelchLevel;
+@@ -517,27 +516,14 @@ void TxRxThread::initializePipeline_()
+         // TOT beep step: replaces speaker audio with a warning beep during countdown
+         auto totBeepBypass = new AudioPipeline(outputSampleRate_, outputSampleRate_);
+         auto totBeepActivePath = new AudioPipeline(outputSampleRate_, outputSampleRate_);
+-        auto totBeepPlayback = new PlaybackStep(
+-            outputSampleRate_,
+-            +[]() FREEDV_NONBLOCKING { return g_totBeepFs; },
+-            +[]() FREEDV_NONBLOCKING {
+-                return g_totBeepActive.load(std::memory_order_acquire)
+-                       ? g_sfTotBeep.load(std::memory_order_acquire)
+-                       : nullptr;
+-            },
+-            []() {
+-                log_info("TOT beep done");
+-                auto tmp = g_sfTotBeep.load(std::memory_order_acquire);
+-                if (tmp) sf_close(tmp);
+-                g_sfTotBeep.store(nullptr, std::memory_order_release);
+-                g_totBeepActive.store(false, std::memory_order_release);
+-            }
+-        );
++        auto totBeepPlayback = new BeepStep(outputSampleRate_, 1000, 250, +[](BeepStep& thisStep) FREEDV_NONBLOCKING {
++            g_totBeepActive.store(false, std::memory_order_release);
++            thisStep.reset();
++        });
+         totBeepActivePath->appendPipelineStep(totBeepPlayback);
+         auto totBeepEitherOr = new EitherOrStep(
+             +[]() FREEDV_NONBLOCKING {
+-                return g_totBeepActive.load(std::memory_order_acquire)
+-                       && g_sfTotBeep.load(std::memory_order_acquire) != nullptr;
++                return g_totBeepActive.load(std::memory_order_acquire);
+             },
+             totBeepActivePath,
+             totBeepBypass
+diff --git a/src/playrec.cpp b/src/playrec.cpp
+index 6a080ec6..7f1b0b69 100644
+--- a/src/playrec.cpp
++++ b/src/playrec.cpp
+@@ -39,9 +39,8 @@ std::atomic<SNDFILE*>            g_sfRecFileFromModulator;
+ std::atomic<bool>                g_recFileFromModulator;
+ 
+ // Time-Out Timer beep: injected into the speaker output path during the warning window.
+-std::atomic<SNDFILE*> g_sfTotBeep(nullptr);
+ std::atomic<bool>     g_totBeepActive(false);
+-int                   g_totBeepFs = 8000;
++
+ int                 g_recFromModulatorSamples;
+ int                 g_recFileFromModulatorEventId;
+ 
+-- 
+2.52.0
+
+
+From 7239392695b47ec326c6e0ae2bd3cb961e5238b5 Mon Sep 17 00:00:00 2001
+From: Mooneer Salem <mooneer@gmail.com>
+Date: Sat, 6 Jun 2026 09:48:02 -0700
+Subject: [PATCH 2/6] Fix Windows compile failure.
+
+---
+ src/pipeline/BeepStep.cpp | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/src/pipeline/BeepStep.cpp b/src/pipeline/BeepStep.cpp
+index e0bb0612..681c25e5 100644
+--- a/src/pipeline/BeepStep.cpp
++++ b/src/pipeline/BeepStep.cpp
+@@ -37,6 +37,11 @@
+ 
+ #include "BeepStep.h"
+ 
++// M_PI is not available on some compilers, so define it here just in case.
++#ifndef M_PI
++    #define M_PI 3.1415926535897932384626433832795
++#endif
++
+ BeepStep::BeepStep(int sampleRate, int frequency, int durationMs, realtime_fp<void(BeepStep&)> const& onCompleteFn)
+     : sampleRate_(sampleRate)
+     , frequency_(frequency)
+@@ -98,4 +103,4 @@ short* BeepStep::execute(short* inputSamples, int numInputSamples, int* numOutpu
+ void BeepStep::reset() FREEDV_NONBLOCKING
+ {
+     sampleCtr_ = 0;
+-}
+\ No newline at end of file
++}
+-- 
+2.52.0
+
+
+From 5ab031c6ba585ddda5e0a05d25ed669259898960 Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@users.noreply.github.com>
+Date: Sat, 6 Jun 2026 17:57:52 +0100
+Subject: [PATCH 3/6] Restore heard station list on launch (#1358)
+
+* Restore heard callsign list from CSV log on startup and modem start.
+
+On startup and each time the modem is started, read up to the 100 most
+recent entries from the CSV RX log and pre-populate the stations-heard
+list. Restored entries are shown in grey to distinguish them from
+callsigns heard in the current session.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* Enable Log QSO button based on list content, not modem state.
+
+The log button is now live whenever the stations-heard list has entries,
+allowing QSOs to be logged from the restored CSV list without needing to
+start the modem.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* Guard against null logger in log entry dialog.
+
+logContact() was called unconditionally on a pointer that is null when
+the modem is stopped or WSJT-X logging is not configured, causing a
+segfault. Skip the WSJT-X forward when no logger is active.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* Create temporary logger in log dialog when modem is stopped.
+
+When the modem is not running the app-level logger is null. If UDP
+reporting is configured, spin up a short-lived WSJTXNetworkLogger for
+the single logContact() call so logging reaches the logging program
+regardless of modem state.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* Add PR #1358 to changelog.
+
+---------
+
+Co-authored-by: Barry Jackson <barjac@mageia.org>
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+Co-authored-by: Mooneer Salem <mooneer@gmail.com>
+---
+ USER_MANUAL.md                |  1 +
+ src/gui/dialogs/log_entry.cpp | 37 +++++++++++------
+ src/main.cpp                  | 77 +++++++++++++++++++++++++++++++++--
+ src/main.h                    |  1 +
+ 4 files changed, 99 insertions(+), 17 deletions(-)
+
+diff --git a/USER_MANUAL.md b/USER_MANUAL.md
+index 1f4d869d..d15c39c9 100644
+--- a/USER_MANUAL.md
++++ b/USER_MANUAL.md
+@@ -949,6 +949,7 @@ LDPC | Low Density Parity Check Codes - a family of powerful FEC codes
+     * Load last-used config file on restarts. (PR #1365, #1371)
+     * Add "Set tune output to minimum" to Tune button context menu for safety. (PR #1378) - thanks @barjac!
+     * Move Tune button into Control widget for improved usability. (PR #1377) - thanks @barjac!
++    * Restore heard station list on launch. (PR #1358) - thanks @barjac!
+ 3. Other:
+     * FlexRadio/KA9Q integrations moved to freedv-integrations repo. (PR #1368)
+ 
+diff --git a/src/gui/dialogs/log_entry.cpp b/src/gui/dialogs/log_entry.cpp
+index ba378061..2251e4bf 100644
+--- a/src/gui/dialogs/log_entry.cpp
++++ b/src/gui/dialogs/log_entry.cpp
+@@ -20,6 +20,7 @@
+ //==========================================================================
+ 
+ #include "../../main.h"
++#include "../../logging/WSJTXNetworkLogger.h"
+ #include <wx/wx.h>
+ #include <wx/valnum.h>
+ #include "log_entry.h"
+@@ -208,19 +209,29 @@ void LogEntryDialog::OnOK(wxCommandEvent&)
+         freqHz = (int64_t)freqDouble;
+         
+         std::time_t timeSinceUnixEpoch = logTime_.GetTicks();
+-        
+-        logger_->logContact(
+-            std::chrono::system_clock::from_time_t(timeSinceUnixEpoch),
+-            (const char*)dxCall_->GetValue().ToUTF8(), 
+-            (const char*)dxGrid_->GetValue().ToUTF8(),
+-            (const char*)wxGetApp().appConfiguration.reportingConfiguration.reportingCallsign->ToUTF8(),
+-            (const char*)wxGetApp().appConfiguration.reportingConfiguration.reportingGridSquare->ToUTF8(),
+-            freqHz,
+-            (const char*)rxReport_->GetValue().ToUTF8(),
+-            (const char*)txReport_->GetValue().ToUTF8(),
+-            (const char*)name_->GetValue().ToUTF8(),
+-            (const char*)comments_->GetValue().ToUTF8(),
+-            snr_);
++
++        auto logger = logger_;
++        if (logger == nullptr && wxGetApp().appConfiguration.reportingConfiguration.udpReportingEnabled)
++        {
++            logger = std::make_shared<WSJTXNetworkLogger>(
++                (const char*)wxGetApp().appConfiguration.reportingConfiguration.udpReportingHostname->ToUTF8(),
++                wxGetApp().appConfiguration.reportingConfiguration.udpReportingPort);
++        }
++        if (logger != nullptr)
++        {
++            logger->logContact(
++                std::chrono::system_clock::from_time_t(timeSinceUnixEpoch),
++                (const char*)dxCall_->GetValue().ToUTF8(),
++                (const char*)dxGrid_->GetValue().ToUTF8(),
++                (const char*)wxGetApp().appConfiguration.reportingConfiguration.reportingCallsign->ToUTF8(),
++                (const char*)wxGetApp().appConfiguration.reportingConfiguration.reportingGridSquare->ToUTF8(),
++                freqHz,
++                (const char*)rxReport_->GetValue().ToUTF8(),
++                (const char*)txReport_->GetValue().ToUTF8(),
++                (const char*)name_->GetValue().ToUTF8(),
++                (const char*)comments_->GetValue().ToUTF8(),
++                snr_);
++        }
+         this->EndModal(wxOK);
+     }
+ }
+diff --git a/src/main.cpp b/src/main.cpp
+index 9de6a338..63743dd6 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -22,6 +22,7 @@
+ 
+ #include <inttypes.h>
+ #include <time.h>
++#include <fstream>
+ #include <sstream>
+ #include <iomanip>
+ #include <vector>
+@@ -1054,6 +1055,9 @@ setDefaultMode:
+     // Show/hide frequency box based on CAT control status
+     m_freqBox->Show(isFrequencyControlEnabled_());
+ 
++    restoreCallsignListFromCsv_();
++    m_logQSO->Enable(m_lastReportedCallsignListView->GetItemCount() > 0);
++
+     // Show/hide callsign combo box based on reporting enablement
+     if (wxGetApp().appConfiguration.reportingConfiguration.reportingEnabled)
+     {
+@@ -1444,6 +1448,71 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+     g_dump_timing = g_dump_fifo_state = 0;
+ }
+ 
++void MainFrame::restoreCallsignListFromCsv_()
++{
++    auto csvPath = wxGetApp().appConfiguration.reportingConfiguration.csvLogFilePath.get();
++    if (csvPath.IsEmpty())
++        return;
++
++    std::ifstream file(csvPath.ToStdString());
++    if (!file.is_open())
++        return;
++
++    std::vector<std::string> lines;
++    std::string line;
++    bool firstLine = true;
++    while (std::getline(file, line))
++    {
++        if (firstLine) { firstLine = false; continue; } // skip CSV header
++        if (!line.empty())
++            lines.push_back(line);
++    }
++
++    const int MAX_RESTORE_ROWS = 100;
++    if ((int)lines.size() > MAX_RESTORE_ROWS)
++        lines.erase(lines.begin(), lines.begin() + ((int)lines.size() - MAX_RESTORE_ROWS));
++
++    bool freqAsKhz = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz;
++
++    for (auto& csvLine : lines)
++    {
++        // CSV columns: date,time,callsign,mode,frequency_hz,snr_db
++        std::istringstream ss(csvLine);
++        std::string date, time, callsign, mode, freqStr, snrStr;
++        if (!std::getline(ss, date, ',')) continue;
++        if (!std::getline(ss, time, ',')) continue;
++        if (!std::getline(ss, callsign, ',')) continue;
++        if (!std::getline(ss, mode, ',')) continue;
++        if (!std::getline(ss, freqStr, ',')) continue;
++        if (!std::getline(ss, snrStr)) continue;
++
++        uint64_t freqHz = 0;
++        try { freqHz = std::stoull(freqStr); } catch (...) { continue; }
++
++        wxString freqDisplay;
++        if (freqAsKhz)
++            freqDisplay = wxNumberFormatter::ToString(freqHz / 1000.0, 1);
++        else
++            freqDisplay = wxNumberFormatter::ToString(freqHz / 1000000.0, 4);
++
++        wxString dateTime = wxString::Format("%s %s", date, time);
++
++        int snrInt = 0;
++        try { snrInt = std::stoi(snrStr); } catch (...) { continue; }
++        wxString snrDisplay;
++        snrDisplay.Printf(SNR_FORMAT_STR_NO_DB, (float)snrInt);
++
++        auto index = m_lastReportedCallsignListView->InsertItem(0, wxString(callsign), 0);
++        m_lastReportedCallsignListView->SetItem(index, 1, freqDisplay);
++        m_lastReportedCallsignListView->SetItem(index, 2, dateTime);
++        m_lastReportedCallsignListView->SetItem(index, 3, snrDisplay);
++        m_lastReportedCallsignListView->SetItemTextColour(index, wxColour(160, 160, 160));
++    }
++
++    for (int col = 0; col < 4; col++)
++        m_lastReportedCallsignListView->SetColumnWidth(col, getIdealStationsHeardColumnLength_(col));
++}
++
+ static std::recursive_mutex stoppingMutex;
+ 
+ void MainFrame::setConfiguration_(wxConfigBase* config)
+@@ -2397,8 +2466,8 @@ void MainFrame::performFreeDVOn_()
+ 
+         m_txtCtrlCallSign->SetValue(wxT(""));
+         m_lastReportedCallsignListView->DeleteAllItems();
+-        m_cboLastReportedCallsigns->Enable(false);
+-            
++        restoreCallsignListFromCsv_();
++        m_cboLastReportedCallsigns->Enable(m_lastReportedCallsignListView->GetItemCount() > 0);
+         m_cboLastReportedCallsigns->SetText(wxT(""));
+         
+         m_logQSO->Disable();
+@@ -2823,8 +2892,8 @@ void MainFrame::performFreeDVOff_()
+         m_rb700d->Enable();
+         m_rb700e->Enable();
+         
+-        m_logQSO->Disable();
+-        
++        m_logQSO->Enable(m_lastReportedCallsignListView->GetItemCount() > 0);
++
+         // Make sure QSY button becomes disabled after stop.
+         if (m_reporterDialog != nullptr)
+         {
+diff --git a/src/main.h b/src/main.h
+index 14ff935c..941ef968 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -579,6 +579,7 @@ class MainFrame : public TopFrame
+         bool        validateSoundCardSetup();
+         
+         void loadConfiguration_();
++        void restoreCallsignListFromCsv_();
+         void resetStats_();
+         void exportConfiguration_(wxConfigBase* config);
+         void setConfiguration_(wxConfigBase* config);
+-- 
+2.52.0
+
+
+From 052c4d79feca2d516f774b18d5e683f1c8b26d38 Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@mageia.org>
+Date: Sun, 7 Jun 2026 18:14:33 +0100
+Subject: [PATCH 4/6] Redesign BeepStep to eliminate pipeline switches at
+ start/end of TOT beep.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BeepStep is now always present in the pipeline and acts as a pure passthrough
+when idle — polling g_totBeepActive each buffer. This removes the EitherOrStep
+that was switching the pipeline on/off for the beep, which caused PipeWire to
+re-initialize its audio stream (producing ~500ms noise bursts at both ends of
+the notification).
+
+Also removes g_totBeepActive from the eitherOrRfDemodulationStep condition so
+the RF demodulator runs continuously throughout the beep without causing a
+separate upstream pipeline switch.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/pipeline/BeepStep.cpp   | 162 ++++++++++++++++++------------------
+ src/pipeline/BeepStep.h     |  68 +++++----------
+ src/pipeline/TxRxThread.cpp |  28 +++----
+ 3 files changed, 118 insertions(+), 140 deletions(-)
+
+diff --git a/src/pipeline/BeepStep.cpp b/src/pipeline/BeepStep.cpp
+index 681c25e5..d6dee2e7 100644
+--- a/src/pipeline/BeepStep.cpp
++++ b/src/pipeline/BeepStep.cpp
+@@ -1,103 +1,107 @@
+-//=========================================================================
+-// Name:            BeepStep.cpp
+-// Purpose:         Describes a beep generator step in the audio pipeline.
+-//
+-// Authors:         Mooneer Salem
+-// License:
+-//
+-// All rights reserved.
+-//
+-// Redistribution and use in source and binary forms, with or without
+-// modification, are permitted provided that the following conditions
+-// are met:
+-//
+-// - Redistributions of source code must retain the above copyright
+-// notice, this list of conditions and the following disclaimer.
+-//
+-// - Redistributions in binary form must reproduce the above copyright
+-// notice, this list of conditions and the following disclaimer in the
+-// documentation and/or other materials provided with the distribution.
+-//
+-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+-// ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+-// OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-//
+-//=========================================================================
+-
+ #include <cmath>
+-#include <cassert>
+-
+ #include "BeepStep.h"
+ 
+-// M_PI is not available on some compilers, so define it here just in case.
+-#ifndef M_PI
+-    #define M_PI 3.1415926535897932384626433832795
+-#endif
 +static const int TONE_AMPLITUDE = 20000;
 +static const double M_2PI = 2.0 * M_PI;
-+
+ 
+-BeepStep::BeepStep(int sampleRate, int frequency, int durationMs, realtime_fp<void(BeepStep&)> const& onCompleteFn)
 +BeepStep::BeepStep(int sampleRate, int frequency,
 +                   std::initializer_list<BeepSegment> pattern,
 +                   realtime_fp<bool()> const& isActiveFn,
 +                   realtime_fp<void(BeepStep&)> const& onCompleteFn)
-+    : sampleRate_(sampleRate)
+     : sampleRate_(sampleRate)
+-    , frequency_(frequency)
 +    , isActiveFn_(isActiveFn)
-+    , onCompleteFn_(onCompleteFn)
+     , onCompleteFn_(onCompleteFn)
+-    
+-    // SR = (samples / 1s) * (1s / 1000ms) = samples / msec
+-    , samplesToGenerate_((sampleRate * durationMs) / 1000)
+-
 +    , samplesToGenerate_(0)
 +    , globalRampSamples_((sampleRate * 5) / 1000)
-+    , sampleCtr_(0)
+     , sampleCtr_(0)
 +    , playing_(false)
-+{
+ {
+-    // Pre-allocate buffers so we don't have to do so during real-time operation.
+-    outputSamples_ = std::make_unique<short[]>(sampleRate);
+-    assert(outputSamples_ != nullptr);
+-}
 +    // Count total samples
 +    for (auto& seg : pattern)
 +        samplesToGenerate_ += (sampleRate * seg.durationMs) / 1000;
-+
+ 
+-BeepStep::~BeepStep()
+-{
+-    // empty
+-}
+-    
+-int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
+-{
+-    return sampleRate_;
 +    pregenSamples_ = std::make_unique<short[]>(samplesToGenerate_);
 +    execOutput_    = std::make_unique<short[]>(samplesToGenerate_);
 +
@@ -54,27 +816,46 @@ index 00000000..8249dc4b
 +            idx++;
 +        }
 +    }
-+}
-+
+ }
+ 
+-int BeepStep::getOutputSampleRate() const FREEDV_NONBLOCKING
+-{
+-    return sampleRate_;
+-}    
 +BeepStep::~BeepStep() = default;
 +
 +int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING { return sampleRate_; }
 +int BeepStep::getOutputSampleRate() const FREEDV_NONBLOCKING { return sampleRate_; }
-+
-+short* BeepStep::execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING
-+{
+ 
+ short* BeepStep::execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING
+ {
 +    // Check for activation once per buffer (never mid-buffer)
 +    if (!playing_ && isActiveFn_()) {
 +        sampleCtr_ = 0;
 +        playing_ = true;
 +    }
 +
-+    *numOutputSamples = numInputSamples;
+     *numOutputSamples = numInputSamples;
 +    bool completed = false;
-+
+ 
+-    short* outPtr = outputSamples_.get();
+-    for (int index = 0; index < numInputSamples; index++)
+-    {
+-        if (sampleCtr_ < samplesToGenerate_)
+-        {
+-            constexpr int TONE_AMPLITUDE = 8192; // TBD
+-            outPtr[index] = TONE_AMPLITUDE * cosf((2.0 * M_PI * frequency_ * sampleCtr_) / sampleRate_);
+-        }
+-        else
+-        {
+-            outPtr[index] = inputSamples[index];
+-        }
 +    for (int index = 0; index < numInputSamples; index++) {
 +        short outSample;
-+
+ 
+-        if (sampleCtr_ == samplesToGenerate_)
+-        {
+-            onCompleteFn_(*this);
 +        if (playing_ && sampleCtr_ < samplesToGenerate_) {
 +            // Mute pre-roll: fade live input to silence over first 5ms
 +            if (sampleCtr_ < globalRampSamples_) {
@@ -102,76 +883,109 @@ index 00000000..8249dc4b
 +        } else {
 +            // Idle passthrough
 +            outSample = inputSamples[index];
-+        }
-+
+         }
+ 
+-        sampleCtr_++;
 +        execOutput_[index] = outSample;
-+    }
-+
+     }
+ 
+-    return outPtr;
 +    return execOutput_.get();
-+}
-+
-+void BeepStep::reset() FREEDV_NONBLOCKING
-+{
-+    playing_ = false;
-+    sampleCtr_ = 0;
-+}
+ }
+ 
+ void BeepStep::reset() FREEDV_NONBLOCKING
 diff --git a/src/pipeline/BeepStep.h b/src/pipeline/BeepStep.h
-new file mode 100644
-index 00000000..1f5bd16a
---- /dev/null
+index 573dd488..1f5bd16a 100644
+--- a/src/pipeline/BeepStep.h
 +++ b/src/pipeline/BeepStep.h
-@@ -0,0 +1,39 @@
+@@ -1,63 +1,39 @@
+-//=========================================================================
+-// Name:            BeepStep.h
+-// Purpose:         Describes a beep generator step in the audio pipeline.
+-//
+-// Authors:         Mooneer Salem
+-// License:
+-//
+-// All rights reserved.
+-//
+-// Redistribution and use in source and binary forms, with or without
+-// modification, are permitted provided that the following conditions
+-// are met:
+-//
+-// - Redistributions of source code must retain the above copyright
+-// notice, this list of conditions and the following disclaimer.
+-//
+-// - Redistributions in binary form must reproduce the above copyright
+-// notice, this list of conditions and the following disclaimer in the
+-// documentation and/or other materials provided with the distribution.
+-//
+-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+-// ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+-// OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-//
+-//=========================================================================
+-
+-#ifndef AUDIO_PIPELINE__BEEP_STEP_H
+-#define AUDIO_PIPELINE__BEEP_STEP_H
 +#ifndef __BEEP_STEP_H__
 +#define __BEEP_STEP_H__
-+
+ 
 +#include <initializer_list>
-+#include <memory>
+ #include <memory>
 +
-+#include "IPipelineStep.h"
+ #include "IPipelineStep.h"
+-#include "realtime_fp.h"
 +#include "../util/realtime_fp.h"
 +
 +struct BeepSegment { int durationMs; bool isTone; };
-+
+ 
+-class BeepStep : public IPipelineStep
+-{
 +// Always-present pipeline step that plays a pattern when activated by isActiveFn_.
 +// Acts as a pure passthrough when idle — no EitherOrStep needed.
 +class BeepStep : public IPipelineStep {
-+public:
+ public:
+-    BeepStep(int sampleRate, int frequency, int durationMs, realtime_fp<void(BeepStep&)> const& onCompleteFn);
 +    BeepStep(int sampleRate, int frequency,
 +             std::initializer_list<BeepSegment> pattern,
 +             realtime_fp<bool()> const& isActiveFn,
 +             realtime_fp<void(BeepStep&)> const& onCompleteFn);
-+    virtual ~BeepStep();
+     virtual ~BeepStep();
+-    
 +
-+    virtual int getInputSampleRate() const FREEDV_NONBLOCKING override;
+     virtual int getInputSampleRate() const FREEDV_NONBLOCKING override;
+-    virtual int getOutputSampleRate() const FREEDV_NONBLOCKING override;    
 +    virtual int getOutputSampleRate() const FREEDV_NONBLOCKING override;
-+    virtual short* execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING override;
-+    virtual void reset() FREEDV_NONBLOCKING override;
-+
-+private:
-+    int sampleRate_;
+     virtual short* execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING override;
+     virtual void reset() FREEDV_NONBLOCKING override;
+ 
+ private:
+     int sampleRate_;
+-    int frequency_;
 +    realtime_fp<bool()> isActiveFn_;
-+    realtime_fp<void(BeepStep&)> onCompleteFn_;
-+    int samplesToGenerate_;
+     realtime_fp<void(BeepStep&)> onCompleteFn_;
+-
+     int samplesToGenerate_;
 +    int globalRampSamples_;
-+    int sampleCtr_;
+     int sampleCtr_;
+-    std::unique_ptr<short[]> outputSamples_;
 +    bool playing_;
 +    std::unique_ptr<short[]> pregenSamples_;
 +    std::unique_ptr<short[]> execOutput_;
-+};
-+
+ };
+ 
+-#endif // AUDIO_PIPELINE__BEEP_STEP_H
 +#endif // __BEEP_STEP_H__
-diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
-index 4cc9cabe..3c35a496 100644
---- a/src/pipeline/CMakeLists.txt
-+++ b/src/pipeline/CMakeLists.txt
-@@ -1,4 +1,5 @@
- add_library(fdv_audio_pipeline_extra STATIC
-+    BeepStep.cpp
-     ComputeRfSpectrumStep.cpp
-     EqualizerStep.cpp
-     FreeDVReceiveStep.cpp
 diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
-index 5c1049db..87b377bb 100644
+index 20108537..38524a07 100644
 --- a/src/pipeline/TxRxThread.cpp
 +++ b/src/pipeline/TxRxThread.cpp
 @@ -49,6 +49,7 @@ using namespace std::chrono_literals;
@@ -182,17 +996,109 @@ index 5c1049db..87b377bb 100644
  #include "EitherOrStep.h"
  #include "RNNoiseStep.h"
  #include "EqualizerStep.h"
-@@ -105,9 +106,7 @@ extern bool g_recFileFromRadio;
- extern unsigned int g_recFromRadioSamples;
- extern std::atomic<bool> g_playFileFromRadio;
- extern int g_sfFs;
--extern std::atomic<SNDFILE*> g_sfTotBeep;
- extern std::atomic<bool>     g_totBeepActive;
--extern int                   g_totBeepFs;
- extern bool g_loopPlayFileFromRadio;
- extern int g_SquelchActive;
- extern float g_SquelchLevel;
-@@ -152,6 +151,12 @@ extern bool g_recFileFromDecoder;
+@@ -63,7 +64,6 @@ using namespace std::chrono_literals;
+ #include "FreeDVReceiveStep.h"
+ #include "MuteStep.h"
+ #include "LinkStep.h"
+-#include "BeepStep.h"
+ 
+ #include "util/logging/ulog.h"
+ #include "os/os_interface.h"
+@@ -483,7 +483,6 @@ void TxRxThread::initializePipeline_()
+         {
+             eitherOrRfDemodulationStep = new EitherOrStep(
+                 +[]() FREEDV_NONBLOCKING { return g_analog ||
+-                    g_totBeepActive.load(std::memory_order_acquire) ||
+                     (
+                         (g_recVoiceKeyerFile) ||
+                         (g_voice_keyer_tx.load(std::memory_order_acquire) && NonblockingWxGetApp().appConfiguration.monitorVoiceKeyerAudio.getWithoutProcessing()) ||
+@@ -495,7 +494,7 @@ void TxRxThread::initializePipeline_()
+         else
+         {
+             eitherOrRfDemodulationStep = new EitherOrStep(
+-                +[]() FREEDV_NONBLOCKING { return g_analog != 0 || g_totBeepActive.load(std::memory_order_acquire); },
++                +[]() FREEDV_NONBLOCKING { return g_analog != 0; },
+                 bypassRfDemodulationPipeline,
+                 rfDemodulationPipeline);
+         }
+@@ -513,22 +512,21 @@ void TxRxThread::initializePipeline_()
+             g_rxUserdata->spkEqLock);
+         pipeline_->appendPipelineStep(equalizerStep);
+ 
+-        // TOT beep step: replaces speaker audio with a warning beep during countdown
+-        auto totBeepBypass = new AudioPipeline(outputSampleRate_, outputSampleRate_);
+-        auto totBeepActivePath = new AudioPipeline(outputSampleRate_, outputSampleRate_);
+-        auto totBeepPlayback = new BeepStep(outputSampleRate_, 1000, 250, +[](BeepStep& thisStep) FREEDV_NONBLOCKING {
+-            g_totBeepActive.store(false, std::memory_order_release);
+-            thisStep.reset();
+-        });
+-        totBeepActivePath->appendPipelineStep(totBeepPlayback);
+-        auto totBeepEitherOr = new EitherOrStep(
++        // TOT beep step: always present in pipeline, activates/deactivates without switching.
++        // Polls g_totBeepActive and plays Morse '5' at 750 Hz / 15 WPM, then clears the flag.
++        auto totBeepPlayback = new BeepStep(
++            outputSampleRate_, 750,
++            {{10,false},{80,true},{80,false},{80,true},{80,false},{80,true},
++             {80,false},{80,true},{80,false},{80,true},{10,false}},
+             +[]() FREEDV_NONBLOCKING {
+                 return g_totBeepActive.load(std::memory_order_acquire);
+             },
+-            totBeepActivePath,
+-            totBeepBypass
++            +[](BeepStep& thisStep) FREEDV_NONBLOCKING {
++                g_totBeepActive.store(false, std::memory_order_release);
++                thisStep.reset();
++            }
+         );
+-        pipeline_->appendPipelineStep(totBeepEitherOr);
++        pipeline_->appendPipelineStep(totBeepPlayback);
+ 
+         // Record from decoder step (optional)
+         auto recordDecoderStep = new RecordStep(
+-- 
+2.52.0
+
+
+From 4557a1e9f649973edffed26cf29a39b40027d8ff Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@mageia.org>
+Date: Sun, 7 Jun 2026 21:38:12 +0100
+Subject: [PATCH 5/6] Fix TOT beep pipeline stall during TX-stop sequence.
+
+stopTotBeep_() clears g_totBeepActive before g_tx becomes false, causing
+rxProcessing_ to evaluate processInputFifo=false (half-duplex TX, no monitor,
+no beep flag) and call clearFifos_(), stalling the pipeline mid-beep.  The
+stall inserts silence into the speaker output; the abrupt resume mid-tone
+produces clicks and can make Morse '5' sound like S+I.
+
+Add s_totBeepPlaying (set when BeepStep activates, cleared on completion) and
+include it in processInputFifo so the pipeline keeps running throughout the
+full beep regardless of when g_totBeepActive is externally cleared.
+
+Also fix BeepStep::reset() to clear playing_ so the step is safe to reset
+from external code paths.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/pipeline/BeepStep.cpp   |  1 +
+ src/pipeline/TxRxThread.cpp | 21 ++++++++++++++++-----
+ 2 files changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/src/pipeline/BeepStep.cpp b/src/pipeline/BeepStep.cpp
+index d6dee2e7..8249dc4b 100644
+--- a/src/pipeline/BeepStep.cpp
++++ b/src/pipeline/BeepStep.cpp
+@@ -106,5 +106,6 @@ short* BeepStep::execute(short* inputSamples, int numInputSamples, int* numOutpu
+ 
+ void BeepStep::reset() FREEDV_NONBLOCKING
+ {
++    playing_ = false;
+     sampleCtr_ = 0;
+ }
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index 38524a07..87b377bb 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -151,6 +151,12 @@ extern bool g_recFileFromDecoder;
  
  #include "sox_biquad.h"
  
@@ -205,73 +1111,21 @@ index 5c1049db..87b377bb 100644
  void TxRxThread::initializePipeline_()
  {
      if (m_tx)
-@@ -484,7 +489,6 @@ void TxRxThread::initializePipeline_()
-         {
-             eitherOrRfDemodulationStep = new EitherOrStep(
-                 +[]() FREEDV_NONBLOCKING { return g_analog ||
--                    g_totBeepActive.load(std::memory_order_acquire) ||
-                     (
-                         (g_recVoiceKeyerFile) ||
-                         (g_voice_keyer_tx.load(std::memory_order_acquire) && NonblockingWxGetApp().appConfiguration.monitorVoiceKeyerAudio.getWithoutProcessing()) ||
-@@ -496,7 +500,7 @@ void TxRxThread::initializePipeline_()
-         else
-         {
-             eitherOrRfDemodulationStep = new EitherOrStep(
--                +[]() FREEDV_NONBLOCKING { return g_analog != 0 || g_totBeepActive.load(std::memory_order_acquire); },
-+                +[]() FREEDV_NONBLOCKING { return g_analog != 0; },
-                 bypassRfDemodulationPipeline,
-                 rfDemodulationPipeline);
-         }
-@@ -514,35 +518,24 @@ void TxRxThread::initializePipeline_()
-             g_rxUserdata->spkEqLock);
-         pipeline_->appendPipelineStep(equalizerStep);
- 
--        // TOT beep step: replaces speaker audio with a warning beep during countdown
--        auto totBeepBypass = new AudioPipeline(outputSampleRate_, outputSampleRate_);
--        auto totBeepActivePath = new AudioPipeline(outputSampleRate_, outputSampleRate_);
--        auto totBeepPlayback = new PlaybackStep(
--            outputSampleRate_,
--            +[]() FREEDV_NONBLOCKING { return g_totBeepFs; },
-+        // TOT beep step: always present in pipeline, activates/deactivates without switching.
-+        // Polls g_totBeepActive and plays Morse '5' at 750 Hz / 15 WPM, then clears the flag.
-+        auto totBeepPlayback = new BeepStep(
-+            outputSampleRate_, 750,
-+            {{10,false},{80,true},{80,false},{80,true},{80,false},{80,true},
-+             {80,false},{80,true},{80,false},{80,true},{10,false}},
+@@ -519,9 +525,12 @@ void TxRxThread::initializePipeline_()
+             {{10,false},{80,true},{80,false},{80,true},{80,false},{80,true},
+              {80,false},{80,true},{80,false},{80,true},{10,false}},
              +[]() FREEDV_NONBLOCKING {
--                return g_totBeepActive.load(std::memory_order_acquire)
--                       ? g_sfTotBeep.load(std::memory_order_acquire)
--                       : nullptr;
+-                return g_totBeepActive.load(std::memory_order_acquire);
 +                bool active = g_totBeepActive.load(std::memory_order_acquire);
 +                if (active) s_totBeepPlaying.store(true, std::memory_order_release);
 +                return active;
              },
--            []() {
--                log_info("TOT beep done");
--                auto tmp = g_sfTotBeep.load(std::memory_order_acquire);
--                if (tmp) sf_close(tmp);
--                g_sfTotBeep.store(nullptr, std::memory_order_release);
-+            +[](BeepStep& thisStep) FREEDV_NONBLOCKING {
+             +[](BeepStep& thisStep) FREEDV_NONBLOCKING {
 +                s_totBeepPlaying.store(false, std::memory_order_release);
                  g_totBeepActive.store(false, std::memory_order_release);
-+                thisStep.reset();
+                 thisStep.reset();
              }
-         );
--        totBeepActivePath->appendPipelineStep(totBeepPlayback);
--        auto totBeepEitherOr = new EitherOrStep(
--            +[]() FREEDV_NONBLOCKING {
--                return g_totBeepActive.load(std::memory_order_acquire)
--                       && g_sfTotBeep.load(std::memory_order_acquire) != nullptr;
--            },
--            totBeepActivePath,
--            totBeepBypass
--        );
--        pipeline_->appendPipelineStep(totBeepEitherOr);
-+        pipeline_->appendPipelineStep(totBeepPlayback);
- 
-         // Record from decoder step (optional)
-         auto recordDecoderStep = new RecordStep(
-@@ -886,8 +879,9 @@ void TxRxThread::rxProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
+@@ -870,8 +879,9 @@ void TxRxThread::rxProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
      bool tmpTx = g_tx.load(std::memory_order_acquire);
      bool tmpVkTx = g_voice_keyer_tx.load(std::memory_order_acquire);
      bool tmpHalfDuplex = g_half_duplex.load(std::memory_order_acquire);
@@ -283,7 +1137,7 @@ index 5c1049db..87b377bb 100644
          (tmpVkTx && NonblockingWxGetApp().appConfiguration.monitorVoiceKeyerAudio.getWithoutProcessing()) ||
          (tmpTx && NonblockingWxGetApp().appConfiguration.monitorTxAudio.getWithoutProcessing()) ||
          (!tmpVkTx && ((tmpHalfDuplex && !tmpTx) || !tmpHalfDuplex)) ||
-@@ -925,8 +919,9 @@ void TxRxThread::rxProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
+@@ -909,8 +919,9 @@ void TxRxThread::rxProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
          tmpTx = g_tx.load(std::memory_order_acquire);
          tmpVkTx = g_voice_keyer_tx.load(std::memory_order_acquire);
          tmpHalfDuplex = g_half_duplex.load(std::memory_order_acquire);
@@ -295,3 +1149,65 @@ index 5c1049db..87b377bb 100644
              (tmpVkTx && NonblockingWxGetApp().appConfiguration.monitorVoiceKeyerAudio.getWithoutProcessing()) ||
              (tmpTx && NonblockingWxGetApp().appConfiguration.monitorTxAudio.getWithoutProcessing()) ||
              (!tmpVkTx && ((tmpHalfDuplex && !tmpTx) || !tmpHalfDuplex)) ||
+-- 
+2.52.0
+
+
+From 134b4092a733f8c76b9fe76f9eb5b249099570e1 Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@mageia.org>
+Date: Sun, 7 Jun 2026 22:27:29 +0100
+Subject: [PATCH 6/6] Bypass RADE decoder during TOT beep to fix timing
+ corruption (S+I instead of '5')
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+RADE's pipeline step outputs 0 samples on most calls (it accumulates modem
+input until a full FARGAN frame is ready, then bursts). BeepStep's
+sample-counter advances only when it receives non-zero input, so when placed
+downstream of RADE the beep timing is corrupted — producing audible effects
+like 'S+I' (3+2 dits) instead of the correct '5' (5 dits), varying on each
+activation.
+
+Fix: add g_totBeepActive || s_totBeepPlaying to the eitherOrRfDemodulationStep
+bypass condition. While the beep is active the pipeline skips RADE entirely,
+giving BeepStep regular 960-sample buffers from the (near-silent during TX)
+raw radio input. The existing 5ms pre-roll in BeepStep fades that silence
+cleanly to zero at the start of playback.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/pipeline/TxRxThread.cpp | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index 87b377bb..c031ee43 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -493,14 +493,21 @@ void TxRxThread::initializePipeline_()
+                         (g_recVoiceKeyerFile) ||
+                         (g_voice_keyer_tx.load(std::memory_order_acquire) && NonblockingWxGetApp().appConfiguration.monitorVoiceKeyerAudio.getWithoutProcessing()) ||
+                         (g_tx.load(std::memory_order_acquire) && NonblockingWxGetApp().appConfiguration.monitorTxAudio.getWithoutProcessing())
+-                    ); },
++                    ) ||
++                    // Bypass RADE during TOT beep so BeepStep gets regular-sized buffers.
++                    // RADE outputs 0 samples on most calls (accumulates input until a full frame
++                    // is ready), which would corrupt BeepStep's sample-counter-based timing.
++                    g_totBeepActive.load(std::memory_order_acquire) ||
++                    s_totBeepPlaying.load(std::memory_order_acquire); },
+                 bypassRfDemodulationPipeline,
+                 rfDemodulationPipeline);
+         }
+         else
+         {
+             eitherOrRfDemodulationStep = new EitherOrStep(
+-                +[]() FREEDV_NONBLOCKING { return g_analog != 0; },
++                +[]() FREEDV_NONBLOCKING { return g_analog != 0 ||
++                    g_totBeepActive.load(std::memory_order_acquire) ||
++                    s_totBeepPlaying.load(std::memory_order_acquire); },
+                 bypassRfDemodulationPipeline,
+                 rfDemodulationPipeline);
+         }
+-- 
+2.52.0
+
