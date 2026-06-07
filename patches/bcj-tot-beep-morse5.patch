@@ -1,9 +1,9 @@
 diff --git a/src/pipeline/BeepStep.cpp b/src/pipeline/BeepStep.cpp
 new file mode 100644
-index 00000000..1b4a5d9a
+index 00000000..0d608338
 --- /dev/null
 +++ b/src/pipeline/BeepStep.cpp
-@@ -0,0 +1,167 @@
+@@ -0,0 +1,162 @@
 +//=========================================================================
 +// Name:            BeepStep.cpp
 +// Purpose:         Describes a beep generator step in the audio pipeline.
@@ -62,9 +62,8 @@ index 00000000..1b4a5d9a
 +    samplesToGenerate_ = totalSamples;
 +    globalRampSamples_ = (sampleRate * 5) / 1000;
 +    pregenSamples_ = std::make_unique<short[]>(totalSamples);
-+    execOutput_ = std::make_unique<short[]>(sampleRate); // sized for up to 1s per execute() call
++    execOutput_ = std::make_unique<short[]>(sampleRate);
 +
-+    // 5ms raised-cosine (Hann) attack/release on each tone segment to avoid hard clicks.
 +    const int rampSamples = globalRampSamples_;
 +    constexpr int TONE_AMPLITUDE = 8192;
 +    double phase = 0.0;
@@ -85,7 +84,6 @@ index 00000000..1b4a5d9a
 +            } else {
 +                pregenSamples_[idx] = 0;
 +            }
-+            // Advance phase even during gaps so the next tone resumes at a continuous phase.
 +            phase += 2.0 * M_PI * frequency / sampleRate;
 +            idx++;
 +        }
@@ -111,7 +109,6 @@ index 00000000..1b4a5d9a
 +
 +short* BeepStep::execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING
 +{
-+    // Apply a deferred reset at the entry point so it never triggers a mid-buffer restart.
 +    if (pendingReset_)
 +    {
 +        sampleCtr_ = 0;
@@ -157,7 +154,7 @@ index 00000000..1b4a5d9a
 +            if (!completed)
 +            {
 +                completed = true;
-+                onCompleteFn_(*this); // sets g_totBeepActive=false; calls reset() -> pendingReset_=true
++                onCompleteFn_(*this);
 +            }
 +        }
 +    }
@@ -167,8 +164,6 @@ index 00000000..1b4a5d9a
 +
 +void BeepStep::reset() FREEDV_NONBLOCKING
 +{
-+    // Defer the actual reset to the next execute() entry so we never restart
-+    // mid-buffer when called from within onCompleteFn_.
 +    pendingReset_ = true;
 +}
 diff --git a/src/pipeline/BeepStep.h b/src/pipeline/BeepStep.h
@@ -261,7 +256,7 @@ index 4cc9cabe..3c35a496 100644
      EqualizerStep.cpp
      FreeDVReceiveStep.cpp
 diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
-index 5c1049db..4e3f46e4 100644
+index 5c1049db..ac383fbd 100644
 --- a/src/pipeline/TxRxThread.cpp
 +++ b/src/pipeline/TxRxThread.cpp
 @@ -61,6 +61,7 @@ using namespace std::chrono_literals;
@@ -272,7 +267,24 @@ index 5c1049db..4e3f46e4 100644
  #include "MuteStep.h"
  #include "LinkStep.h"
  
-@@ -514,30 +515,23 @@ void TxRxThread::initializePipeline_()
+@@ -484,7 +485,6 @@ void TxRxThread::initializePipeline_()
+         {
+             eitherOrRfDemodulationStep = new EitherOrStep(
+                 +[]() FREEDV_NONBLOCKING { return g_analog ||
+-                    g_totBeepActive.load(std::memory_order_acquire) ||
+                     (
+                         (g_recVoiceKeyerFile) ||
+                         (g_voice_keyer_tx.load(std::memory_order_acquire) && NonblockingWxGetApp().appConfiguration.monitorVoiceKeyerAudio.getWithoutProcessing()) ||
+@@ -496,7 +496,7 @@ void TxRxThread::initializePipeline_()
+         else
+         {
+             eitherOrRfDemodulationStep = new EitherOrStep(
+-                +[]() FREEDV_NONBLOCKING { return g_analog != 0 || g_totBeepActive.load(std::memory_order_acquire); },
++                +[]() FREEDV_NONBLOCKING { return g_analog != 0; },
+                 bypassRfDemodulationPipeline,
+                 rfDemodulationPipeline);
+         }
+@@ -514,30 +514,27 @@ void TxRxThread::initializePipeline_()
              g_rxUserdata->spkEqLock);
          pipeline_->appendPipelineStep(equalizerStep);
  
@@ -281,6 +293,10 @@ index 5c1049db..4e3f46e4 100644
 +        // Morse '5' (. . . . .) at 15 WPM, 750 Hz: dit=80ms, inter-element gap=80ms.
 +        // 10ms silent pre/post-roll gives the mute ramp (5ms) room before the
 +        // first dit and after the last dit.
++        // Note: g_totBeepActive is intentionally NOT in the eitherOrRfDemodulationStep
++        // condition above; switching that upstream step caused audio artefacts on Linux
++        // (PipeWire). BeepStep overrides the speaker output directly without touching
++        // the demodulation pipeline.
          auto totBeepBypass = new AudioPipeline(outputSampleRate_, outputSampleRate_);
          auto totBeepActivePath = new AudioPipeline(outputSampleRate_, outputSampleRate_);
 -        auto totBeepPlayback = new PlaybackStep(
