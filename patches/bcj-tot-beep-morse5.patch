@@ -1,7 +1,7 @@
 From 8caaccd567fcbbe59ac12a4e5b469e103cc618cb Mon Sep 17 00:00:00 2001
 From: Mooneer Salem <mooneer@gmail.com>
 Date: Sat, 6 Jun 2026 09:29:44 -0700
-Subject: [PATCH 1/6] Create BeepStep pipeline step to improve audio quality of
+Subject: [PATCH 1/7] Create BeepStep pipeline step to improve audio quality of
  warning beep.
 
 ---
@@ -392,7 +392,7 @@ index 6a080ec6..7f1b0b69 100644
 From 7239392695b47ec326c6e0ae2bd3cb961e5238b5 Mon Sep 17 00:00:00 2001
 From: Mooneer Salem <mooneer@gmail.com>
 Date: Sat, 6 Jun 2026 09:48:02 -0700
-Subject: [PATCH 2/6] Fix Windows compile failure.
+Subject: [PATCH 2/7] Fix Windows compile failure.
 
 ---
  src/pipeline/BeepStep.cpp | 7 ++++++-
@@ -428,7 +428,7 @@ index e0bb0612..681c25e5 100644
 From 5ab031c6ba585ddda5e0a05d25ed669259898960 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@users.noreply.github.com>
 Date: Sat, 6 Jun 2026 17:57:52 +0100
-Subject: [PATCH 3/6] Restore heard station list on launch (#1358)
+Subject: [PATCH 3/7] Restore heard station list on launch (#1358)
 
 * Restore heard callsign list from CSV log on startup and modem start.
 
@@ -680,7 +680,7 @@ index 14ff935c..941ef968 100644
 From 052c4d79feca2d516f774b18d5e683f1c8b26d38 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Sun, 7 Jun 2026 18:14:33 +0100
-Subject: [PATCH 4/6] Redesign BeepStep to eliminate pipeline switches at
+Subject: [PATCH 4/7] Redesign BeepStep to eliminate pipeline switches at
  start/end of TOT beep.
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -1062,7 +1062,7 @@ index 20108537..38524a07 100644
 From 4557a1e9f649973edffed26cf29a39b40027d8ff Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Sun, 7 Jun 2026 21:38:12 +0100
-Subject: [PATCH 5/6] Fix TOT beep pipeline stall during TX-stop sequence.
+Subject: [PATCH 5/7] Fix TOT beep pipeline stall during TX-stop sequence.
 
 stopTotBeep_() clears g_totBeepActive before g_tx becomes false, causing
 rxProcessing_ to evaluate processInputFifo=false (half-duplex TX, no monitor,
@@ -1156,7 +1156,7 @@ index 38524a07..87b377bb 100644
 From 134b4092a733f8c76b9fe76f9eb5b249099570e1 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Sun, 7 Jun 2026 22:27:29 +0100
-Subject: [PATCH 6/6] Bypass RADE decoder during TOT beep to fix timing
+Subject: [PATCH 6/7] Bypass RADE decoder during TOT beep to fix timing
  corruption (S+I instead of '5')
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -1208,6 +1208,93 @@ index 87b377bb..c031ee43 100644
                  bypassRfDemodulationPipeline,
                  rfDemodulationPipeline);
          }
+-- 
+2.52.0
+
+
+From b9f42b5367b32418d4dc841d9a4dc1ccb17f63c1 Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@mageia.org>
+Date: Sun, 7 Jun 2026 23:40:40 +0100
+Subject: [PATCH 7/7] Remove pre/post-roll from BeepStep to eliminate crunches
+ on raw audio input
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The pre/post-roll faded the live pipeline input in/out around the beep.
+This was designed for decoded speech (low level), but after the RADE bypass
+fix the input is raw radio RX audio, which can be high level during TX.
+The pre-roll started at full-scale input amplitude, producing an audible
+crunch at the start of each beep activation.
+
+The fix is simply to remove the pre/post-roll entirely. The pregenSamples_
+pattern already includes 10ms of silence at both ends, and each tone segment
+already has a 5ms Hann attack/release envelope — no other transitions exist
+that need smoothing. globalRampSamples_ is no longer a member; the ramp size
+is used only as a local during pattern pre-generation.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/pipeline/BeepStep.cpp | 19 ++-----------------
+ src/pipeline/BeepStep.h   |  1 -
+ 2 files changed, 2 insertions(+), 18 deletions(-)
+
+diff --git a/src/pipeline/BeepStep.cpp b/src/pipeline/BeepStep.cpp
+index 8249dc4b..28e0f404 100644
+--- a/src/pipeline/BeepStep.cpp
++++ b/src/pipeline/BeepStep.cpp
+@@ -12,7 +12,6 @@ BeepStep::BeepStep(int sampleRate, int frequency,
+     , isActiveFn_(isActiveFn)
+     , onCompleteFn_(onCompleteFn)
+     , samplesToGenerate_(0)
+-    , globalRampSamples_((sampleRate * 5) / 1000)
+     , sampleCtr_(0)
+     , playing_(false)
+ {
+@@ -23,7 +22,7 @@ BeepStep::BeepStep(int sampleRate, int frequency,
+     pregenSamples_ = std::make_unique<short[]>(samplesToGenerate_);
+     execOutput_    = std::make_unique<short[]>(samplesToGenerate_);
+ 
+-    int ramp = globalRampSamples_;
++    int ramp = (sampleRate * 5) / 1000;
+     double phase = 0.0;
+     double phaseStep = M_2PI * frequency / sampleRate;
+     int idx = 0;
+@@ -70,21 +69,7 @@ short* BeepStep::execute(short* inputSamples, int numInputSamples, int* numOutpu
+         short outSample;
+ 
+         if (playing_ && sampleCtr_ < samplesToGenerate_) {
+-            // Mute pre-roll: fade live input to silence over first 5ms
+-            if (sampleCtr_ < globalRampSamples_) {
+-                int scale = 32767 - sampleCtr_ * 32767 / globalRampSamples_;
+-                outSample = static_cast<short>((int)inputSamples[index] * scale / 32767);
+-            }
+-            // Mute post-roll: fade live input back in over last 5ms
+-            else if (sampleCtr_ >= samplesToGenerate_ - globalRampSamples_) {
+-                int scale = (sampleCtr_ - (samplesToGenerate_ - globalRampSamples_)) * 32767 / globalRampSamples_;
+-                outSample = static_cast<short>((int)inputSamples[index] * scale / 32767);
+-            }
+-            // Pure pre-generated beep
+-            else {
+-                outSample = pregenSamples_[sampleCtr_];
+-            }
+-            sampleCtr_++;
++            outSample = pregenSamples_[sampleCtr_++];
+         } else if (playing_) {
+             // Pattern complete — passthrough + fire callback once
+             outSample = inputSamples[index];
+diff --git a/src/pipeline/BeepStep.h b/src/pipeline/BeepStep.h
+index 1f5bd16a..6949a3b6 100644
+--- a/src/pipeline/BeepStep.h
++++ b/src/pipeline/BeepStep.h
+@@ -29,7 +29,6 @@ private:
+     realtime_fp<bool()> isActiveFn_;
+     realtime_fp<void(BeepStep&)> onCompleteFn_;
+     int samplesToGenerate_;
+-    int globalRampSamples_;
+     int sampleCtr_;
+     bool playing_;
+     std::unique_ptr<short[]> pregenSamples_;
 -- 
 2.52.0
 
