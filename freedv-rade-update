@@ -393,6 +393,10 @@ if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch, tag or PR(s)?" "[N
     done
 fi
 
+if (( fastupdt == 1 )) && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
+    read -r -p "Enter the commit git#:" cname
+fi
+
 if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
     patches=()
     _bdir="/home/${user}/freedv-rade-build"
@@ -453,10 +457,6 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
     fi
 fi
 
-if (( fastupdt == 1 )) && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
-    read -r -p "Enter the commit git#:" cname
-fi
-
 if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )) && (( switch != 1 )); then
 # Ask to backup with the current version
     echo -e "\nYou currently have no backup of FreeDV-RADE."
@@ -508,12 +508,12 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
             updt_str="built with merged PRs: ${prbranches[*]}"
         fi
 
-        if (( ${#patches[@]} > 0 )); then
-            updt_str="$updt_str and patched with ${patches[@]}"
+        if (( ${#cname} > 0 )); then
+            updt_str="$updt_str at commit $cname"
         fi
 
-        if (( ${#cname} >0 )); then
-            updt_str="$updt_str at commit $cname"
+        if (( ${#patches[@]} > 0 )); then
+            updt_str="$updt_str and patched with ${patches[@]}"
         fi
         echo "FreeDV will be $updt_str"
     fi
