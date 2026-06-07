@@ -1,39 +1,60 @@
 diff --git a/src/pipeline/BeepStep.cpp b/src/pipeline/BeepStep.cpp
-index 681c25e5..be7abe5f 100644
---- a/src/pipeline/BeepStep.cpp
+new file mode 100644
+index 00000000..1b4a5d9a
+--- /dev/null
 +++ b/src/pipeline/BeepStep.cpp
-@@ -32,36 +32,67 @@
- //
- //=========================================================================
- 
--#include <cmath>
+@@ -0,0 +1,167 @@
++//=========================================================================
++// Name:            BeepStep.cpp
++// Purpose:         Describes a beep generator step in the audio pipeline.
++//
++// Authors:         Mooneer Salem
++// License:
++//
++// All rights reserved.
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions
++// are met:
++//
++// - Redistributions of source code must retain the above copyright
++// notice, this list of conditions and the following disclaimer.
++//
++// - Redistributions in binary form must reproduce the above copyright
++// notice, this list of conditions and the following disclaimer in the
++// documentation and/or other materials provided with the distribution.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++// ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
++// OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
++// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
++// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
++// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
++// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
++// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++//
++//=========================================================================
++
 +#include <algorithm>
- #include <cassert>
++#include <cassert>
 +#include <cmath>
- 
- #include "BeepStep.h"
- 
--// M_PI is not available on some compilers, so define it here just in case.
- #ifndef M_PI
-     #define M_PI 3.1415926535897932384626433832795
- #endif
- 
--BeepStep::BeepStep(int sampleRate, int frequency, int durationMs, realtime_fp<void(BeepStep&)> const& onCompleteFn)
++
++#include "BeepStep.h"
++
++#ifndef M_PI
++    #define M_PI 3.1415926535897932384626433832795
++#endif
++
 +BeepStep::BeepStep(int sampleRate, int frequency, std::initializer_list<BeepSegment> pattern,
 +                   realtime_fp<void(BeepStep&)> const& onCompleteFn)
-     : sampleRate_(sampleRate)
--    , frequency_(frequency)
-     , onCompleteFn_(onCompleteFn)
--    
--    // SR = (samples / 1s) * (1s / 1000ms) = samples / msec
--    , samplesToGenerate_((sampleRate * durationMs) / 1000)
--
-     , sampleCtr_(0)
++    : sampleRate_(sampleRate)
++    , onCompleteFn_(onCompleteFn)
++    , sampleCtr_(0)
 +    , pendingReset_(false)
- {
--    // Pre-allocate buffers so we don't have to do so during real-time operation.
--    outputSamples_ = std::make_unique<short[]>(sampleRate);
--    assert(outputSamples_ != nullptr);
++{
 +    int totalSamples = 0;
 +    for (auto& seg : pattern)
 +        totalSamples += (sampleRate * seg.durationMs) / 1000;
@@ -71,44 +92,39 @@ index 681c25e5..be7abe5f 100644
 +    }
 +
 +    assert(idx == totalSamples);
- }
- 
- BeepStep::~BeepStep()
- {
-     // empty
- }
--    
-+
- int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
- {
-     return sampleRate_;
-@@ -70,37 +101,68 @@ int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
- int BeepStep::getOutputSampleRate() const FREEDV_NONBLOCKING
- {
-     return sampleRate_;
--}    
 +}
- 
- short* BeepStep::execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING
- {
-+    // Apply a deferred reset (set by reset() called from onCompleteFn_) at the
-+    // entry point so it never triggers a mid-buffer restart.
++
++BeepStep::~BeepStep()
++{
++    // empty
++}
++
++int BeepStep::getInputSampleRate() const FREEDV_NONBLOCKING
++{
++    return sampleRate_;
++}
++
++int BeepStep::getOutputSampleRate() const FREEDV_NONBLOCKING
++{
++    return sampleRate_;
++}
++
++short* BeepStep::execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING
++{
++    // Apply a deferred reset at the entry point so it never triggers a mid-buffer restart.
 +    if (pendingReset_)
 +    {
 +        sampleCtr_ = 0;
 +        pendingReset_ = false;
 +    }
 +
-     *numOutputSamples = numInputSamples;
- 
--    short* outPtr = outputSamples_.get();
++    *numOutputSamples = numInputSamples;
++
 +    bool completed = false;
-     for (int index = 0; index < numInputSamples; index++)
-     {
-         if (sampleCtr_ < samplesToGenerate_)
-         {
--            constexpr int TONE_AMPLITUDE = 8192; // TBD
--            outPtr[index] = TONE_AMPLITUDE * cosf((2.0 * M_PI * frequency_ * sampleCtr_) / sampleRate_);
++    for (int index = 0; index < numInputSamples; index++)
++    {
++        if (sampleCtr_ < samplesToGenerate_)
++        {
 +            short outSample;
 +
 +            if (sampleCtr_ < globalRampSamples_)
@@ -134,108 +150,167 @@ index 681c25e5..be7abe5f 100644
 +
 +            execOutput_[index] = outSample;
 +            sampleCtr_++;
-         }
-         else
-         {
--            outPtr[index] = inputSamples[index];
++        }
++        else
++        {
 +            execOutput_[index] = inputSamples[index];
 +            if (!completed)
 +            {
 +                completed = true;
 +                onCompleteFn_(*this); // sets g_totBeepActive=false; calls reset() -> pendingReset_=true
 +            }
-         }
--
--        if (sampleCtr_ == samplesToGenerate_)
--        {
--            onCompleteFn_(*this);
--        }
--
--        sampleCtr_++;
-     }
- 
--    return outPtr;
++        }
++    }
++
 +    return execOutput_.get();
- }
- 
- void BeepStep::reset() FREEDV_NONBLOCKING
- {
--    sampleCtr_ = 0;
++}
++
++void BeepStep::reset() FREEDV_NONBLOCKING
++{
 +    // Defer the actual reset to the next execute() entry so we never restart
 +    // mid-buffer when called from within onCompleteFn_.
 +    pendingReset_ = true;
- }
++}
 diff --git a/src/pipeline/BeepStep.h b/src/pipeline/BeepStep.h
-index 573dd488..dd47b78f 100644
---- a/src/pipeline/BeepStep.h
+new file mode 100644
+index 00000000..dd47b78f
+--- /dev/null
 +++ b/src/pipeline/BeepStep.h
-@@ -35,29 +35,39 @@
- #ifndef AUDIO_PIPELINE__BEEP_STEP_H
- #define AUDIO_PIPELINE__BEEP_STEP_H
- 
+@@ -0,0 +1,73 @@
++//=========================================================================
++// Name:            BeepStep.h
++// Purpose:         Describes a beep generator step in the audio pipeline.
++//
++// Authors:         Mooneer Salem
++// License:
++//
++// All rights reserved.
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions
++// are met:
++//
++// - Redistributions of source code must retain the above copyright
++// notice, this list of conditions and the following disclaimer.
++//
++// - Redistributions in binary form must reproduce the above copyright
++// notice, this list of conditions and the following disclaimer in the
++// documentation and/or other materials provided with the distribution.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++// ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
++// OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
++// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
++// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
++// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
++// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
++// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++//
++//=========================================================================
++
++#ifndef AUDIO_PIPELINE__BEEP_STEP_H
++#define AUDIO_PIPELINE__BEEP_STEP_H
++
 +#include <initializer_list>
- #include <memory>
- #include "IPipelineStep.h"
- #include "realtime_fp.h"
- 
++#include <memory>
++#include "IPipelineStep.h"
++#include "realtime_fp.h"
++
 +struct BeepSegment {
 +    int durationMs;
 +    bool isTone;
 +};
 +
- class BeepStep : public IPipelineStep
- {
- public:
--    BeepStep(int sampleRate, int frequency, int durationMs, realtime_fp<void(BeepStep&)> const& onCompleteFn);
++class BeepStep : public IPipelineStep
++{
++public:
 +    BeepStep(int sampleRate, int frequency, std::initializer_list<BeepSegment> pattern,
 +             realtime_fp<void(BeepStep&)> const& onCompleteFn);
-     virtual ~BeepStep();
--    
++    virtual ~BeepStep();
 +
-     virtual int getInputSampleRate() const FREEDV_NONBLOCKING override;
--    virtual int getOutputSampleRate() const FREEDV_NONBLOCKING override;    
++    virtual int getInputSampleRate() const FREEDV_NONBLOCKING override;
 +    virtual int getOutputSampleRate() const FREEDV_NONBLOCKING override;
-     virtual short* execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING override;
-     virtual void reset() FREEDV_NONBLOCKING override;
- 
- private:
-     int sampleRate_;
--    int frequency_;
-     realtime_fp<void(BeepStep&)> onCompleteFn_;
- 
-     int samplesToGenerate_;
++    virtual short* execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING override;
++    virtual void reset() FREEDV_NONBLOCKING override;
++
++private:
++    int sampleRate_;
++    realtime_fp<void(BeepStep&)> onCompleteFn_;
++
++    int samplesToGenerate_;
 +    int globalRampSamples_;
-     int sampleCtr_;
--    std::unique_ptr<short[]> outputSamples_;
++    int sampleCtr_;
 +    bool pendingReset_;
 +
 +    std::unique_ptr<short[]> pregenSamples_;
 +    std::unique_ptr<short[]> execOutput_;
- };
- 
- #endif // AUDIO_PIPELINE__BEEP_STEP_H
++};
++
++#endif // AUDIO_PIPELINE__BEEP_STEP_H
+diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
+index 4cc9cabe..3c35a496 100644
+--- a/src/pipeline/CMakeLists.txt
++++ b/src/pipeline/CMakeLists.txt
+@@ -1,4 +1,5 @@
+ add_library(fdv_audio_pipeline_extra STATIC
++    BeepStep.cpp
+     ComputeRfSpectrumStep.cpp
+     EqualizerStep.cpp
+     FreeDVReceiveStep.cpp
 diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
-index 20108537..3956c4c2 100644
+index 5c1049db..4e3f46e4 100644
 --- a/src/pipeline/TxRxThread.cpp
 +++ b/src/pipeline/TxRxThread.cpp
-@@ -516,10 +516,16 @@ void TxRxThread::initializePipeline_()
-         // TOT beep step: replaces speaker audio with a warning beep during countdown
-         auto totBeepBypass = new AudioPipeline(outputSampleRate_, outputSampleRate_);
-         auto totBeepActivePath = new AudioPipeline(outputSampleRate_, outputSampleRate_);
--        auto totBeepPlayback = new BeepStep(outputSampleRate_, 1000, 250, +[](BeepStep& thisStep) FREEDV_NONBLOCKING {
--            g_totBeepActive.store(false, std::memory_order_release);
--            thisStep.reset();
--        });
+@@ -61,6 +61,7 @@ using namespace std::chrono_literals;
+ #include "ToneInterfererStep.h"
+ #include "ComputeRfSpectrumStep.h"
+ #include "FreeDVReceiveStep.h"
++#include "BeepStep.h"
+ #include "MuteStep.h"
+ #include "LinkStep.h"
+ 
+@@ -514,30 +515,23 @@ void TxRxThread::initializePipeline_()
+             g_rxUserdata->spkEqLock);
+         pipeline_->appendPipelineStep(equalizerStep);
+ 
+-        // TOT beep step: replaces speaker audio with a warning beep during countdown
++        // TOT beep step: replaces speaker audio with a warning beep during countdown.
 +        // Morse '5' (. . . . .) at 15 WPM, 750 Hz: dit=80ms, inter-element gap=80ms.
 +        // 10ms silent pre/post-roll gives the mute ramp (5ms) room before the
 +        // first dit and after the last dit.
+         auto totBeepBypass = new AudioPipeline(outputSampleRate_, outputSampleRate_);
+         auto totBeepActivePath = new AudioPipeline(outputSampleRate_, outputSampleRate_);
+-        auto totBeepPlayback = new PlaybackStep(
+-            outputSampleRate_,
+-            +[]() FREEDV_NONBLOCKING { return g_totBeepFs; },
+-            +[]() FREEDV_NONBLOCKING {
+-                return g_totBeepActive.load(std::memory_order_acquire)
+-                       ? g_sfTotBeep.load(std::memory_order_acquire)
+-                       : nullptr;
+-            },
+-            []() {
+-                log_info("TOT beep done");
+-                auto tmp = g_sfTotBeep.load(std::memory_order_acquire);
+-                if (tmp) sf_close(tmp);
+-                g_sfTotBeep.store(nullptr, std::memory_order_release);
 +        auto totBeepPlayback = new BeepStep(outputSampleRate_, 750,
 +            {{10,false},{80,true},{80,false},{80,true},{80,false},{80,true},
 +             {80,false},{80,true},{80,false},{80,true},{10,false}},
 +            +[](BeepStep& thisStep) FREEDV_NONBLOCKING {
-+                g_totBeepActive.store(false, std::memory_order_release);
+                 g_totBeepActive.store(false, std::memory_order_release);
+-            }
+-        );
 +                thisStep.reset();
 +            });
          totBeepActivePath->appendPipelineStep(totBeepPlayback);
          auto totBeepEitherOr = new EitherOrStep(
              +[]() FREEDV_NONBLOCKING {
+-                return g_totBeepActive.load(std::memory_order_acquire)
+-                       && g_sfTotBeep.load(std::memory_order_acquire) != nullptr;
++                return g_totBeepActive.load(std::memory_order_acquire);
+             },
+             totBeepActivePath,
+             totBeepBypass
