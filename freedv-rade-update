@@ -203,7 +203,15 @@ if (( ${#prbranches[@]} == 0 )); then
         echo "Using combined PRs: ${prbranches[*]}"
     fi
 
-# Apply a patches if there are any
+# Use a specific commit (before applying patches so patches land on top of it)
+if (( ${#cname} > 0 )); then
+    if ! git checkout --detach $cname; then
+        echo "ERROR: Can't find that git#"
+        exit 1
+    fi
+fi
+
+# Apply patches if there are any
 if (( ${#patches[@]} > 0 )); then
     for patch in "${patches[@]}"; do
     echo "Applying $patch"
@@ -214,14 +222,6 @@ if (( ${#patches[@]} > 0 )); then
     done
     git -c user.email="freedv@localhost" -c user.name="FreeDV Update" commit -a -m "Applied patches: ${patches[*]}"
     printf '%s\n' "${patches[@]}" > "/home/${user}/freedv-rade-build/.last-patches"
-fi
-
-# Use a specific commit
-if (( ${#cname} > 0 )); then
-    if ! git checkout --detach $cname; then
-        echo "ERROR: Can't find that git#"
-        exit 1
-    fi
 fi
 
 cd build_linux || exit 1
