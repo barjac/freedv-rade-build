@@ -401,10 +401,6 @@ if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch, tag or PR(s)?" "[N
     done
 fi
 
-if (( fastupdt == 1 )) && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
-    read -r -p "Enter the commit git#:" cname
-fi
-
 if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
     patches=()
     _bdir="/home/${user}/freedv-rade-build"
@@ -465,17 +461,22 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
     fi
 fi
 
-# Auto-detect per-patch base commit from sidecar .commit files (only if user didn't specify one)
-if (( fastupdt == 1 )) && (( ${#patches[@]} > 0 )) && [[ -z "$cname" ]]; then
+# Auto-detect base commit from per-patch sidecar .commit files
+if (( fastupdt == 1 )) && (( ${#patches[@]} > 0 )); then
     for _p in "${patches[@]}"; do
         _sidecar="/home/${user}/freedv-rade-build/${_p%.patch}.commit"
         if [[ -f "$_sidecar" ]]; then
             _sc=$(tr -d '[:space:]' < "$_sidecar")
-            echo -e "\nNote: patch $(basename "$_p") requires base commit $_sc — applying automatically."
+            echo -e "\nPatch $(basename "$_p") requires base commit $_sc."
             cname="$_sc"
             break
         fi
     done
+fi
+
+# Ask about a specific commit (skipped if a patch sidecar already set one)
+if (( fastupdt == 1 )) && [[ -z "$cname" ]] && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
+    read -r -p "Enter the commit git#:" cname
 fi
 
 if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )) && (( switch != 1 )); then
