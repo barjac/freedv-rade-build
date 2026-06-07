@@ -465,6 +465,19 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
     fi
 fi
 
+# Auto-detect per-patch base commit from sidecar .commit files (only if user didn't specify one)
+if (( fastupdt == 1 )) && (( ${#patches[@]} > 0 )) && [[ -z "$cname" ]]; then
+    for _p in "${patches[@]}"; do
+        _sidecar="/home/${user}/freedv-rade-build/${_p%.patch}.commit"
+        if [[ -f "$_sidecar" ]]; then
+            _sc=$(tr -d '[:space:]' < "$_sidecar")
+            echo -e "\nNote: patch $(basename "$_p") requires base commit $_sc — applying automatically."
+            cname="$_sc"
+            break
+        fi
+    done
+fi
+
 if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )) && (( switch != 1 )); then
 # Ask to backup with the current version
     echo -e "\nYou currently have no backup of FreeDV-RADE."
