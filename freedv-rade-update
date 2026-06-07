@@ -281,7 +281,14 @@ desktop=
 showcurrent() {
 currdir=$(pwd)
 cd $basedir/freedv-rade/freedv-gui
-echo -e "\nNOTE: Your current system is using $(git branch --show-current 2>/dev/null || echo HEAD) @ $(git rev-parse --short HEAD 2>/dev/null)\n"
+_build_info="$(git branch --show-current 2>/dev/null || echo HEAD) @ $(git rev-parse --short HEAD 2>/dev/null)"
+_patch_info=""
+_last_file="/home/${user}/freedv-rade-build/.last-patches"
+if [[ -f "$_last_file" ]] && [[ -s "$_last_file" ]]; then
+    mapfile -t _last_patches < "$_last_file"
+    _patch_info=" with patches: $(IFS=', '; echo "${_last_patches[*]}" | sed 's|patches/||g')"
+fi
+echo -e "\nNOTE: Your current system is using ${_build_info}${_patch_info}\n"
 cd $currdir
 }
 
