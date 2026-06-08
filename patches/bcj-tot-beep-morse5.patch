@@ -438,6 +438,16 @@ index 00000000..6949a3b6
 +};
 +
 +#endif // __BEEP_STEP_H__
+diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
+index 4cc9cabe..3c35a496 100644
+--- a/src/pipeline/CMakeLists.txt
++++ b/src/pipeline/CMakeLists.txt
+@@ -1,4 +1,5 @@
+ add_library(fdv_audio_pipeline_extra STATIC
++    BeepStep.cpp
+     ComputeRfSpectrumStep.cpp
+     EqualizerStep.cpp
+     FreeDVReceiveStep.cpp
 diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
 index 5c1049db..a43a27ff 100644
 --- a/src/pipeline/TxRxThread.cpp
