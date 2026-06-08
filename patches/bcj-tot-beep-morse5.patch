@@ -296,10 +296,10 @@ index e5282ffc..56306ded 100644
  //-------------------------------------------------------------------------
 diff --git a/src/pipeline/BeepStep.cpp b/src/pipeline/BeepStep.cpp
 new file mode 100644
-index 00000000..5924d5ca
+index 00000000..78d4489d
 --- /dev/null
 +++ b/src/pipeline/BeepStep.cpp
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,108 @@
 +#include <cmath>
 +#include "BeepStep.h"
 +
@@ -383,12 +383,16 @@ index 00000000..5924d5ca
 +        if (playing_ && sampleCtr_ < samplesToGenerate_) {
 +            outSample = pregenSamples_[sampleCtr_++];
 +        } else if (playing_) {
-+            outSample = inputSamples[index];
++            // Beep just finished: silence the rest of this frame so that radio
++            // audio passing through the bypass pipeline doesn't leak to the speaker.
++            outSample = 0;
 +            if (!completed) {
 +                completed = true;
 +                playing_ = false;
 +                onCompleteFn_(*this);
 +            }
++        } else if (completed) {
++            outSample = 0;  // silence remainder of completion frame
 +        } else {
 +            outSample = inputSamples[index];
 +        }
