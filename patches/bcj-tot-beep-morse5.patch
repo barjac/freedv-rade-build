@@ -1,3 +1,58 @@
+diff --git a/src/gui/dialogs/log_entry.cpp b/src/gui/dialogs/log_entry.cpp
+index ba378061..2251e4bf 100644
+--- a/src/gui/dialogs/log_entry.cpp
++++ b/src/gui/dialogs/log_entry.cpp
+@@ -20,6 +20,7 @@
+ //==========================================================================
+ 
+ #include "../../main.h"
++#include "../../logging/WSJTXNetworkLogger.h"
+ #include <wx/wx.h>
+ #include <wx/valnum.h>
+ #include "log_entry.h"
+@@ -208,19 +209,29 @@ void LogEntryDialog::OnOK(wxCommandEvent&)
+         freqHz = (int64_t)freqDouble;
+         
+         std::time_t timeSinceUnixEpoch = logTime_.GetTicks();
+-        
+-        logger_->logContact(
+-            std::chrono::system_clock::from_time_t(timeSinceUnixEpoch),
+-            (const char*)dxCall_->GetValue().ToUTF8(), 
+-            (const char*)dxGrid_->GetValue().ToUTF8(),
+-            (const char*)wxGetApp().appConfiguration.reportingConfiguration.reportingCallsign->ToUTF8(),
+-            (const char*)wxGetApp().appConfiguration.reportingConfiguration.reportingGridSquare->ToUTF8(),
+-            freqHz,
+-            (const char*)rxReport_->GetValue().ToUTF8(),
+-            (const char*)txReport_->GetValue().ToUTF8(),
+-            (const char*)name_->GetValue().ToUTF8(),
+-            (const char*)comments_->GetValue().ToUTF8(),
+-            snr_);
++
++        auto logger = logger_;
++        if (logger == nullptr && wxGetApp().appConfiguration.reportingConfiguration.udpReportingEnabled)
++        {
++            logger = std::make_shared<WSJTXNetworkLogger>(
++                (const char*)wxGetApp().appConfiguration.reportingConfiguration.udpReportingHostname->ToUTF8(),
++                wxGetApp().appConfiguration.reportingConfiguration.udpReportingPort);
++        }
++        if (logger != nullptr)
++        {
++            logger->logContact(
++                std::chrono::system_clock::from_time_t(timeSinceUnixEpoch),
++                (const char*)dxCall_->GetValue().ToUTF8(),
++                (const char*)dxGrid_->GetValue().ToUTF8(),
++                (const char*)wxGetApp().appConfiguration.reportingConfiguration.reportingCallsign->ToUTF8(),
++                (const char*)wxGetApp().appConfiguration.reportingConfiguration.reportingGridSquare->ToUTF8(),
++                freqHz,
++                (const char*)rxReport_->GetValue().ToUTF8(),
++                (const char*)txReport_->GetValue().ToUTF8(),
++                (const char*)name_->GetValue().ToUTF8(),
++                (const char*)comments_->GetValue().ToUTF8(),
++                snr_);
++        }
+         this->EndModal(wxOK);
+     }
+ }
 diff --git a/src/main.cpp b/src/main.cpp
 index 565bdc1a..b87203db 100644
 --- a/src/main.cpp
@@ -114,6 +169,18 @@ index 565bdc1a..b87203db 100644
          // Make sure QSY button becomes disabled after stop.
          if (m_reporterDialog != nullptr)
          {
+diff --git a/src/main.h b/src/main.h
+index 98b685ec..f8b4f578 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -599,6 +599,7 @@ class MainFrame : public TopFrame
+         bool        validateSoundCardSetup();
+         
+         void loadConfiguration_();
++        void restoreCallsignListFromCsv_();
+         void resetStats_();
+         void exportConfiguration_(wxConfigBase* config);
+         void setConfiguration_(wxConfigBase* config);
 diff --git a/src/ongui.cpp b/src/ongui.cpp
 index e5282ffc..56306ded 100644
 --- a/src/ongui.cpp
@@ -556,3 +623,18 @@ index 5c1049db..a43a27ff 100644
              (tmpVkTx && NonblockingWxGetApp().appConfiguration.monitorVoiceKeyerAudio.getWithoutProcessing()) ||
              (tmpTx && NonblockingWxGetApp().appConfiguration.monitorTxAudio.getWithoutProcessing()) ||
              (!tmpVkTx && ((tmpHalfDuplex && !tmpTx) || !tmpHalfDuplex)) ||
+diff --git a/src/playrec.cpp b/src/playrec.cpp
+index 6a080ec6..7f1b0b69 100644
+--- a/src/playrec.cpp
++++ b/src/playrec.cpp
+@@ -39,9 +39,8 @@ std::atomic<SNDFILE*>            g_sfRecFileFromModulator;
+ std::atomic<bool>                g_recFileFromModulator;
+ 
+ // Time-Out Timer beep: injected into the speaker output path during the warning window.
+-std::atomic<SNDFILE*> g_sfTotBeep(nullptr);
+ std::atomic<bool>     g_totBeepActive(false);
+-int                   g_totBeepFs = 8000;
++
+ int                 g_recFromModulatorSamples;
+ int                 g_recFileFromModulatorEventId;
+ 
