@@ -467,7 +467,7 @@ if (( fastupdt == 1 )) && (( ${#patches[@]} > 0 )); then
         _sidecar="/home/${user}/freedv-rade-build/${_p%.patch}.commit"
         if [[ -f "$_sidecar" ]]; then
             _sc=$(tr -d '[:space:]' < "$_sidecar")
-            echo -e "\nPatch $(basename "$_p") requires base commit $_sc."
+            echo -e "\nPatch $(basename "$_p") is using base commit $_sc."
             cname="$_sc"
             break
         fi
