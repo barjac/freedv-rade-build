@@ -1,5 +1,5 @@
 diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
-index 2be0cf69..a1791d20 100644
+index 2be0cf69..3bc40d98 100644
 --- a/src/gui/dialogs/freedv_reporter.cpp
 +++ b/src/gui/dialogs/freedv_reporter.cpp
 @@ -148,6 +148,7 @@ void FreeDVReporterDialog::createColumn_(int col, bool visible)
@@ -10,3 +10,21 @@ index 2be0cf69..a1791d20 100644
              break;
          case LAST_UPDATE_DATE_COL:
              colName = wxT("Last Update");
+@@ -3424,7 +3425,7 @@ void FreeDVReporterDialog::FreeDVReporterDataModel::onUserConnectFn_(std::string
+         temp->lastRxCallsign = parent_->UNKNOWN_STR;
+         temp->lastRxMode = parent_->UNKNOWN_STR;
+         temp->snrVal = UNKNOWN_SNR_VAL;
+-        temp->snr = parent_->UNKNOWN_STR;
++        temp->snr = parent_->UNKNOWN_STR + wxT(" ");
+         
+         // Default to sane colors for rows. If we need to highlight, the timer will change
+         // these later. 
+@@ -3698,7 +3699,7 @@ void FreeDVReporterDialog::FreeDVReporterDataModel::onReceiveUpdateFn_(std::stri
+             iter->second->lastRxCallsign = receivedCallsignWx;
+             iter->second->lastRxMode = rxModeWx;
+ 
+-            wxString snrString = wxNumberFormatter::ToString(snr, 1);
++            wxString snrString = wxNumberFormatter::ToString(snr, 1) + wxT(" ");
+             if (receivedCallsign == "" && rxMode == "")
+             {
+                 // Frequency change--blank out SNR too.
