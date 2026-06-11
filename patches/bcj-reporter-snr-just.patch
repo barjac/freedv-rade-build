@@ -1,5 +1,5 @@
 diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
-index 2be0cf69..20233d05 100644
+index 2be0cf69..786067da 100644
 --- a/src/gui/dialogs/freedv_reporter.cpp
 +++ b/src/gui/dialogs/freedv_reporter.cpp
 @@ -148,6 +148,7 @@ void FreeDVReporterDialog::createColumn_(int col, bool visible)
@@ -15,7 +15,7 @@ index 2be0cf69..20233d05 100644
      auto renderer = colObj->GetRenderer();
      renderer->SetAlignment(alignment);
 +    if (col == SNR_COL)
-+        colObj->SetAlignment(wxALIGN_CENTER);
++        colObj->SetAlignment(wxALIGN_RIGHT);
      if (ellipsize)
      {
          renderer->EnableEllipsize(wxELLIPSIZE_END);
