@@ -1,0 +1,12 @@
+diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
+index 2be0cf69..a1791d20 100644
+--- a/src/gui/dialogs/freedv_reporter.cpp
++++ b/src/gui/dialogs/freedv_reporter.cpp
+@@ -148,6 +148,7 @@ void FreeDVReporterDialog::createColumn_(int col, bool visible)
+         case SNR_COL:
+             colName = wxT("SNR");
+             minWidth = 60;
++            alignment = wxALIGN_RIGHT | wxALIGN_CENTRE_VERTICAL;
+             break;
+         case LAST_UPDATE_DATE_COL:
+             colName = wxT("Last Update");
