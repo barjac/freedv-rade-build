@@ -133,6 +133,7 @@ cd ${basedir}/freedv-rade/freedv-gui || exit 1
 echo "Resetting any patches or edits"
 git reset --hard HEAD
 git clean -fd
+rm -f "/home/${user}/freedv-rade-build/.last-patches"
 
 echo "Switching to $default and syncing with origin"
 git fetch origin
