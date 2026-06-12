@@ -315,9 +315,11 @@ write_build_index() {
     if [[ -f "$_idx_file" ]] && [[ -s "$_idx_file" ]]; then
         _next=$(( $(awk '{print $1+0}' "$_idx_file" | sort -n | tail -1) + 1 ))
     fi
-    printf '%d | %s | %s\n' "$_next" "$details" "$(date '+%Y-%m-%d %H:%M')" >> "$_idx_file"
+    local _entry
+    _entry="$(printf '%d | %s | %s' "$_next" "$details" "$(date '+%Y-%m-%d %H:%M')")"
+    echo "$_entry" >> "$_idx_file"
     echo "$_next" > "$_build_file"
-    echo "Build #$_next recorded in index."
+    echo "Build #$_next recorded: $_entry"
 }
 
 # Show details of the current installed build
