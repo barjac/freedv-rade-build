@@ -307,7 +307,7 @@ write_build_index() {
     if [[ -f "$_idx_file" ]] && [[ -s "$_idx_file" ]]; then
         _next=$(( $(awk '{print $1+0}' "$_idx_file" | sort -n | tail -1) + 1 ))
     fi
-    printf '%d | %s | %s\n' "$_next" "$details" "$(date +%Y-%m-%d)" >> "$_idx_file"
+    printf '%d | %s | %s\n' "$_next" "$details" "$(date '+%Y-%m-%d %H:%M')" >> "$_idx_file"
     echo "$_next" > "$_build_file"
     echo "Build #$_next recorded in index."
 }
