@@ -129,6 +129,10 @@ done
 fastupdt() {
 cd ${basedir}/freedv-rade/freedv-gui || exit 1
 
+_bi_base=""
+_bi_prs=()
+_bi_patches=()
+
 # Remove any patched/edited files and sync to origin
 echo "Resetting any patches or edits"
 git reset --hard HEAD || { echo "ERROR: git reset failed"; exit 1; }
@@ -138,6 +142,7 @@ echo "Switching to $default and syncing with origin"
 git fetch origin || { echo "ERROR: git fetch failed - check network connection"; exit 1; }
 git checkout -B $default origin/$default || { echo "ERROR: failed to reset $default to origin/$default"; exit 1; }
 git reset --hard origin/$default || { echo "ERROR: git reset to origin/$default failed"; exit 1; }
+_bi_base="${default}@$(git rev-parse --short HEAD)"
 
 # Ensure git has an identity for merge commits; use a fallback if not configured
 if ! git config user.email >/dev/null 2>&1; then
@@ -166,6 +171,7 @@ if (( ${#prbranches[@]} == 0 )); then
                 exit 1
             fi
             echo "PR #$prnumber merged OK"
+            _bi_prs+=("pr:${prnumber}@$(git rev-parse --short HEAD)")
         elif [[ "$entry" == *:* ]]; then
             echo "ERROR: Fork branch '$entry' not in upstream. Use a PR number instead."
             exit 1
@@ -175,6 +181,7 @@ if (( ${#prbranches[@]} == 0 )); then
                 exit 1
             fi
             git pull
+            _bi_base="${entry}@$(git rev-parse --short HEAD)"
         fi
         echo "Using branch $entry"
     else
@@ -199,6 +206,7 @@ if (( ${#prbranches[@]} == 0 )); then
                 exit 1
             fi
             echo "PR #$prnumber merged OK"
+            _bi_prs+=("pr:${prnumber}@$(git rev-parse --short HEAD)")
         done
         echo "Using combined PRs: ${prbranches[*]}"
     fi
@@ -209,6 +217,8 @@ if (( ${#cname} > 0 )); then
         echo "ERROR: Can't find that git#"
         exit 1
     fi
+    _bi_base="pinned:$(git rev-parse --short HEAD)"
+    _bi_prs=()
 fi
 
 # Apply patches if there are any
@@ -219,6 +229,7 @@ if (( ${#patches[@]} > 0 )); then
         echo "$patch failed to apply.  pwd= $(pwd)"
         exit 1
     fi
+    _bi_patches+=("$patch")
     done
     git add -A
     git -c user.email="freedv@localhost" -c user.name="FreeDV Update" commit -m "Applied patches: ${patches[*]}"
@@ -256,6 +267,16 @@ if (( make_exit != 0 )); then
     fi
 fi
 cd || exit 1
+if (( make_exit == 0 )); then
+    _bi_details="$_bi_base"
+    for _pr in "${_bi_prs[@]}"; do
+        _bi_details="$_bi_details $_pr"
+    done
+    if (( ${#_bi_patches[@]} > 0 )); then
+        _bi_details="$_bi_details | ${_bi_patches[*]}"
+    fi
+    write_build_index "$_bi_details"
+fi
 return $make_exit
 }
 
@@ -278,19 +299,40 @@ switch=
 desktop=
 }
 
-# Get current FreeDV-GUI branch name and git#
+write_build_index() {
+    local details="$1"
+    local _idx_file="/home/${user}/freedv-rade-build/.build_index"
+    local _build_file="${basedir}/freedv-rade/.build"
+    local _next=1
+    if [[ -f "$_idx_file" ]] && [[ -s "$_idx_file" ]]; then
+        _next=$(( $(awk '{print $1+0}' "$_idx_file" | sort -n | tail -1) + 1 ))
+    fi
+    printf '%d | %s | %s\n' "$_next" "$details" "$(date +%Y-%m-%d)" >> "$_idx_file"
+    echo "$_next" > "$_build_file"
+    echo "Build #$_next recorded in index."
+}
+
+# Show details of the current installed build
 showcurrent() {
-currdir=$(pwd)
-cd $basedir/freedv-rade/freedv-gui
-_build_info="$(git branch --show-current 2>/dev/null || echo HEAD) @ $(git rev-parse --short HEAD 2>/dev/null)"
-_patch_info=""
-_last_file="/home/${user}/freedv-rade-build/.last-patches"
-if [[ -f "$_last_file" ]] && [[ -s "$_last_file" ]]; then
-    mapfile -t _last_patches < "$_last_file"
-    _patch_info=" with patches: $(IFS=', '; echo "${_last_patches[*]}" | sed 's|patches/||g')"
-fi
-echo -e "\nNOTE: Your current system is using ${_build_info}${_patch_info}\n"
-cd $currdir
+    local currdir="$(pwd)"
+    local _idx_file="/home/${user}/freedv-rade-build/.build_index"
+    local _build_file="${basedir}/freedv-rade/.build"
+    if [[ -f "$_build_file" ]]; then
+        local _idx
+        _idx=$(tr -d '[:space:]' < "$_build_file")
+        local _record
+        _record=$(grep "^${_idx} |" "$_idx_file" 2>/dev/null)
+        if [[ -n "$_record" ]]; then
+            echo -e "\nNOTE: Current build #${_idx}: ${_record#*| }\n"
+        else
+            echo -e "\nNOTE: Build #${_idx} recorded but no index entry found\n"
+        fi
+    else
+        cd "${basedir}/freedv-rade/freedv-gui" 2>/dev/null && \
+            echo -e "\nNOTE: No build record (git: $(git branch --show-current 2>/dev/null || echo HEAD) @ $(git rev-parse --short HEAD 2>/dev/null))\n" || \
+            echo -e "\nNOTE: No build record available\n"
+        cd "$currdir"
+    fi
 }
 
 # Main routine ###################
@@ -617,6 +659,8 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
             sleep 3
             if freedv-rade-build/freedv-rade-build; then
                 echo "Full rebuild complete"
+                _commit=$(git -C "${basedir}/freedv-rade/freedv-gui" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+                write_build_index "${default}@${_commit}"
             else
                 echo "Full rebuild failed"
                 exit 1
