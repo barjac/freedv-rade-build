@@ -225,11 +225,19 @@ fi
 if (( ${#patches[@]} > 0 )); then
     for patch in "${patches[@]}"; do
     echo "Applying $patch"
-    if ! patch -p1 < /home/${user}/freedv-rade-build/$patch; then
-        echo "$patch failed to apply.  pwd= $(pwd)"
-        exit 1
+    _patch_out=$(patch -p1 --forward < /home/${user}/freedv-rade-build/$patch 2>&1)
+    _patch_exit=$?
+    echo "$_patch_out"
+    if (( _patch_exit != 0 )); then
+        if echo "$_patch_out" | grep -q "previously applied\|Skipping patch"; then
+            echo "WARNING: $patch appears already applied (included in a merged PR?) — skipping."
+        else
+            echo "$patch failed to apply.  pwd= $(pwd)"
+            exit 1
+        fi
+    else
+        _bi_patches+=("$patch")
     fi
-    _bi_patches+=("$patch")
     done
     git add -A
     git -c user.email="freedv@localhost" -c user.name="FreeDV Update" commit -m "Applied patches: ${patches[*]}"
