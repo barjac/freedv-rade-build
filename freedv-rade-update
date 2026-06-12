@@ -131,13 +131,13 @@ cd ${basedir}/freedv-rade/freedv-gui || exit 1
 
 # Remove any patched/edited files and sync to origin
 echo "Resetting any patches or edits"
-git reset --hard HEAD
-git clean -fd
+git reset --hard HEAD || { echo "ERROR: git reset failed"; exit 1; }
+git clean -fd || { echo "ERROR: git clean failed"; exit 1; }
 
 echo "Switching to $default and syncing with origin"
-git fetch origin
+git fetch origin || { echo "ERROR: git fetch failed - check network connection"; exit 1; }
 git checkout -B $default origin/$default || { echo "ERROR: failed to reset $default to origin/$default"; exit 1; }
-git reset --hard origin/$default
+git reset --hard origin/$default || { echo "ERROR: git reset to origin/$default failed"; exit 1; }
 
 # Ensure git has an identity for merge commits; use a fallback if not configured
 if ! git config user.email >/dev/null 2>&1; then
@@ -596,6 +596,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
                 echo "Restore complete."
             else
                 echo "Restore failed."
+                exit 1
             fi
         fi
 
@@ -614,7 +615,12 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         if (( update == 1 )); then 
             echo -e "\nStarting full rebuild in 3 seconds. Please be patient this will take some time ..."
             sleep 3
-            freedv-rade-build/freedv-rade-build
+            if freedv-rade-build/freedv-rade-build; then
+                echo "Full rebuild complete"
+            else
+                echo "Full rebuild failed"
+                exit 1
+            fi
         fi
 # Desktop file
         if (( desktop == 1 )); then
