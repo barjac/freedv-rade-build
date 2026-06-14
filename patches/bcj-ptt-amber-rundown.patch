@@ -83,7 +83,7 @@ index fe46f62a..afd935ca 100644
 +        // Amber during TX->RX drain: distinct from TX (red) and RX (default),
 +        // black text readable throughout.
 +        m_btnTogPTT->SetBackgroundColour(wxColour(255, 165, 0));
-+        m_btnTogPTT->SetLabel("TX Stopping");
++        m_btnTogPTT->SetLabel("TX Ending");
 +        m_btnTogPTT->Refresh();
          // Stop Time-Out Timer on TX->RX transition (user stopped, VK finished, or TOT fired).
          if (m_totTimer.IsRunning())
