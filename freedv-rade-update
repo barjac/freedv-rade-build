@@ -450,25 +450,28 @@ fi
 prbranches=()
 if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch, tag or PR(s)?" "[N/y]" "yY" "nN"; then
     _last_prs_file="/home/${user}/freedv-rade-build/.last-prs"
+    _default_input=""
 
-    # Offer to reuse recent PRs/branches
+    # Build editable default from previously used PRs/branches (strip pr: prefix)
     if [[ -f "$_last_prs_file" ]] && [[ -s "$_last_prs_file" ]]; then
-        mapfile -t _last_prs < "$_last_prs_file"
-        echo -e "\nRecent PRs/branches: ${_last_prs[*]}"
-        if confirm "Use these?" "[Y/n]" "yY" "nN"; then
-            prbranches=("${_last_prs[@]}")
-        fi
+        while IFS= read -r _line; do
+            _line="${_line#pr:}"
+            _default_input="${_default_input:+$_default_input }$_line"
+        done < "$_last_prs_file"
     fi
 
-    if (( ${#prbranches[@]} == 0 )); then
-        echo -e "\nNOTE: Enter PR numbers or a single branch name/tag. Enter a blank line when done."
-        while true; do
-            read -r -p "Enter branch/tag/PR number (or press Enter to finish): " entry
-            [[ -z "$entry" ]] && break
-            [[ "$entry" =~ ^[0-9]+$ ]] && entry="pr:$entry"
-            prbranches+=("$entry")
-        done
+    echo -e "\nNOTE: Enter PR numbers and/or a branch name, space-separated."
+    [[ -n "$_default_input" ]] && echo "(Edit or clear the previous selection below)"
+    if [[ -n "$_default_input" ]]; then
+        read -r -e -i "$_default_input" -p "PR(s)/branch: " _input
+    else
+        read -r -e -p "PR(s)/branch: " _input
     fi
+
+    for entry in $_input; do
+        [[ "$entry" =~ ^[0-9]+$ ]] && entry="pr:$entry"
+        prbranches+=("$entry")
+    done
 fi
 
 if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
