@@ -25,7 +25,7 @@ index f8b4f578..e2490c1f 100644
          void OnTogBtnVoiceKeyerRightClick( wxContextMenuEvent& event ) override;
          
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index fe46f62a..ecadb30d 100644
+index fe46f62a..afd935ca 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
 @@ -1129,6 +1129,25 @@ void MainFrame::OnTogBtnPTTRightClick( wxContextMenuEvent& )
@@ -54,7 +54,7 @@ index fe46f62a..ecadb30d 100644
  //-------------------------------------------------------------------------
  // OnTogBtnPTT ()
  //-------------------------------------------------------------------------
-@@ -1253,19 +1272,25 @@ void MainFrame::OnTOTWarningTimer(wxTimerEvent&)
+@@ -1253,19 +1272,26 @@ void MainFrame::OnTOTWarningTimer(wxTimerEvent&)
  }
  
  void MainFrame::togglePTT(void) {
@@ -83,11 +83,12 @@ index fe46f62a..ecadb30d 100644
 +        // Amber during TX->RX drain: distinct from TX (red) and RX (default),
 +        // black text readable throughout.
 +        m_btnTogPTT->SetBackgroundColour(wxColour(255, 165, 0));
++        m_btnTogPTT->SetLabel("TX Stopping");
 +        m_btnTogPTT->Refresh();
          // Stop Time-Out Timer on TX->RX transition (user stopped, VK finished, or TOT fired).
          if (m_totTimer.IsRunning())
              m_totTimer.Stop();
-@@ -1478,7 +1503,9 @@ void MainFrame::togglePTT(void) {
+@@ -1478,7 +1504,9 @@ void MainFrame::togglePTT(void) {
          m_togBtnOnOff->Enable(false);
      }
  
@@ -98,7 +99,15 @@ index fe46f62a..ecadb30d 100644
      if (wxGetApp().rigPttController != nullptr && wxGetApp().rigPttController->isConnected())
      {
          wxGetApp().rigPttController->ptt(newTx);
-@@ -1586,8 +1613,8 @@ void MainFrame::togglePTT(void) {
+@@ -1562,6 +1590,7 @@ void MainFrame::togglePTT(void) {
+     // here (similar to what's already done for ending TX while
+     // using the voice keyer).
+     m_btnTogPTT->SetValue(newTx);
++    m_btnTogPTT->SetLabel(_("&PTT"));
+     m_btnTogPTT->SetBackgroundColour(m_btnTogPTT->GetValue() ? *wxRED : wxNullColour);
+     
+     // The Report Frequency drop-down should not be modifiable during TX.
+@@ -1586,8 +1615,8 @@ void MainFrame::togglePTT(void) {
          m_txtMicSpkrLevelNum->SetLabel(fmtString);
      }
  
