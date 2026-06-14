@@ -1,0 +1,111 @@
+diff --git a/src/main.cpp b/src/main.cpp
+index a0cd19c4..ddcbff82 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1256,6 +1256,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+      m_togBtnOnOff->Connect(wxEVT_UPDATE_UI, wxUpdateUIEventHandler(MainFrame::OnTogBtnOnOffUI), NULL, this);
+     m_togBtnAnalog->Connect(wxEVT_UPDATE_UI, wxUpdateUIEventHandler(MainFrame::OnTogBtnAnalogClickUI), NULL, this);
+    // m_btnTogPTT->Connect(wxEVT_UPDATE_UI, wxUpdateUIEventHandler(MainFrame::OnTogBtnPTT_UI), NULL, this);
++    m_btnTogPTT->Bind(wxEVT_LEFT_DOWN, &MainFrame::OnTogBtnPTTMouseDown, this);
+ 
+     loadConfiguration_();
+     
+diff --git a/src/main.h b/src/main.h
+index f8b4f578..e2490c1f 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -422,6 +422,9 @@ class MainFrame : public TopFrame
+         void OnTogBtnAnalogClick(wxCommandEvent& event) override;
+         void OnTogBtnPTT( wxCommandEvent& event ) override;
+         void OnTogBtnPTTRightClick( wxContextMenuEvent& event ) override;
++        // NOTE: sets TX colour on press to avoid a GTK blue-flash during the TX delay.
++        // Upstream may prefer a different approach (e.g. true press-to-start TX).
++        void OnTogBtnPTTMouseDown( wxMouseEvent& event );
+         void OnTogBtnVoiceKeyerClick (wxCommandEvent& event) override;
+         void OnTogBtnVoiceKeyerRightClick( wxContextMenuEvent& event ) override;
+         
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index fe46f62a..ecadb30d 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1129,6 +1129,25 @@ void MainFrame::OnTogBtnPTTRightClick( wxContextMenuEvent& )
+     m_btnTogPTT->PopupMenu(pttPopupMenu_, wxPoint(-sz.GetWidth() - 25, 0));
+ }
+ 
++//-------------------------------------------------------------------------
++// OnTogBtnPTTMouseDown()
++// Set TX colour immediately on mouse press when going RX->TX, avoiding a GTK
++// blue-flash during the TX delay before togglePTT() sets it on release.
++// Only fires when the pipeline is genuinely in RX (g_tx false); during the
++// TX->RX drain g_tx is still true, so clicks there are correctly ignored.
++// NOTE for upstream: this is a simple cosmetic fix. A fuller alternative would
++// be to start TX here on press and suppress the togglePTT() call on release.
++//-------------------------------------------------------------------------
++void MainFrame::OnTogBtnPTTMouseDown(wxMouseEvent& event)
++{
++    if (!m_btnTogPTT->GetValue() && !g_tx.load(std::memory_order_acquire))
++    {
++        m_btnTogPTT->SetBackgroundColour(*wxRED);
++        m_btnTogPTT->Refresh();
++    }
++    event.Skip();
++}
++
+ //-------------------------------------------------------------------------
+ // OnTogBtnPTT ()
+ //-------------------------------------------------------------------------
+@@ -1253,19 +1272,25 @@ void MainFrame::OnTOTWarningTimer(wxTimerEvent&)
+ }
+ 
+ void MainFrame::togglePTT(void) {
+-    std::chrono::high_resolution_clock highResClock;
++    // Guard against re-entrant calls during the TX drain (Yield() processes events).
++    static std::atomic<bool> s_changeover{false};
++    bool expected = false;
++    if (!s_changeover.compare_exchange_strong(expected, true)) return;
+ 
+-    m_btnTogPTT->Enable(false); // disable PTT button during changeover
++    std::chrono::high_resolution_clock highResClock;
+ 
+-    // Use intermediate background to indicate that we're switching states.
+-    // This will be reset to the final state at the end of the switch.
+-    m_btnTogPTT->SetBackgroundColour(wxTheColourDatabase->Find("ORANGE RED"));
+-    m_btnTogPTT->Refresh();
++    // Record direction now; button value may be toggled by a stray click during
++    // the drain loops below, which would corrupt newTx at the end if not checked.
++    const bool wasInTx = g_tx.load(std::memory_order_acquire);
+ 
+     // Change tabbed page in centre panel depending on PTT state
+ 
+-    if (g_tx.load(std::memory_order_acquire))
++    if (wasInTx)
+     {
++        // Amber during TX->RX drain: distinct from TX (red) and RX (default),
++        // black text readable throughout.
++        m_btnTogPTT->SetBackgroundColour(wxColour(255, 165, 0));
++        m_btnTogPTT->Refresh();
+         // Stop Time-Out Timer on TX->RX transition (user stopped, VK finished, or TOT fired).
+         if (m_totTimer.IsRunning())
+             m_totTimer.Stop();
+@@ -1478,7 +1503,9 @@ void MainFrame::togglePTT(void) {
+         m_togBtnOnOff->Enable(false);
+     }
+ 
+-    auto newTx = m_btnTogPTT->GetValue();
++    // Use wasInTx to determine direction: don't let a stray click during the drain
++    // flip newTx and leave the radio keyed with the pipeline in the wrong state.
++    auto newTx = !wasInTx;
+     if (wxGetApp().rigPttController != nullptr && wxGetApp().rigPttController->isConnected())
+     {
+         wxGetApp().rigPttController->ptt(newTx);
+@@ -1586,8 +1613,8 @@ void MainFrame::togglePTT(void) {
+         m_txtMicSpkrLevelNum->SetLabel(fmtString);
+     }
+ 
+-    CallAfter([&]() { 
+-        m_btnTogPTT->Enable(true); // allow PTT again
++    CallAfter([&]() {
++        s_changeover.store(false);
+         m_sliderMicSpkrLevel->Refresh(); // Redraw doesn't happen immediately otherwise in some environments
+     });
+ }
