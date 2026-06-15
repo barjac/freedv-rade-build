@@ -1,7 +1,7 @@
 From 7d8afc11b605fee571cfd04589cd42e10c719b93 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Mon, 15 Jun 2026 11:56:58 +0100
-Subject: [PATCH] Hamlib: auto-reconnect to rigctld after broken pipe
+Subject: [PATCH 1/2] Hamlib: auto-reconnect to rigctld after broken pipe
 
 When the hamlib connection to rigctld is lost (e.g. radio powered off
 and rigctld restarted on the remote host), FreeDV now recovers without
@@ -251,6 +251,96 @@ index 07556ab7..489a94b6 100644
      
      vfo_t getCurrentVfo_();
      void setFrequencyHelper_(vfo_t currVfo, uint64_t frequencyHz);
+-- 
+2.52.0
+
+
+From 1ba9d4d140ce329e09dc06a4c5e5be88db643a6c Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@mageia.org>
+Date: Mon, 15 Jun 2026 12:25:42 +0100
+Subject: [PATCH 2/2] Hamlib: fix VFO/memory switch and stale mode push on
+ reconnect
+
+Three fixes in connectImpl_():
+
+1. Gate rig_get_vfo() probe on restoreOnDisconnect_ (read-only mode).
+   On some radios (e.g. Kenwood TS-450S via rigctld) querying the active
+   VFO via CAT causes the radio to exit memory mode and switch to VFO A
+   as a side effect.  In read-only mode RIG_VFO_CURR suffices for all
+   frequency/mode monitoring so the probe is unnecessary.
+
+2. Gate rig_set_ptt(PTT_OFF) on pttType_ != PTT_VIA_NONE, matching the
+   existing guard in pttImpl_().  Avoids sending redundant CAT commands
+   when PTT is not under hamlib control.
+
+3. Reset currFreq_/currMode_ to 0/NONE when reconnecting_ is set.
+   The object is reused across auto-reconnects, so without this the
+   stale values from the previous session would be pushed back to the
+   radio (triggering a mode/frequency change) even in read-only mode.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/rig_control/HamlibRigController.cpp | 35 ++++++++++++++++++-------
+ 1 file changed, 26 insertions(+), 9 deletions(-)
+
+diff --git a/src/rig_control/HamlibRigController.cpp b/src/rig_control/HamlibRigController.cpp
+index 90b24539..fc640185 100644
+--- a/src/rig_control/HamlibRigController.cpp
++++ b/src/rig_control/HamlibRigController.cpp
+@@ -343,6 +343,13 @@ void HamlibRigController::connectImpl_()
+     origMode_ = RIG_MODE_NONE;
+     errorEncountered_ = false;
+     getFreqModeErrorCount_ = 0;
++    // On auto-reconnect the object is reused; reset freq/mode so stale
++    // values from the previous session aren't pushed back to the radio.
++    if (reconnecting_)
++    {
++        currFreq_ = 0;
++        currMode_ = RIG_MODE_NONE;
++    }
+ 
+     auto tmpRig = rig_init(RigList_[rigIndex]->rig_model);
+     if (!tmpRig)
+@@ -478,20 +485,30 @@ void HamlibRigController::connectImpl_()
+         reconnecting_ = false;
+         onRigConnected(this);
+         
+-        // Determine whether we have multiple VFOs.
++        // Only probe for multiple VFOs when freq/mode changes are enabled.
++        // In read-only mode always use RIG_VFO_CURR — rig_get_vfo() can
++        // cause some radios (e.g. Kenwood TS-450S via rigctld) to switch
++        // from memory mode to VFO as a side effect of the CAT query.
+         multipleVfos_ = false;
+-        vfo_t vfo;
+-        if (rig_get_vfo (tmpRig, &vfo) == RIG_OK && (tmpRig->state.vfo_list & RIG_VFO_B))
++        if (restoreOnDisconnect_)
+         {
+-            multipleVfos_ = true;
++            vfo_t vfo;
++            if (rig_get_vfo(tmpRig, &vfo) == RIG_OK && (tmpRig->state.vfo_list & RIG_VFO_B))
++            {
++                multipleVfos_ = true;
++            }
+         }
+ 
+-        // Make sure PTT is not enabled as there have been reports of some 
+-        // radios starting off in this state.
+-        result = rig_set_ptt(tmpRig, RIG_VFO_CURR, RIG_PTT_OFF);
+-        if (result != RIG_OK)
++        // Make sure PTT is not enabled as there have been reports of some
++        // radios starting off in this state.  Skip when PTT_VIA_NONE to
++        // match pttImpl_() and avoid sending unnecessary CAT commands.
++        if (pttType_ != PTT_VIA_NONE)
+         {
+-            log_warn("Could not ensure that radio starts with PTT off: %s", rigerror(result));
++            result = rig_set_ptt(tmpRig, RIG_VFO_CURR, RIG_PTT_OFF);
++            if (result != RIG_OK)
++            {
++                log_warn("Could not ensure that radio starts with PTT off: %s", rigerror(result));
++            }
+         }
+         
+         // Get current frequency and mode when we first connect so we can 
 -- 
 2.52.0
 
