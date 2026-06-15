@@ -327,6 +327,27 @@ write_build_index() {
     echo "Build #$_next recorded: $_entry"
 }
 
+# Show build details for a given directory (label, dir path)
+show_dir_build() {
+    local _label="$1"
+    local _dir="$2"
+    local _idx_file="/home/${user}/freedv-rade-build/.build_index"
+    local _build_file="${_dir}/.build"
+    if [[ -f "$_build_file" ]]; then
+        local _idx
+        _idx=$(tr -d '[:space:]' < "$_build_file")
+        local _record
+        _record=$(grep "^${_idx} |" "$_idx_file" 2>/dev/null)
+        if [[ -n "$_record" ]]; then
+            echo "  ${_label}: build #${_idx}: ${_record#*| }"
+        else
+            echo "  ${_label}: build #${_idx} (no index entry found)"
+        fi
+    else
+        echo "  ${_label}: no build record"
+    fi
+}
+
 # Show details of the current installed build
 showcurrent() {
     local currdir="$(pwd)"
@@ -622,7 +643,9 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     fi
 
     if (( switch == 1 )); then
-        echo -e "The current version will be switched with the one in backup and vice versa"
+        echo -e "The current version will be switched with the one in backup and vice versa:"
+        show_dir_build "Current" "${basedir}/freedv-rade"
+        show_dir_build "Backup " "${basedir}/freedv-rade_bak"
     fi
 
     if (( desktop == 1 )); then
