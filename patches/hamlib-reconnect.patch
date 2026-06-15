@@ -1,0 +1,256 @@
+From 7d8afc11b605fee571cfd04589cd42e10c719b93 Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@mageia.org>
+Date: Mon, 15 Jun 2026 11:56:58 +0100
+Subject: [PATCH] Hamlib: auto-reconnect to rigctld after broken pipe
+
+When the hamlib connection to rigctld is lost (e.g. radio powered off
+and rigctld restarted on the remote host), FreeDV now recovers without
+requiring the modem to be stopped and restarted:
+
+- On hitting the error threshold in requestCurrentFrequencyModeImpl_(),
+  the broken hamlib handle is closed, onRigDisconnected is fired, and a
+  reconnecting_ flag is set with a 5-second back-off timestamp.
+- The existing 1-second ID_TIMER_UPD_FREQ timer continues to call
+  requestCurrentFrequencyMode() (isConnected() guard removed); when the
+  handle is null and the back-off has elapsed, connectImpl_() is called.
+- connectImpl_() suppresses error dialogs during reconnect attempts and
+  updates nextReconnectAt_ on each failure; on success it clears
+  reconnecting_ and fires onRigConnected() so the UI resumes normally.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/main.cpp                            |   4 +-
+ src/rig_control/HamlibRigController.cpp | 103 +++++++++++++++++++-----
+ src/rig_control/HamlibRigController.h   |   6 ++
+ 3 files changed, 90 insertions(+), 23 deletions(-)
+
+diff --git a/src/main.cpp b/src/main.cpp
+index 63743dd6..69e499e5 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1749,9 +1749,9 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+     else if (timerId == ID_TIMER_UPD_FREQ)
+     {
+         // show freq. and mode [UP]
+-        if (wxGetApp().rigFrequencyController && wxGetApp().rigFrequencyController->isConnected()) 
++        if (wxGetApp().rigFrequencyController)
+         {
+-            log_debug("update freq and mode ...."); 
++            log_debug("update freq and mode ....");
+             wxGetApp().rigFrequencyController->requestCurrentFrequencyMode();
+         }
+      }
+diff --git a/src/rig_control/HamlibRigController.cpp b/src/rig_control/HamlibRigController.cpp
+index 987f3c74..90b24539 100644
+--- a/src/rig_control/HamlibRigController.cpp
++++ b/src/rig_control/HamlibRigController.cpp
+@@ -92,6 +92,8 @@ HamlibRigController::HamlibRigController(std::string rigName, std::string serial
+     , rigResponseTime_(0)
+     , errorEncountered_(false)
+     , getFreqModeErrorCount_(0)
++    , reconnecting_(false)
++    , nextReconnectAt_(std::chrono::steady_clock::now())
+ {
+     // Perform initial load of rig list if this is our first time being created.
+     InitializeHamlibLibrary();
+@@ -120,6 +122,8 @@ HamlibRigController::HamlibRigController(int rigIndex, std::string serialPort, c
+     , rigResponseTime_(0)
+     , errorEncountered_(false)
+     , getFreqModeErrorCount_(0)
++    , reconnecting_(false)
++    , nextReconnectAt_(std::chrono::steady_clock::now())
+ {
+     // Perform initial load of rig list if this is our first time being created.
+     InitializeHamlibLibrary();
+@@ -322,11 +326,18 @@ void HamlibRigController::connectImpl_()
+     auto rigIndex = RigNameToIndex(rigName_);
+     if (rigIndex == -1)
+     {
+-        std::string errMsg = "Could not find rig " + rigName_ + " in Hamlib database.";
+-        onRigError(this, errMsg);
++        if (!reconnecting_)
++        {
++            std::string errMsg = "Could not find rig " + rigName_ + " in Hamlib database.";
++            onRigError(this, errMsg);
++        }
++        else
++        {
++            nextReconnectAt_ = std::chrono::steady_clock::now() + std::chrono::seconds(5);
++        }
+         return;
+     }
+-    
++
+     /* Initialise, configure and open. */
+     origFreq_ = 0;
+     origMode_ = RIG_MODE_NONE;
+@@ -334,12 +345,19 @@ void HamlibRigController::connectImpl_()
+     getFreqModeErrorCount_ = 0;
+ 
+     auto tmpRig = rig_init(RigList_[rigIndex]->rig_model);
+-    if (!tmpRig) 
++    if (!tmpRig)
+     {
+         log_debug("rig_init() failed, returning");
+-        
+-        std::string errMsg = "Hamlib could not initialize rig " + rigName_;
+-        onRigError(this, errMsg);
++
++        if (!reconnecting_)
++        {
++            std::string errMsg = "Hamlib could not initialize rig " + rigName_;
++            onRigError(this, errMsg);
++        }
++        else
++        {
++            nextReconnectAt_ = std::chrono::steady_clock::now() + std::chrono::seconds(5);
++        }
+         return;
+     }
+     log_info ("rigName -%s- via port -%s-\n", rigName_.c_str(), serialPort_.c_str() );
+@@ -454,9 +472,10 @@ void HamlibRigController::connectImpl_()
+     rig_set_conf(tmpRig, rig_token_lookup(tmpRig, "timeout_retry"), "2");
+             
+     result = rig_open(tmpRig);
+-    if (result == RIG_OK) 
++    if (result == RIG_OK)
+     {
+         log_debug("hamlib: rig_open() OK");
++        reconnecting_ = false;
+         onRigConnected(this);
+         
+         // Determine whether we have multiple VFOs.
+@@ -503,9 +522,16 @@ void HamlibRigController::connectImpl_()
+     }
+     else
+     {
+-        std::string errMsg = std::string("Could not connect to radio: ") + HAMLIB_FRIENDLY_ERROR_FN(result);
+-        onRigError(this, errMsg);
+-        errorEncountered_ = true;
++        if (!reconnecting_)
++        {
++            std::string errMsg = std::string("Could not connect to radio: ") + HAMLIB_FRIENDLY_ERROR_FN(result);
++            onRigError(this, errMsg);
++            errorEncountered_ = true;
++        }
++        else
++        {
++            nextReconnectAt_ = std::chrono::steady_clock::now() + std::chrono::seconds(5);
++        }
+     }
+     log_debug("hamlib: rig_open() failed: %s", rigerror(result));
+ 
+@@ -747,7 +773,7 @@ void HamlibRigController::setModeImpl_(IRigFrequencyController::Mode mode)
+ void HamlibRigController::requestCurrentFrequencyModeImpl_()
+ {
+     auto tmpRig = rig_.load(std::memory_order_acquire);
+-    if (tmpRig == nullptr || pttSet_)
++    if (pttSet_)
+     {
+         // Note: we ignore attempts to retrieve frequency/mode during
+         // TX for several reasons:
+@@ -756,6 +782,15 @@ void HamlibRigController::requestCurrentFrequencyModeImpl_()
+         //      causing distortion of the transmitted signal (ex: Red Pitaya with Thetis).
+         return;
+     }
++    if (tmpRig == nullptr)
++    {
++        if (reconnecting_ && std::chrono::steady_clock::now() >= nextReconnectAt_)
++        {
++            log_info("Hamlib: attempting reconnect to radio...");
++            connectImpl_();
++        }
++        return;
++    }
+     
+     rmode_t mode = RIG_MODE_NONE;
+     pbwidth_t passband = 0;
+@@ -767,11 +802,24 @@ modeAttempt:
+     {
+         log_debug("rig_get_mode: error = %s ", rigerror(result));
+         getFreqModeErrorCount_++;
+-        if (!errorEncountered_ && getFreqModeErrorCount_ > MAX_GET_FREQUENCY_ERR_COUNT)
++        if (getFreqModeErrorCount_ > MAX_GET_FREQUENCY_ERR_COUNT)
+         {
+-            std::string errMsg = std::string("Could not retrieve current radio mode: ") + HAMLIB_FRIENDLY_ERROR_FN(result);
+-            onRigError(this, errMsg);
+-            errorEncountered_ = true;
++            if (!errorEncountered_)
++            {
++                std::string errMsg = std::string("Could not retrieve current radio mode: ") + HAMLIB_FRIENDLY_ERROR_FN(result);
++                onRigError(this, errMsg);
++                errorEncountered_ = true;
++            }
++            if (!reconnecting_)
++            {
++                auto brokenRig = rig_.load(std::memory_order_acquire);
++                rig_.store(nullptr, std::memory_order_release);
++                rig_close(brokenRig);
++                rig_cleanup(brokenRig);
++                onRigDisconnected(this);
++                reconnecting_ = true;
++                nextReconnectAt_ = std::chrono::steady_clock::now() + std::chrono::seconds(5);
++            }
+         }
+     }
+     else if (result != RIG_OK)
+@@ -790,14 +838,27 @@ freqAttempt:
+         if (result != RIG_OK && currVfo == RIG_VFO_CURR)
+         {
+             log_debug("rig_get_freq: error = %s ", rigerror(result));
+-            
++
+             getFreqModeErrorCount_++;
+ 
+-            if (!errorEncountered_ && getFreqModeErrorCount_ > MAX_GET_FREQUENCY_ERR_COUNT)
++            if (getFreqModeErrorCount_ > MAX_GET_FREQUENCY_ERR_COUNT)
+             {
+-                std::string errMsg = std::string("Could not get current frequency: ") + HAMLIB_FRIENDLY_ERROR_FN(result);
+-                onRigError(this, errMsg);
+-                errorEncountered_ = true;
++                if (!errorEncountered_)
++                {
++                    std::string errMsg = std::string("Could not get current frequency: ") + HAMLIB_FRIENDLY_ERROR_FN(result);
++                    onRigError(this, errMsg);
++                    errorEncountered_ = true;
++                }
++                if (!reconnecting_)
++                {
++                    auto brokenRig = rig_.load(std::memory_order_acquire);
++                    rig_.store(nullptr, std::memory_order_release);
++                    rig_close(brokenRig);
++                    rig_cleanup(brokenRig);
++                    onRigDisconnected(this);
++                    reconnecting_ = true;
++                    nextReconnectAt_ = std::chrono::steady_clock::now() + std::chrono::seconds(5);
++                }
+             }
+         }
+         else if (result != RIG_OK)
+diff --git a/src/rig_control/HamlibRigController.h b/src/rig_control/HamlibRigController.h
+index 07556ab7..489a94b6 100644
+--- a/src/rig_control/HamlibRigController.h
++++ b/src/rig_control/HamlibRigController.h
+@@ -27,6 +27,7 @@
+ #include <vector>
+ #include <mutex>
+ #include <atomic>
++#include <chrono>
+ 
+ #include "ThreadedObject.h"
+ #include "IRigFrequencyController.h"
+@@ -109,6 +110,11 @@ private:
+ 
+     // 2 or more errors while retrieving freq/mode should cause the popup to appear
+     const int MAX_GET_FREQUENCY_ERR_COUNT = 1;
++
++    // Auto-reconnect state: set when a fatal comms error closes the handle,
++    // cleared on successful reconnect.  nextReconnectAt_ rate-limits attempts.
++    bool reconnecting_;
++    std::chrono::steady_clock::time_point nextReconnectAt_;
+     
+     vfo_t getCurrentVfo_();
+     void setFrequencyHelper_(vfo_t currVfo, uint64_t frequencyHz);
+-- 
+2.52.0
+
