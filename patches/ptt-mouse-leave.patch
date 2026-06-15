@@ -1,0 +1,50 @@
+diff --git a/src/main.cpp b/src/main.cpp
+index ab482fad..1d038a1f 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1259,6 +1259,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+    // m_btnTogPTT->Connect(wxEVT_UPDATE_UI, wxUpdateUIEventHandler(MainFrame::OnTogBtnPTT_UI), NULL, this);
+     m_btnTogPTT->Bind(wxEVT_LEFT_DOWN, &MainFrame::OnTogBtnPTTMouseDown, this);
+     m_btnTogPTT->Bind(wxEVT_LEFT_DCLICK, &MainFrame::OnTogBtnPTTMouseDown, this);
++    m_btnTogPTT->Bind(wxEVT_LEAVE_WINDOW, &MainFrame::OnTogBtnPTTMouseLeave, this);
+ 
+     loadConfiguration_();
+     
+diff --git a/src/main.h b/src/main.h
+index 2d2313d8..d675bdd9 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -426,6 +426,7 @@ class MainFrame : public TopFrame
+         // NOTE: sets TX colour on press to avoid a GTK blue-flash during the TX delay.
+         // Upstream may prefer a different approach (e.g. true press-to-start TX).
+         void OnTogBtnPTTMouseDown( wxMouseEvent& event );
++        void OnTogBtnPTTMouseLeave( wxMouseEvent& event );
+         void OnTogBtnVoiceKeyerClick (wxCommandEvent& event) override;
+         void OnTogBtnVoiceKeyerRightClick( wxContextMenuEvent& event ) override;
+         
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index bbdeb603..3b89ea83 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1150,6 +1150,21 @@ void MainFrame::OnTogBtnPTTMouseDown(wxMouseEvent& event)
+     event.Skip();
+ }
+ 
++//-------------------------------------------------------------------------
++// OnTogBtnPTTMouseLeave()
++// Reset premature TX colour if mouse leaves button before release and TX
++// has not actually started, preventing a stuck-red button.
++//-------------------------------------------------------------------------
++void MainFrame::OnTogBtnPTTMouseLeave(wxMouseEvent& event)
++{
++    if (!m_btnTogPTT->GetValue() && !g_tx.load(std::memory_order_acquire))
++    {
++        m_btnTogPTT->SetBackgroundColour(wxNullColour);
++        m_btnTogPTT->Refresh();
++    }
++    event.Skip();
++}
++
+ //-------------------------------------------------------------------------
+ // OnTogBtnPTT ()
+ //-------------------------------------------------------------------------
