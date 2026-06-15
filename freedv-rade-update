@@ -142,7 +142,7 @@ echo "Switching to $default and syncing with origin"
 git fetch origin || { echo "ERROR: git fetch failed - check network connection"; exit 1; }
 git checkout -B $default origin/$default || { echo "ERROR: failed to reset $default to origin/$default"; exit 1; }
 git reset --hard origin/$default || { echo "ERROR: git reset to origin/$default failed"; exit 1; }
-_bi_base="${default}@$(git rev-parse --short HEAD)"
+_bi_base="${default} @ $(git rev-parse --short HEAD)"
 
 # Ensure git has an identity for merge commits; use a fallback if not configured
 if ! git config user.email >/dev/null 2>&1; then
@@ -171,7 +171,7 @@ if (( ${#prbranches[@]} == 0 )); then
                 exit 1
             fi
             echo "PR #$prnumber merged OK"
-            _bi_prs+=("pr:${prnumber}@$(git rev-parse --short HEAD)")
+            _bi_prs+=("pr:${prnumber} @ $(git rev-parse --short HEAD)")
         elif [[ "$entry" == *:* ]]; then
             echo "ERROR: Fork branch '$entry' not in upstream. Use a PR number instead."
             exit 1
@@ -181,7 +181,7 @@ if (( ${#prbranches[@]} == 0 )); then
                 exit 1
             fi
             git pull
-            _bi_base="${entry}@$(git rev-parse --short HEAD)"
+            _bi_base="${entry} @ $(git rev-parse --short HEAD)"
         fi
         echo "Using branch $entry"
     else
@@ -206,7 +206,7 @@ if (( ${#prbranches[@]} == 0 )); then
                 exit 1
             fi
             echo "PR #$prnumber merged OK"
-            _bi_prs+=("pr:${prnumber}@$(git rev-parse --short HEAD)")
+            _bi_prs+=("pr:${prnumber} @ $(git rev-parse --short HEAD)")
         done
         echo "Using combined PRs: ${prbranches[*]}"
     fi
@@ -414,7 +414,10 @@ TIP: Hitting ENTER without typing will automatically select the first option to 
 # Check if there is already a backup and flag it
 [[ -d ${basedir}/freedv-rade_bak ]] && bak=1
 
-showcurrent
+echo ""
+show_dir_build "Current" "${basedir}/freedv-rade"
+[[ -d ${basedir}/freedv-rade_bak ]] && show_dir_build "Backup " "${basedir}/freedv-rade_bak"
+echo ""
 
 if grep -q venv < ~/freedv-start; then
     echo "*************************** Your system is using a Python based version of FreeDV RADE."
@@ -714,7 +717,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
             if freedv-rade-build/freedv-rade-build; then
                 echo "Full rebuild complete"
                 _commit=$(git -C "${basedir}/freedv-rade/freedv-gui" rev-parse --short HEAD 2>/dev/null || echo "unknown")
-                write_build_index "${default}@${_commit}"
+                write_build_index "${default} @ ${_commit}"
             else
                 echo "Full rebuild failed"
                 exit 1
