@@ -1,0 +1,296 @@
+diff --git a/src/config/ReportingConfiguration.cpp b/src/config/ReportingConfiguration.cpp
+index c62f3c6d..24f2d2e0 100644
+--- a/src/config/ReportingConfiguration.cpp
++++ b/src/config/ReportingConfiguration.cpp
+@@ -72,25 +72,27 @@ ReportingConfiguration::ReportingConfiguration()
+ 
+     , useUTCForReporting("/CallsignList/UseUTCTime", false)
+ 
++    // Values are centre frequencies (dial frequency +/-1.5kHz depending on
++    // sideband), matching the convention used for reportingFrequency.
+     , reportingFrequencyList("/Reporting/FrequencyList", {
+-        _("1.8700"),
+-        _("3.6250"),
+-        _("3.6430"),
+-        _("3.6930"),
+-        _("3.6970"),
+-        _("3.8030"),
+-        _("5.4035"),
+-        _("5.3685"),
+-        _("7.1770"),
+-        _("7.1970"),
+-        _("14.2360"),
+-        _("14.2400"),
+-        _("18.1180"),
+-        _("21.3130"),
+-        _("24.9330"),
+-        _("28.3300"),
+-        _("28.7200"),
+-        _("10489.6400"),
++        _("1.8685"),
++        _("3.6235"),
++        _("3.6415"),
++        _("3.6915"),
++        _("3.6955"),
++        _("3.8015"),
++        _("5.4050"),
++        _("5.3700"),
++        _("7.1755"),
++        _("7.1955"),
++        _("14.2375"),
++        _("14.2415"),
++        _("18.1195"),
++        _("21.3145"),
++        _("24.9345"),
++        _("28.3315"),
++        _("28.7215"),
++        _("10489.6415"),
+     })
+     , freedvReporterTxRowBackgroundColor("/Reporting/FreeDV/TxRowBackgroundColor", "#fc4500")
+     , freedvReporterTxRowForegroundColor("/Reporting/FreeDV/TxRowForegroundColor", "#000000")
+diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
+index 786067da..5167298f 100644
+--- a/src/gui/dialogs/freedv_reporter.cpp
++++ b/src/gui/dialogs/freedv_reporter.cpp
+@@ -1471,17 +1471,22 @@ void FreeDVReporterDialog::OnItemDoubleClick(wxDataViewEvent& event)
+     {
+         FreeDVReporterDataModel* model = (FreeDVReporterDataModel*)spotsDataModel_.get();
+         auto frequency = model->getFrequency(event.GetItem());
+-        if (wxGetApp().rigFrequencyController && 
+-            (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges || 
++        if (wxGetApp().rigFrequencyController &&
++            (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges ||
+             wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqChangesOnly))
+         {
+-            wxGetApp().rigFrequencyController->setFrequency(frequency);
++            // The spot's frequency is the remote station's centre frequency;
++            // convert to dial frequency before commanding the rig. The
++            // offset depends only on g_analog (real analog voice mode), not
++            // on the hamlibUseAnalogModes label preference.
++            bool useAnalog =
++                wxGetApp().appConfiguration.rigControlConfiguration.hamlibUseAnalogModes || g_analog;
++            auto mode = GetModeForFrequency(frequency, useAnalog);
++            wxGetApp().rigFrequencyController->setFrequency(DisplayToDialFreq(frequency, mode, g_analog != 0));
+ 
+             if (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges)
+             {
+-                bool useAnalog = 
+-                    wxGetApp().appConfiguration.rigControlConfiguration.hamlibUseAnalogModes || g_analog;
+-                wxGetApp().rigFrequencyController->setMode(GetModeForFrequency(frequency, useAnalog));
++                wxGetApp().rigFrequencyController->setMode(mode);
+             }
+         }
+         DeselectItem();
+diff --git a/src/gui/util/FrequencyOps.h b/src/gui/util/FrequencyOps.h
+index f77861d5..6787cc14 100644
+--- a/src/gui/util/FrequencyOps.h
++++ b/src/gui/util/FrequencyOps.h
+@@ -48,4 +48,36 @@ inline HamlibRigController::Mode GetModeForFrequency(uint64_t frequency, bool us
+     return newMode;
+ }
+ 
++// centre = dial + offset. Offset is 0 whenever analogActive is true (SSB
++// analog has no fixed-tone convention to reference), and otherwise depends
++// on sideband only. Callers must derive `mode` via GetModeForFrequency (or
++// equivalent) -- this function intentionally has no band-threshold logic of
++// its own, so any future change to mode selection (e.g. always-USB digital)
++// doesn't require touching this conversion.
++inline int32_t GetCentreFreqOffsetHz(HamlibRigController::Mode mode, bool analogActive)
++{
++    if (analogActive) return 0;
++    switch (mode)
++    {
++        case HamlibRigController::USB:
++        case HamlibRigController::DIGU:
++            return 1500;
++        case HamlibRigController::LSB:
++        case HamlibRigController::DIGL:
++            return -1500;
++        default:
++            return 0;
++    }
++}
++
++inline uint64_t DialToDisplayFreq(uint64_t dialFreq, HamlibRigController::Mode mode, bool analogActive)
++{
++    return (uint64_t)((int64_t)dialFreq + GetCentreFreqOffsetHz(mode, analogActive));
++}
++
++inline uint64_t DisplayToDialFreq(uint64_t displayFreq, HamlibRigController::Mode mode, bool analogActive)
++{
++    return (uint64_t)((int64_t)displayFreq - GetCentreFreqOffsetHz(mode, analogActive));
++}
++
+ #endif // FREQUENCY_OPS_H
+\ No newline at end of file
+diff --git a/src/main.cpp b/src/main.cpp
+index 1d038a1f..422151c9 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -56,6 +56,7 @@
+ #include "gui/dialogs/dlg_filter.h"
+ #include "gui/dialogs/dlg_easy_setup.h"
+ #include "gui/dialogs/freedv_reporter.h"
++#include "gui/util/FrequencyOps.h"
+ 
+ #include "util/logging/ulog.h"
+ #include "util/audio_spin_mutex.h"
+@@ -2687,11 +2688,15 @@ void MainFrame::performFreeDVOn_()
+                     (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges || wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqChangesOnly) &&
+                     wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0)
+                 {
+-                    wxGetApp().rigFrequencyController->setFrequency(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
+-        
++                    // The offset depends only on g_analog (real analog voice
++                    // mode), not on the hamlibUseAnalogModes label preference.
++                    auto mode = getCurrentMode_();
++                    wxGetApp().rigFrequencyController->setFrequency(
++                        DisplayToDialFreq(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency, mode, g_analog != 0));
++
+                     if (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges)
+                     {
+-                        wxGetApp().rigFrequencyController->setMode(getCurrentMode_());
++                        wxGetApp().rigFrequencyController->setMode(mode);
+                     }
+                 }
+                     
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index 3b89ea83..8dc7407a 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -454,6 +454,14 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+             return;
+         }
+ 
++        // Convert the rig's dial frequency to the actual centre frequency of
++        // the transmitted/received signal for display/reporting purposes.
++        // Note: the offset depends only on whether FreeDV is actually in
++        // analog voice mode (g_analog) -- NOT on hamlibUseAnalogModes, which
++        // is purely a USB/LSB-vs-DIGU/DIGL label preference still used while
++        // transmitting digital FreeDV.
++        uint64_t displayFreq = DialToDisplayFreq(freq, mode, g_analog != 0);
++
+         // Update string value.
+         switch(mode)
+         {
+@@ -517,24 +525,24 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+             !wxGetApp().appConfiguration.reportingConfiguration.manualFrequencyReporting))
+         {
+             // wxString::Format() doesn't respect locale but wxNumberFormatter should. Use the latter instead.
+-            wxString freqString;            
++            wxString freqString;
+             if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
+             {
+-                freqString = wxNumberFormatter::ToString(freq / 1000.0, 1);
++                freqString = wxNumberFormatter::ToString(displayFreq / 1000.0, 1);
+             }
+             else
+             {
+-                freqString = wxNumberFormatter::ToString(freq / 1000.0 / 1000.0, 4);
++                freqString = wxNumberFormatter::ToString(displayFreq / 1000.0 / 1000.0, 4);
+             }
+-            
++
+             // Set internal reporting frequency to ensure we don't immediately request
+             // a frequency change from the radio (i.e. if rapidly changing frequency
+-            // on the radio side). Note that this also causes reporting to not fire 
++            // on the radio side). Note that this also causes reporting to not fire
+             // by m_cboReportFrequency's change handler, so we should fire off reporting
+             // here.
+             auto oldFreq = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency;
+-            wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency = freq;
+-            if (oldFreq != freq)
++            wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency = displayFreq;
++            if (oldFreq != displayFreq)
+             {
+                 for (auto& ptr : wxGetApp().m_reporters)
+                 {
+@@ -570,11 +578,15 @@ void MainFrame::onRadioConnected_(IRigController*)
+         firstFreqUpdateOnConnect_ = true;
+ 
+         // Set frequency/mode to the one pre-selected by the user before start.
+-        wxGetApp().rigFrequencyController->setFrequency(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
+-        
++        // The offset depends only on g_analog (real analog voice mode), not
++        // on the hamlibUseAnalogModes label preference.
++        auto mode = getCurrentMode_();
++        wxGetApp().rigFrequencyController->setFrequency(
++            DisplayToDialFreq(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency, mode, g_analog != 0));
++
+         if (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges)
+         {
+-            wxGetApp().rigFrequencyController->setMode(getCurrentMode_());
++            wxGetApp().rigFrequencyController->setMode(mode);
+         }
+     }
+ }
+@@ -1695,6 +1707,8 @@ HamlibRigController::Mode MainFrame::getCurrentMode_()
+ //-------------------------------------------------------------------------
+ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+ {
++    bool wasAnalog = (g_analog != 0);
++
+     if (g_analog == 0) {
+         g_analog = 1;
+         m_panelSpectrum->setFreqScale(MODEM_STATS_NSPEC*((float)MAX_F_HZ/(FS/2)));
+@@ -1719,7 +1733,40 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+         }
+     }
+     
+-    if (wxGetApp().rigFrequencyController != nullptr && 
++    // The dial frequency on the rig isn't changing here -- only the display
++    // convention is (centre frequency in digital mode vs. plain dial
++    // frequency in analog mode). Recover the dial frequency using the old
++    // convention, then redisplay it using the new one.
++    if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0)
++    {
++        auto& reportingFreq = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency;
++        bool hamlibUseAnalogModes = wxGetApp().appConfiguration.rigControlConfiguration.hamlibUseAnalogModes;
++
++        // hamlibUseAnalogModes is only a USB/LSB-vs-DIGU/DIGL label
++        // preference for GetModeForFrequency -- the centre-frequency offset
++        // itself depends only on whether we were/are actually in analog
++        // voice mode (wasAnalog / g_analog).
++        bool oldUseAnalogLabel = hamlibUseAnalogModes || wasAnalog;
++        auto oldMode = GetModeForFrequency(reportingFreq, oldUseAnalogLabel);
++        uint64_t dialFreq = DisplayToDialFreq(reportingFreq, oldMode, wasAnalog);
++
++        bool newUseAnalogLabel = hamlibUseAnalogModes || (g_analog != 0);
++        auto newMode = GetModeForFrequency(dialFreq, newUseAnalogLabel);
++        reportingFreq = DialToDisplayFreq(dialFreq, newMode, g_analog != 0);
++
++        wxString freqString;
++        if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
++        {
++            freqString = wxNumberFormatter::ToString(reportingFreq / 1000.0, 1);
++        }
++        else
++        {
++            freqString = wxNumberFormatter::ToString(reportingFreq / 1000.0 / 1000.0, 4);
++        }
++        m_cboReportFrequency->SetValue(freqString);
++    }
++
++    if (wxGetApp().rigFrequencyController != nullptr &&
+         wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0 &&
+         wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges)
+     {
+@@ -1973,11 +2020,15 @@ void MainFrame::OnChangeReportFrequency( wxCommandEvent& )
+             wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0 && 
+             (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges || wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqChangesOnly))
+         {
+-            // Request frequency/mode change on the radio side
+-            wxGetApp().rigFrequencyController->setFrequency(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
++            // Request frequency/mode change on the radio side. The offset
++            // depends only on g_analog (real analog voice mode), not on the
++            // hamlibUseAnalogModes label preference.
++            auto mode = getCurrentMode_();
++            wxGetApp().rigFrequencyController->setFrequency(
++                DisplayToDialFreq(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency, mode, g_analog != 0));
+             if (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges)
+             {
+-                wxGetApp().rigFrequencyController->setMode(getCurrentMode_());
++                wxGetApp().rigFrequencyController->setMode(mode);
+             }
+         }
+     }
