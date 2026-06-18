@@ -504,23 +504,61 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
     _last_file="${_bdir}/.last-patches"
     _patch_dir="${_bdir}/patches"
 
+    # Build the list of patches/ subdirectory entries up front (used by both
+    # the fresh-pick and edit-list flows below).
+    _available=()
+    if [[ -d "$_patch_dir" ]]; then
+        while IFS= read -r _f; do
+            _available+=("$(basename "$_f")")
+        done < <(find "$_patch_dir" -maxdepth 1 -name '*.patch' | sort)
+    fi
+
     # Offer to reuse recent patches
     if [[ -f "$_last_file" ]] && [[ -s "$_last_file" ]]; then
         mapfile -t _last_patches < "$_last_file"
-        echo -e "\nRecent patches: ${_last_patches[*]}"
-        if confirm "Use these?" "[Y/n]" "yY" "nN"; then
-            patches=("${_last_patches[@]}")
-        fi
+        echo -e "\nRecent patches:"
+        for _i in "${!_last_patches[@]}"; do
+            printf "  %2d) %s\n" "$((_i+1))" "${_last_patches[$_i]}"
+        done
+        confirm "Use these as-is, (E)dit the list, or start (F)resh?" "[U/E/F]" "Uu" "Ee" "Ff"
+        case $? in
+            0)
+                patches=("${_last_patches[@]}")
+                ;;
+            1)
+                patches=("${_last_patches[@]}")
+                echo -e "\nEnter numbers to REMOVE (space-separated, blank for none):"
+                read -r _rm
+                for _num in $_rm; do
+                    if [[ "$_num" =~ ^[0-9]+$ ]] && (( _num >= 1 && _num <= ${#_last_patches[@]} )); then
+                        unset 'patches[_num-1]'
+                    fi
+                done
+                patches=("${patches[@]}")
+
+                if (( ${#_available[@]} > 0 )); then
+                    echo -e "\nAvailable patches:"
+                    for _i in "${!_available[@]}"; do
+                        printf "  %2d) %s\n" "$((_i+1))" "${_available[$_i]}"
+                    done
+                    echo -e "Enter numbers to ADD (space-separated, blank for none):"
+                    read -r _add
+                    for _num in $_add; do
+                        if [[ "$_num" =~ ^[0-9]+$ ]] && (( _num >= 1 && _num <= ${#_available[@]} )); then
+                            _new="patches/${_available[$((_num-1))]}"
+                            [[ " ${patches[*]} " == *" $_new "* ]] || patches+=("$_new")
+                        fi
+                    done
+                fi
+                ;;
+            *)
+                : # start fresh: fall through to the patches/ subdirectory pick below
+                ;;
+        esac
     fi
 
     # Pick list from patches/ subdirectory
     if (( ${#patches[@]} == 0 )); then
-        _available=()
-        if [[ -d "$_patch_dir" ]]; then
-            while IFS= read -r _f; do
-                _available+=("$(basename "$_f")")
-            done < <(find "$_patch_dir" -maxdepth 1 -name '*.patch' | sort)
-        fi
         if (( ${#_available[@]} > 0 )); then
             echo -e "\nAvailable patches:"
             for _i in "${!_available[@]}"; do
