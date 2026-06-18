@@ -163,7 +163,7 @@ index f77861d5..643464ab 100644
  #endif // FREQUENCY_OPS_H
 \ No newline at end of file
 diff --git a/src/main.cpp b/src/main.cpp
-index 1d038a1f..422151c9 100644
+index 1d038a1f..6031c009 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -56,6 +56,7 @@
@@ -174,6 +174,21 @@ index 1d038a1f..422151c9 100644
  
  #include "util/logging/ulog.h"
  #include "util/audio_spin_mutex.h"
+@@ -913,12 +914,12 @@ void MainFrame::loadConfiguration_()
+     m_lastReportedCallsignListView->GetColumn(1, colInfo);
+     if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
+     {
+-        m_freqBox->SetLabel(_("Radio Freq. (kHz)"));
++        m_freqBox->SetLabel(_("Center Freq. (kHz)"));
+         colInfo.SetText(_("kHz"));
+     }
+     else
+     {
+-        m_freqBox->SetLabel(_("Radio Freq. (MHz)"));
++        m_freqBox->SetLabel(_("Center Freq. (MHz)"));
+         colInfo.SetText(_("MHz"));
+     }
+     m_lastReportedCallsignListView->SetColumn(1, colInfo);
 @@ -2687,11 +2688,15 @@ void MainFrame::performFreeDVOn_()
                      (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges || wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqChangesOnly) &&
                      wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0)
@@ -194,9 +209,24 @@ index 1d038a1f..422151c9 100644
                  }
                      
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index 3b89ea83..189b6e4a 100644
+index 3b89ea83..3b2e5a35 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
+@@ -300,12 +300,12 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
+         m_lastReportedCallsignListView->GetColumn(1, colInfo);
+         if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
+         {
+-            m_freqBox->SetLabel(_("Radio Freq. (kHz)"));
++            m_freqBox->SetLabel(_("Center Freq. (kHz)"));
+             colInfo.SetText(_("kHz"));
+         }
+         else
+         {
+-            m_freqBox->SetLabel(_("Radio Freq. (MHz)"));
++            m_freqBox->SetLabel(_("Center Freq. (MHz)"));
+             colInfo.SetText(_("MHz"));
+         }
+         m_lastReportedCallsignListView->SetColumn(1, colInfo);
 @@ -454,6 +454,14 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
              return;
          }
@@ -381,6 +411,20 @@ index 3b89ea83..189b6e4a 100644
              }
          }
      }
+@@ -2093,11 +2163,11 @@ void MainFrame::updateReportingFreqList_()
+     // Update associated label if the units have changed
+     if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
+     {
+-        m_freqBox->SetLabel(_("Radio Freq. (kHz)"));
++        m_freqBox->SetLabel(_("Center Freq. (kHz)"));
+     }
+     else
+     {
+-        m_freqBox->SetLabel(_("Radio Freq. (MHz)"));
++        m_freqBox->SetLabel(_("Center Freq. (MHz)"));
+     }
+ }
+ 
 diff --git a/src/rig_control/HamlibRigController.cpp b/src/rig_control/HamlibRigController.cpp
 index f6ddd787..34824dd0 100644
 --- a/src/rig_control/HamlibRigController.cpp
@@ -448,4 +492,17 @@ index 07556ab7..105313d5 100644
 +    vfo_t getWritableVfo_();
      void setFrequencyHelper_(vfo_t currVfo, uint64_t frequencyHz);
      void setModeHelper_(vfo_t currVfo, rmode_t mode);
+     
+diff --git a/src/topFrame.cpp b/src/topFrame.cpp
+index 7f593d66..67e49096 100644
+--- a/src/topFrame.cpp
++++ b/src/topFrame.cpp
+@@ -761,7 +761,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     rightSizer->Add(micSpeakerLevelSizer, 0, wxALL | wxEXPAND, 2);
+     
+     // Frequency text field (PSK Reporter)
+-    m_freqBox = new wxStaticBox(m_panel, wxID_ANY, _("Radio Freq. (MHz)"), wxDefaultPosition, wxSize(100,-1));
++    m_freqBox = new wxStaticBox(m_panel, wxID_ANY, _("Center Freq. (MHz)"), wxDefaultPosition, wxSize(100,-1));
+ 
+     wxBoxSizer* reportFrequencySizer = new wxStaticBoxSizer(m_freqBox, wxHORIZONTAL);
      
