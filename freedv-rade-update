@@ -339,7 +339,8 @@ show_dir_build() {
         local _record
         _record=$(grep "^${_idx} |" "$_idx_file" 2>/dev/null)
         if [[ -n "$_record" ]]; then
-            echo "  ${_label}: build #${_idx}: ${_record#*| }"
+            local _display="${_record#*| }"
+            echo "  ${_label}: build #${_idx}: ${_display//patches\//}"
         else
             echo "  ${_label}: build #${_idx} (no index entry found)"
         fi
@@ -359,7 +360,8 @@ showcurrent() {
         local _record
         _record=$(grep "^${_idx} |" "$_idx_file" 2>/dev/null)
         if [[ -n "$_record" ]]; then
-            echo -e "\nNOTE: Current build #${_idx}: ${_record#*| }\n"
+            local _display="${_record#*| }"
+            echo -e "\nNOTE: Current build #${_idx}: ${_display//patches\//}\n"
         else
             echo -e "\nNOTE: Build #${_idx} recorded but no index entry found\n"
         fi
