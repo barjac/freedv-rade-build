@@ -541,14 +541,42 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
                     for _i in "${!_available[@]}"; do
                         printf "  %2d) %s\n" "$((_i+1))" "${_available[$_i]}"
                     done
-                    echo -e "Enter numbers to ADD (space-separated, blank for none):"
-                    read -r _add
+
+                    # Pre-fill with the numbers of patches already kept (so
+                    # they're visible and editable on this line too), pulling
+                    # them out of `patches` for now -- whatever's left in the
+                    # edited line is authoritative for anything with a number.
+                    _prefill_nums=()
+                    _kept_unmatched=()
+                    for _p in "${patches[@]}"; do
+                        _pname="$(basename "$_p")"
+                        _match=
+                        for _i in "${!_available[@]}"; do
+                            if [[ "${_available[$_i]}" == "$_pname" ]]; then
+                                _prefill_nums+=("$((_i+1))")
+                                _match=1
+                                break
+                            fi
+                        done
+                        [[ -z "$_match" ]] && _kept_unmatched+=("$_p")
+                    done
+                    patches=("${_kept_unmatched[@]}")
+
+                    echo -e "Numbers to keep/add (space-separated, blank for none):"
+                    read -e -i "${_prefill_nums[*]}" -r _add
                     for _num in $_add; do
                         if [[ "$_num" =~ ^[0-9]+$ ]] && (( _num >= 1 && _num <= ${#_available[@]} )); then
                             _new="patches/${_available[$((_num-1))]}"
                             [[ " ${patches[*]} " == *" $_new "* ]] || patches+=("$_new")
                         fi
                     done
+
+                    if (( ${#_kept_unmatched[@]} > 0 )); then
+                        echo -e "\nAlso kept (not found in patches/ listing):"
+                        for _p in "${_kept_unmatched[@]}"; do
+                            echo "  - $_p"
+                        done
+                    fi
                 fi
                 ;;
             *)
