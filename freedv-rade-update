@@ -241,7 +241,7 @@ if (( ${#patches[@]} > 0 )); then
             exit 1
         fi
     else
-        _bi_patches+=("$patch")
+        _bi_patches+=("${patch#patches/}")
     fi
     done
     git add -A
@@ -520,7 +520,7 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
         for _i in "${!_last_patches[@]}"; do
             printf "  %2d) %s\n" "$((_i+1))" "${_last_patches[$_i]#patches/}"
         done
-        confirm "Use these as-is, (E)dit the list, or start (F)resh?" "[U/E/F]" "Uu" "Ee" "Ff"
+        confirm "(U)se these as-is, (E)dit the list, or start (F)resh?" "[U/E/F]" "Uu" "Ee" "Ff"
         case $? in
             0)
                 patches=("${_last_patches[@]}")
