@@ -518,7 +518,7 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
         mapfile -t _last_patches < "$_last_file"
         echo -e "\nRecent patches:"
         for _i in "${!_last_patches[@]}"; do
-            printf "  %2d) %s\n" "$((_i+1))" "${_last_patches[$_i]}"
+            printf "  %2d) %s\n" "$((_i+1))" "${_last_patches[$_i]#patches/}"
         done
         confirm "Use these as-is, (E)dit the list, or start (F)resh?" "[U/E/F]" "Uu" "Ee" "Ff"
         case $? in
