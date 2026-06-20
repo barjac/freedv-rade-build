@@ -162,6 +162,7 @@ if (( ${#prbranches[@]} == 0 )); then
             echo "Fetching PR #$prnumber via GitHub ref..."
             git fetch origin "+refs/pull/$prnumber/head:pr/$prnumber" \
                 || { echo "ERROR: Failed to fetch PR #$prnumber"; exit 1; }
+            prhead=$(git rev-parse --short "pr/$prnumber")
             git checkout -B build/combined "$default" \
                 || { echo "ERROR: Could not create build/combined branch"; exit 1; }
             echo "Merging PR #$prnumber..."
@@ -171,7 +172,7 @@ if (( ${#prbranches[@]} == 0 )); then
                 exit 1
             fi
             echo "PR #$prnumber merged OK"
-            _bi_prs+=("pr:${prnumber} @ $(git rev-parse --short HEAD)")
+            _bi_prs+=("pr:${prnumber} @ ${prhead}")
         elif [[ "$entry" == *:* ]]; then
             echo "ERROR: Fork branch '$entry' not in upstream. Use a PR number instead."
             exit 1
@@ -199,6 +200,7 @@ if (( ${#prbranches[@]} == 0 )); then
             echo "Fetching PR #$prnumber..."
             git fetch origin "+refs/pull/$prnumber/head:pr/$prnumber" \
                 || { echo "ERROR: Failed to fetch PR #$prnumber"; exit 1; }
+            prhead=$(git rev-parse --short "pr/$prnumber")
             echo "Merging PR #$prnumber..."
             if ! git merge --no-edit "pr/$prnumber"; then
                 git merge --abort 2>/dev/null
@@ -206,7 +208,7 @@ if (( ${#prbranches[@]} == 0 )); then
                 exit 1
             fi
             echo "PR #$prnumber merged OK"
-            _bi_prs+=("pr:${prnumber} @ $(git rev-parse --short HEAD)")
+            _bi_prs+=("pr:${prnumber} @ ${prhead}")
         done
         echo "Using combined PRs: ${prbranches[*]}"
     fi
