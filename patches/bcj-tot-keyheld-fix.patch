@@ -1,0 +1,109 @@
+diff --git a/src/main.cpp b/src/main.cpp
+index d2288ae2..70dfe3aa 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1277,6 +1277,8 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+     Bind(wxEVT_TIMER, &MainFrame::OnTOTTimer, this, ID_TIMER_TOT);
+     m_totWarningTimer.SetOwner(this, ID_TIMER_TOT_WARNING);
+     Bind(wxEVT_TIMER, &MainFrame::OnTOTWarningTimer, this, ID_TIMER_TOT_WARNING);
++    m_pttKeyPollTimer.SetOwner(this, ID_TIMER_PTT_KEY_POLL);
++    Bind(wxEVT_TIMER, &MainFrame::OnPttKeyPollTimer, this, ID_TIMER_PTT_KEY_POLL);
+ #endif
+     
+     // Create voice keyer popup menu.
+diff --git a/src/main.h b/src/main.h
+index 937bbe3b..3c0beca2 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -120,6 +120,7 @@ enum {
+         ID_TIMER_UPD_FREQ,
+         ID_TIMER_TOT,           // Time-Out Timer
+         ID_TIMER_TOT_WARNING,   // Polls remaining TOT time to show warning
++        ID_TIMER_PTT_KEY_POLL,  // Polls physical PTT key state after a forced TX stop
+      };
+ 
+ #define EXCHANGE_DATA_IN    0
+@@ -339,6 +340,11 @@ class MainFrame : public TopFrame
+         // Time-Out Timer (TOT): stops TX after configured period
+         wxTimer                 m_totTimer;
+         wxTimer                 m_totWarningTimer;
++
++        // Polls the physical PTT key state (via wxGetKeyState) after a forced
++        // TX stop, so a held key can't immediately restart TX -- see
++        // m_pttKeyRequireRelease_ below.
++        wxTimer                 m_pttKeyPollTimer;
+ #endif
+ 
+         // TOT warning state
+@@ -346,6 +352,14 @@ class MainFrame : public TopFrame
+         int                     m_totCurrentDurationMs{0};
+         TotWarningDialog*       m_totWarningDialog_{nullptr};
+ 
++        // Set when TX is force-stopped (e.g. by the TOT) while the PTT key is
++        // still physically held down. Blocks the spacebar from restarting TX
++        // until wxGetKeyState() confirms a genuine release -- this can't be
++        // determined reliably from wxEVT_KEY_UP/DOWN alone, since holding a
++        // key down can generate real (non-auto-repeat-flagged) up/down event
++        // pairs at the OS key-repeat rate.
++        bool                    m_pttKeyRequireRelease_{false};
++
+         // TOT beep state
+         std::chrono::time_point<std::chrono::high_resolution_clock> m_totLastBeepTime_;
+ 
+@@ -489,6 +503,7 @@ class MainFrame : public TopFrame
+ 
+         void OnTOTTimer(wxTimerEvent& evt);
+         void OnTOTWarningTimer(wxTimerEvent& evt);
++        void OnPttKeyPollTimer(wxTimerEvent& evt);
+         void playTotBeep_();
+         void stopTotBeep_();
+         
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index b6ce23a0..3df32bf8 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1085,7 +1085,10 @@ int MainApp::FilterEvent(wxEvent& event)
+             bool totWarningActive = frame->m_totWarningDialog_ != nullptr && frame->m_totWarningDialog_->IsActive();
+             bool tuneActive = frame->m_btnTogTune->GetValue();
+ 	    bool keyRepeated = static_cast<wxKeyEvent&>(event).IsAutoRepeat();
+-            if (frame->m_RxRunning && !tuneActive && !keyRepeated && (mainWindowActive || totWarningActive || reporterActiveButNotUpdatingTextMessage) && 
++            // m_pttKeyRequireRelease_ blocks a key held through a forced TX stop
++            // (e.g. TOT) from immediately restarting TX -- see main.h.
++            if (frame->m_RxRunning && !tuneActive && !keyRepeated && !frame->m_pttKeyRequireRelease_ &&
++                (mainWindowActive || totWarningActive || reporterActiveButNotUpdatingTextMessage) &&
+                 wxGetApp().appConfiguration.enableSpaceBarForPTT && !frame->isReceiveOnly()) {
+ 
+                 // space bar controls tx/rx if keyer not running
+@@ -1265,6 +1268,32 @@ void MainFrame::OnTOTTimer(wxTimerEvent&)
+         m_btnTogPTT->SetValue(false);
+         endingTx.store(true, std::memory_order_release);
+         togglePTT();
++
++        // If the spacebar PTT key is still physically held down (e.g. something
++        // resting on the keyboard), holding it through the timeout must not be
++        // able to immediately re-key the rig -- that would defeat the whole
++        // point of the TOT. wxEVT_KEY_UP/DOWN aren't reliable for detecting
++        // "still held" here: on some platforms, a held key generates real
++        // key-up/key-down event pairs at the OS repeat rate rather than a
++        // single sustained key-down, so we poll the actual OS key state
++        // instead and keep the spacebar disabled until it genuinely goes up.
++        if (wxGetApp().appConfiguration.pttMomentaryMode &&
++            wxGetKeyState(static_cast<wxKeyCode>(wxGetApp().appConfiguration.pttKeyCode.get())))
++        {
++            log_info("TOT fired while PTT key still held -- blocking restart until key is released");
++            m_pttKeyRequireRelease_ = true;
++            m_pttKeyPollTimer.Start(30, wxTIMER_CONTINUOUS);
++        }
++    }
++}
++
++void MainFrame::OnPttKeyPollTimer(wxTimerEvent&)
++{
++    if (!wxGetKeyState(static_cast<wxKeyCode>(wxGetApp().appConfiguration.pttKeyCode.get())))
++    {
++        log_info("PTT key released -- spacebar PTT re-armed");
++        m_pttKeyRequireRelease_ = false;
++        m_pttKeyPollTimer.Stop();
+     }
+ }
+ 
