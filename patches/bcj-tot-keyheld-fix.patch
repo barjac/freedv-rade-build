@@ -59,14 +59,23 @@ index 937bbe3b..3c0beca2 100644
          void stopTotBeep_();
          
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index b6ce23a0..3df32bf8 100644
+index d5fbdd8b..acefa796 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
-@@ -1085,7 +1085,10 @@ int MainApp::FilterEvent(wxEvent& event)
+@@ -1071,7 +1071,6 @@ void MainFrame::OnCheckSNRClick(wxCommandEvent&)
+ }
+ 
+ // check for space bar press (only when running)
+-static bool IsPttKeyDown_ = false;
+ 
+ int MainApp::FilterEvent(wxEvent& event)
+ {
+@@ -1085,7 +1084,11 @@ int MainApp::FilterEvent(wxEvent& event)
+                 !frame->m_reporterDialog->isTextMessageFieldInFocus();
              bool totWarningActive = frame->m_totWarningDialog_ != nullptr && frame->m_totWarningDialog_->IsActive();
              bool tuneActive = frame->m_btnTogTune->GetValue();
- 	    bool keyRepeated = static_cast<wxKeyEvent&>(event).IsAutoRepeat();
--            if (frame->m_RxRunning && !tuneActive && !keyRepeated && (mainWindowActive || totWarningActive || reporterActiveButNotUpdatingTextMessage) && 
+-            if (frame->m_RxRunning && !tuneActive && !IsPttKeyDown_ && (mainWindowActive || totWarningActive || reporterActiveButNotUpdatingTextMessage) && 
++	    bool keyRepeated = static_cast<wxKeyEvent&>(event).IsAutoRepeat();
 +            // m_pttKeyRequireRelease_ blocks a key held through a forced TX stop
 +            // (e.g. TOT) from immediately restarting TX -- see main.h.
 +            if (frame->m_RxRunning && !tuneActive && !keyRepeated && !frame->m_pttKeyRequireRelease_ &&
@@ -74,7 +83,23 @@ index b6ce23a0..3df32bf8 100644
                  wxGetApp().appConfiguration.enableSpaceBarForPTT && !frame->isReceiveOnly()) {
  
                  // space bar controls tx/rx if keyer not running
-@@ -1265,6 +1268,32 @@ void MainFrame::OnTOTTimer(wxTimerEvent&)
+@@ -1093,7 +1096,6 @@ int MainApp::FilterEvent(wxEvent& event)
+                     if (wxGetApp().appConfiguration.pttMomentaryMode) {
+                         // Momentary mode: start TX only on the initial key press (not repeated events).
+                         if (!g_tx.load(std::memory_order_acquire)) {
+-                            IsPttKeyDown_ = true;
+                             frame->m_btnTogPTT->SetValue(true);
+                             frame->m_btnTogPTT->SetBackgroundColour(*wxRED);
+                             frame->togglePTT();
+@@ -1130,7 +1132,6 @@ int MainApp::FilterEvent(wxEvent& event)
+                 wxGetApp().appConfiguration.pttMomentaryMode) {
+ 
+                 if (frame->vk_state == VK_IDLE && g_tx.load(std::memory_order_acquire)) {
+-                    IsPttKeyDown_ = false;
+                     frame->m_btnTogPTT->SetValue(false);
+                     frame->m_btnTogPTT->SetBackgroundColour(wxNullColour);
+                     frame->togglePTT();
+@@ -1277,6 +1278,32 @@ void MainFrame::OnTOTTimer(wxTimerEvent&)
          m_btnTogPTT->SetValue(false);
          endingTx.store(true, std::memory_order_release);
          togglePTT();
