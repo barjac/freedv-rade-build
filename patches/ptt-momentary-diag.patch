@@ -1,0 +1,41 @@
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index a5eb858e..6150d66e 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1090,6 +1090,7 @@ int MainApp::FilterEvent(wxEvent& event)
+         (((wxKeyEvent&)event).GetKeyCode() == wxGetApp().appConfiguration.pttKeyCode))
+         {
+             bool pttKeyChanging = !PttKeyDown_;
++            log_info("PTT DIAG: KEY_DOWN pttKeyDownWasFalse=%d g_tx=%d momentaryMode=%d", (int)pttKeyChanging, (int)g_tx.load(std::memory_order_acquire), (int)wxGetApp().appConfiguration.pttMomentaryMode);
+             PttKeyDown_ = true;
+ 
+             // only use space to toggle PTT if we are running and no modal dialogs (like options) up
+@@ -1111,9 +1112,12 @@ int MainApp::FilterEvent(wxEvent& event)
+                     if (wxGetApp().appConfiguration.pttMomentaryMode) {
+                         // Momentary mode: start TX only on the initial key press (not repeated events).
+                         if (!g_tx.load(std::memory_order_acquire)) {
++                            log_info("PTT DIAG: KEY_DOWN momentary START TX (pttKeyDownWasFalse=%d)", (int)pttKeyChanging);
+                             frame->m_btnTogPTT->SetValue(true);
+                             frame->m_btnTogPTT->SetBackgroundColour(*wxRED);
+                             frame->togglePTT();
++                        } else {
++                            log_info("PTT DIAG: KEY_DOWN momentary suppressed, already in TX (pttKeyDownWasFalse=%d)", (int)pttKeyChanging);
+                         }
+                     } else if (pttKeyChanging) {
+                         // Latching mode: toggle TX state on each key press.
+@@ -1137,6 +1141,7 @@ int MainApp::FilterEvent(wxEvent& event)
+     if ((event.GetEventType() == wxEVT_KEY_UP) &&
+         (((wxKeyEvent&)event).GetKeyCode() == wxGetApp().appConfiguration.pttKeyCode))
+         {
++            log_info("PTT DIAG: KEY_UP pttKeyDownWasTrue=%d g_tx=%d momentaryMode=%d", (int)PttKeyDown_, (int)g_tx.load(std::memory_order_acquire), (int)wxGetApp().appConfiguration.pttMomentaryMode);
+             PttKeyDown_ = false;
+ 
+             bool mainWindowActive = frame->IsActive();
+@@ -1149,6 +1154,7 @@ int MainApp::FilterEvent(wxEvent& event)
+                 wxGetApp().appConfiguration.pttMomentaryMode) {
+ 
+                 if (frame->vk_state == VK_IDLE && g_tx.load(std::memory_order_acquire)) {
++                    log_info("PTT DIAG: KEY_UP momentary STOP TX");
+                     frame->m_btnTogPTT->SetValue(false);
+                     frame->m_btnTogPTT->SetBackgroundColour(wxNullColour);
+                     frame->togglePTT();
