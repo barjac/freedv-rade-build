@@ -193,6 +193,19 @@ if (( ${#prbranches[@]} == 0 )); then
                 || { echo "ERROR: Could not create build/combined branch"; exit 1; }
             for entry in "${pr_entries[@]}"; do
                 prnumber="${entry#pr:}"
+                pr_base=$(gh pr view "$prnumber" --json baseRefName -q .baseRefName 2>/dev/null)
+                if [[ -z "$pr_base" ]]; then
+                    echo "WARNING: Could not look up base branch for PR #$prnumber via 'gh' — proceeding without the base-branch check."
+                elif [[ "$pr_base" != "$base_branch" ]]; then
+                    echo -e "\nWARNING: PR #$prnumber is based on '$pr_base', not '$base_branch'. Merging it would pull in all of '$pr_base''s unique history (not just this PR's diff)."
+                    if confirm "Skip this PR and continue?" "[Y/n]" "yY" "nN"; then
+                        echo "Skipping PR #$prnumber."
+                        continue
+                    else
+                        echo "ERROR: Aborting build due to PR #$prnumber base-branch mismatch."
+                        exit 1
+                    fi
+                fi
                 echo "Fetching PR #$prnumber..."
                 git fetch origin "+refs/pull/$prnumber/head:pr/$prnumber" \
                     || { echo "ERROR: Failed to fetch PR #$prnumber"; exit 1; }
