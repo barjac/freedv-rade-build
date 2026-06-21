@@ -191,19 +191,41 @@ if (( ${#prbranches[@]} == 0 )); then
             # One or more PRs to merge onto the base branch (default, or the named one).
             git checkout -B build/combined "$base_branch" \
                 || { echo "ERROR: Could not create build/combined branch"; exit 1; }
+            # Pre-fetch each PR's head branch name so a PR stacked on another
+            # PR in this same batch (base == that other PR's head branch)
+            # isn't flagged as a mismatch - only a base outside this batch
+            # and outside $base_branch pulls in unrelated history.
+            declare -A _pr_head_refs
+            for entry in "${pr_entries[@]}"; do
+                _pn="${entry#pr:}"
+                _pr_head_refs[$_pn]=$(gh pr view "$_pn" --json headRefName -q .headRefName 2>/dev/null)
+            done
+
             for entry in "${pr_entries[@]}"; do
                 prnumber="${entry#pr:}"
                 pr_base=$(gh pr view "$prnumber" --json baseRefName -q .baseRefName 2>/dev/null)
                 if [[ -z "$pr_base" ]]; then
                     echo "WARNING: Could not look up base branch for PR #$prnumber via 'gh' — proceeding without the base-branch check."
                 elif [[ "$pr_base" != "$base_branch" ]]; then
-                    echo -e "\nWARNING: PR #$prnumber is based on '$pr_base', not '$base_branch'. Merging it would pull in all of '$pr_base''s unique history (not just this PR's diff)."
-                    if confirm "Skip this PR and continue?" "[Y/n]" "yY" "nN"; then
-                        echo "Skipping PR #$prnumber."
-                        continue
+                    _stacked_on=""
+                    for _other_pn in "${!_pr_head_refs[@]}"; do
+                        [[ "$_other_pn" == "$prnumber" ]] && continue
+                        if [[ -n "$pr_base" && "$pr_base" == "${_pr_head_refs[$_other_pn]}" ]]; then
+                            _stacked_on="$_other_pn"
+                            break
+                        fi
+                    done
+                    if [[ -n "$_stacked_on" ]]; then
+                        echo "NOTE: PR #$prnumber is based on '$pr_base', which is PR #${_stacked_on}'s branch also being merged in this build - treating as a stacked PR, not a mismatch."
                     else
-                        echo "ERROR: Aborting build due to PR #$prnumber base-branch mismatch."
-                        exit 1
+                        echo -e "\nWARNING: PR #$prnumber is based on '$pr_base', not '$base_branch'. Merging it would pull in all of '$pr_base''s unique history (not just this PR's diff)."
+                        if confirm "Skip this PR and continue?" "[Y/n]" "yY" "nN"; then
+                            echo "Skipping PR #$prnumber."
+                            continue
+                        else
+                            echo "ERROR: Aborting build due to PR #$prnumber base-branch mismatch."
+                            exit 1
+                        fi
                     fi
                 fi
                 echo "Fetching PR #$prnumber..."
