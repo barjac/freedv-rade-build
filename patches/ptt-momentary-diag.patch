@@ -1,16 +1,28 @@
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index a5eb858e..6150d66e 100644
+index a5eb858e..bf3bd2c0 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
-@@ -1090,6 +1090,7 @@ int MainApp::FilterEvent(wxEvent& event)
-         (((wxKeyEvent&)event).GetKeyCode() == wxGetApp().appConfiguration.pttKeyCode))
-         {
-             bool pttKeyChanging = !PttKeyDown_;
-+            log_info("PTT DIAG: KEY_DOWN pttKeyDownWasFalse=%d g_tx=%d momentaryMode=%d", (int)pttKeyChanging, (int)g_tx.load(std::memory_order_acquire), (int)wxGetApp().appConfiguration.pttMomentaryMode);
-             PttKeyDown_ = true;
+@@ -1100,22 +1100,32 @@ int MainApp::FilterEvent(wxEvent& event)
+             bool totWarningActive = frame->m_totWarningDialog_ != nullptr && frame->m_totWarningDialog_->IsActive();
+             bool tuneActive = frame->m_btnTogTune->GetValue();
  
-             // only use space to toggle PTT if we are running and no modal dialogs (like options) up
-@@ -1111,9 +1112,12 @@ int MainApp::FilterEvent(wxEvent& event)
++            bool gateDown = frame->m_RxRunning && !tuneActive && !frame->m_pttKeyRequireRelease_ &&
++                (mainWindowActive || totWarningActive || reporterActiveButNotUpdatingTextMessage) &&
++                wxGetApp().appConfiguration.enableSpaceBarForPTT && !frame->isReceiveOnly();
++            log_info("PTT DIAG: KEY_DOWN gate=%d mainWindowActive=%d totWarningActive=%d reporterActive=%d tuneActive=%d RxRunning=%d pttKeyRequireRelease=%d enableSpaceBarForPTT=%d receiveOnly=%d vk_state=%d g_tx=%d",
++                (int)gateDown, (int)mainWindowActive, (int)totWarningActive, (int)reporterActiveButNotUpdatingTextMessage, (int)tuneActive,
++                (int)frame->m_RxRunning, (int)frame->m_pttKeyRequireRelease_, (int)wxGetApp().appConfiguration.enableSpaceBarForPTT,
++                (int)frame->isReceiveOnly(), (int)frame->vk_state, (int)g_tx.load(std::memory_order_acquire));
++
+             // m_pttKeyRequireRelease_ blocks a key held through a forced TX stop
+             // (e.g. TOT) from immediately restarting TX -- see main.h.
+-            if (frame->m_RxRunning && !tuneActive && !frame->m_pttKeyRequireRelease_ &&
+-                (mainWindowActive || totWarningActive || reporterActiveButNotUpdatingTextMessage) &&
+-                wxGetApp().appConfiguration.enableSpaceBarForPTT && !frame->isReceiveOnly()) {
++            if (gateDown) {
+ 
+                 // space bar controls tx/rx if keyer not running
+                 if (frame->vk_state == VK_IDLE) {
                      if (wxGetApp().appConfiguration.pttMomentaryMode) {
                          // Momentary mode: start TX only on the initial key press (not repeated events).
                          if (!g_tx.load(std::memory_order_acquire)) {
@@ -22,20 +34,41 @@ index a5eb858e..6150d66e 100644
 +                            log_info("PTT DIAG: KEY_DOWN momentary suppressed, already in TX (pttKeyDownWasFalse=%d)", (int)pttKeyChanging);
                          }
                      } else if (pttKeyChanging) {
++                        log_info("PTT DIAG: KEY_DOWN latching TOGGLE TX");
                          // Latching mode: toggle TX state on each key press.
-@@ -1137,6 +1141,7 @@ int MainApp::FilterEvent(wxEvent& event)
-     if ((event.GetEventType() == wxEVT_KEY_UP) &&
-         (((wxKeyEvent&)event).GetKeyCode() == wxGetApp().appConfiguration.pttKeyCode))
-         {
-+            log_info("PTT DIAG: KEY_UP pttKeyDownWasTrue=%d g_tx=%d momentaryMode=%d", (int)PttKeyDown_, (int)g_tx.load(std::memory_order_acquire), (int)wxGetApp().appConfiguration.pttMomentaryMode);
-             PttKeyDown_ = false;
+                         if (frame->m_btnTogPTT->GetValue())
+                             frame->m_btnTogPTT->SetValue(false);
+@@ -1123,6 +1133,8 @@ int MainApp::FilterEvent(wxEvent& event)
+                             frame->m_btnTogPTT->SetValue(true);
  
-             bool mainWindowActive = frame->IsActive();
-@@ -1149,6 +1154,7 @@ int MainApp::FilterEvent(wxEvent& event)
-                 wxGetApp().appConfiguration.pttMomentaryMode) {
+                         frame->togglePTT();
++                    } else {
++                        log_info("PTT DIAG: KEY_DOWN latching suppressed (repeat)");
+                     }
+                 }
+                 else // space bar stops keyer
+@@ -1144,14 +1156,22 @@ int MainApp::FilterEvent(wxEvent& event)
+                 frame->m_reporterDialog != nullptr && frame->m_reporterDialog->IsActive() &&
+                 !frame->m_reporterDialog->isTextMessageFieldInFocus();
+             bool totWarningActive = frame->m_totWarningDialog_ != nullptr && frame->m_totWarningDialog_->IsActive();
+-            if (frame->m_RxRunning && (mainWindowActive || totWarningActive || reporterActiveButNotUpdatingTextMessage) &&
++            bool gateUp = frame->m_RxRunning && (mainWindowActive || totWarningActive || reporterActiveButNotUpdatingTextMessage) &&
+                 wxGetApp().appConfiguration.enableSpaceBarForPTT && !frame->isReceiveOnly() &&
+-                wxGetApp().appConfiguration.pttMomentaryMode) {
++                wxGetApp().appConfiguration.pttMomentaryMode;
++            log_info("PTT DIAG: KEY_UP gate=%d mainWindowActive=%d totWarningActive=%d reporterActive=%d RxRunning=%d enableSpaceBarForPTT=%d receiveOnly=%d momentaryMode=%d vk_state=%d g_tx=%d",
++                (int)gateUp, (int)mainWindowActive, (int)totWarningActive, (int)reporterActiveButNotUpdatingTextMessage,
++                (int)frame->m_RxRunning, (int)wxGetApp().appConfiguration.enableSpaceBarForPTT, (int)frame->isReceiveOnly(),
++                (int)wxGetApp().appConfiguration.pttMomentaryMode, (int)frame->vk_state, (int)g_tx.load(std::memory_order_acquire));
++            if (gateUp) {
  
                  if (frame->vk_state == VK_IDLE && g_tx.load(std::memory_order_acquire)) {
 +                    log_info("PTT DIAG: KEY_UP momentary STOP TX");
                      frame->m_btnTogPTT->SetValue(false);
                      frame->m_btnTogPTT->SetBackgroundColour(wxNullColour);
                      frame->togglePTT();
++                } else {
++                    log_info("PTT DIAG: KEY_UP gate passed but no stop (vk_state!=VK_IDLE or g_tx already false)");
+                 }
+                 return Event_Processed;
+             }
