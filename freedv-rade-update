@@ -154,63 +154,60 @@ fi
 
 if (( ${#prbranches[@]} == 0 )); then
         echo "Using branch $default"
-    elif (( ${#prbranches[@]} == 1 )); then
-        # Single entry — existing checkout behaviour (branch, tag, or PR)
-        entry="${prbranches[0]}"
-        if [[ "$entry" == pr:* ]]; then
-            prnumber="${entry#pr:}"
-            echo "Fetching PR #$prnumber via GitHub ref..."
-            git fetch origin "+refs/pull/$prnumber/head:pr/$prnumber" \
-                || { echo "ERROR: Failed to fetch PR #$prnumber"; exit 1; }
-            prhead=$(git rev-parse --short "pr/$prnumber")
-            git checkout -B build/combined "$default" \
-                || { echo "ERROR: Could not create build/combined branch"; exit 1; }
-            echo "Merging PR #$prnumber..."
-            if ! git merge --no-edit "pr/$prnumber"; then
-                git merge --abort 2>/dev/null
-                echo "ERROR: PR #$prnumber conflicts with existing changes — aborting."
+    else
+        # Split the selection into at most one branch/tag entry (the base)
+        # and any number of PR-number entries to merge onto that base.
+        base_entry=""
+        pr_entries=()
+        for entry in "${prbranches[@]}"; do
+            if [[ "$entry" == pr:* ]]; then
+                pr_entries+=("$entry")
+            elif [[ "$entry" == *:* ]]; then
+                echo "ERROR: Fork branch '$entry' not in upstream. Use a PR number instead."
                 exit 1
+            else
+                if [[ -n "$base_entry" ]]; then
+                    echo "ERROR: Only one branch/tag name may be used as the base ('$base_entry' and '$entry' were both given). Use PR numbers for anything else to combine."
+                    exit 1
+                fi
+                base_entry="$entry"
             fi
-            echo "PR #$prnumber merged OK"
-            _bi_prs+=("pr:${prnumber} @ ${prhead}")
-        elif [[ "$entry" == *:* ]]; then
-            echo "ERROR: Fork branch '$entry' not in upstream. Use a PR number instead."
-            exit 1
-        else
-            if git checkout "$entry" | grep -q "error:"; then
-                echo -e "\nError finding $entry - closing.\n"
+        done
+        base_branch="${base_entry:-$default}"
+
+        if [[ -n "$base_entry" ]]; then
+            if git checkout "$base_entry" | grep -q "error:"; then
+                echo -e "\nError finding $base_entry - closing.\n"
                 exit 1
             fi
             git pull
-            _bi_base="${entry} @ $(git rev-parse --short HEAD)"
+            _bi_base="${base_entry} @ $(git rev-parse --short HEAD)"
         fi
-        echo "Using branch $entry"
-    else
-        # Multiple PRs — validate all are PR numbers, then merge into a throwaway branch
-        for entry in "${prbranches[@]}"; do
-            if [[ "$entry" != pr:* ]]; then
-                echo "ERROR: '$entry' is not a PR number. When combining multiple entries all must be PR numbers."
-                exit 1
-            fi
-        done
-        git checkout -B build/combined "$default" \
-            || { echo "ERROR: Could not create build/combined branch"; exit 1; }
-        for entry in "${prbranches[@]}"; do
-            prnumber="${entry#pr:}"
-            echo "Fetching PR #$prnumber..."
-            git fetch origin "+refs/pull/$prnumber/head:pr/$prnumber" \
-                || { echo "ERROR: Failed to fetch PR #$prnumber"; exit 1; }
-            prhead=$(git rev-parse --short "pr/$prnumber")
-            echo "Merging PR #$prnumber..."
-            if ! git merge --no-edit "pr/$prnumber"; then
-                git merge --abort 2>/dev/null
-                echo "ERROR: PR #$prnumber conflicts with existing changes — aborting."
-                exit 1
-            fi
-            echo "PR #$prnumber merged OK"
-            _bi_prs+=("pr:${prnumber} @ ${prhead}")
-        done
-        echo "Using combined PRs: ${prbranches[*]}"
+
+        if (( ${#pr_entries[@]} == 0 )); then
+            # Branch/tag only, nothing to merge onto it.
+            echo "Using branch $base_branch"
+        else
+            # One or more PRs to merge onto the base branch (default, or the named one).
+            git checkout -B build/combined "$base_branch" \
+                || { echo "ERROR: Could not create build/combined branch"; exit 1; }
+            for entry in "${pr_entries[@]}"; do
+                prnumber="${entry#pr:}"
+                echo "Fetching PR #$prnumber..."
+                git fetch origin "+refs/pull/$prnumber/head:pr/$prnumber" \
+                    || { echo "ERROR: Failed to fetch PR #$prnumber"; exit 1; }
+                prhead=$(git rev-parse --short "pr/$prnumber")
+                echo "Merging PR #$prnumber..."
+                if ! git merge --no-edit "pr/$prnumber"; then
+                    git merge --abort 2>/dev/null
+                    echo "ERROR: PR #$prnumber conflicts with existing changes — aborting."
+                    exit 1
+                fi
+                echo "PR #$prnumber merged OK"
+                _bi_prs+=("pr:${prnumber} @ ${prhead}")
+            done
+            echo "Using base $base_branch combined with PRs: ${pr_entries[*]}"
+        fi
     fi
 
 # Save PR/branch selection for reuse next time
@@ -687,14 +684,21 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
     if (( fastupdt == 1 )); then
         if (( ${#prbranches[@]} == 0 )); then
             updt_str="built at $default"
-        elif (( ${#prbranches[@]} == 1 )); then
-            if [[ "${prbranches[0]}" == pr:* ]]; then
-                updt_str="built at $default with PR ${prbranches[0]#pr:} merged"
-            else
-                updt_str="built at ${prbranches[0]}"
-            fi
         else
-            updt_str="built with merged PRs: ${prbranches[*]}"
+            _preview_base="$default"
+            _preview_prs=()
+            for _entry in "${prbranches[@]}"; do
+                if [[ "$_entry" == pr:* ]]; then
+                    _preview_prs+=("${_entry#pr:}")
+                else
+                    _preview_base="$_entry"
+                fi
+            done
+            if (( ${#_preview_prs[@]} == 0 )); then
+                updt_str="built at $_preview_base"
+            else
+                updt_str="built at $_preview_base with PR(s) ${_preview_prs[*]} merged"
+            fi
         fi
 
         if (( ${#cname} > 0 )); then
