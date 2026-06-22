@@ -639,7 +639,7 @@ index 19586606..643464ab 100644
  #endif // FREQUENCY_OPS_H
 \ No newline at end of file
 diff --git a/src/main.cpp b/src/main.cpp
-index 1d038a1f..6031c009 100644
+index 1d038a1f..2004bf1d 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -56,6 +56,7 @@
@@ -650,22 +650,23 @@ index 1d038a1f..6031c009 100644
  
  #include "util/logging/ulog.h"
  #include "util/audio_spin_mutex.h"
-@@ -913,12 +914,12 @@ void MainFrame::loadConfiguration_()
+@@ -911,14 +912,13 @@ void MainFrame::loadConfiguration_()
+     // Adjust frequency entry labels
+     wxListItem colInfo;
      m_lastReportedCallsignListView->GetColumn(1, colInfo);
++    updateFreqBoxLabel_();
      if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
      {
 -        m_freqBox->SetLabel(_("Radio Freq. (kHz)"));
-+        m_freqBox->SetLabel(_("Center Freq. (kHz)"));
          colInfo.SetText(_("kHz"));
      }
      else
      {
 -        m_freqBox->SetLabel(_("Radio Freq. (MHz)"));
-+        m_freqBox->SetLabel(_("Center Freq. (MHz)"));
          colInfo.SetText(_("MHz"));
      }
      m_lastReportedCallsignListView->SetColumn(1, colInfo);
-@@ -2687,11 +2688,15 @@ void MainFrame::performFreeDVOn_()
+@@ -2687,11 +2687,15 @@ void MainFrame::performFreeDVOn_()
                      (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges || wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqChangesOnly) &&
                      wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0)
                  {
@@ -684,26 +685,39 @@ index 1d038a1f..6031c009 100644
                      }
                  }
                      
+diff --git a/src/main.h b/src/main.h
+index d675bdd9..355dd25e 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -617,6 +617,7 @@ class MainFrame : public TopFrame
+         void executeOnUiThreadAndWait_(std::function<void()> fn);
+         
+         void updateReportingFreqList_();
++        void updateFreqBoxLabel_();
+         
+         void initializeFreeDVReporter_();
+         void updateVoiceKeyerButtonLabel_();
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index 31994c62..edce8790 100644
+index 31994c62..e7137a0f 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
-@@ -300,12 +300,12 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
+@@ -298,14 +298,13 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
+         // Adjust frequency labels on main window
+         wxListItem colInfo;
          m_lastReportedCallsignListView->GetColumn(1, colInfo);
++        updateFreqBoxLabel_();
          if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
          {
 -            m_freqBox->SetLabel(_("Radio Freq. (kHz)"));
-+            m_freqBox->SetLabel(_("Center Freq. (kHz)"));
              colInfo.SetText(_("kHz"));
          }
          else
          {
 -            m_freqBox->SetLabel(_("Radio Freq. (MHz)"));
-+            m_freqBox->SetLabel(_("Center Freq. (MHz)"));
              colInfo.SetText(_("MHz"));
          }
          m_lastReportedCallsignListView->SetColumn(1, colInfo);
-@@ -454,6 +454,14 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+@@ -454,6 +453,14 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
              return;
          }
  
@@ -718,7 +732,7 @@ index 31994c62..edce8790 100644
          // Update string value.
          switch(mode)
          {
-@@ -518,24 +526,24 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+@@ -518,24 +525,24 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
              !wxGetApp().appConfiguration.reportingConfiguration.manualFrequencyReporting))
          {
              // wxString::Format() doesn't respect locale but wxNumberFormatter should. Use the latter instead.
@@ -750,7 +764,7 @@ index 31994c62..edce8790 100644
              {
                  for (auto& ptr : wxGetApp().m_reporters)
                  {
-@@ -571,11 +579,15 @@ void MainFrame::onRadioConnected_(IRigController*)
+@@ -571,11 +578,15 @@ void MainFrame::onRadioConnected_(IRigController*)
          firstFreqUpdateOnConnect_ = true;
  
          // Set frequency/mode to the one pre-selected by the user before start.
@@ -769,7 +783,7 @@ index 31994c62..edce8790 100644
          }
      }
  }
-@@ -1682,7 +1694,7 @@ HamlibRigController::Mode MainFrame::getCurrentMode_()
+@@ -1682,7 +1693,7 @@ HamlibRigController::Mode MainFrame::getCurrentMode_()
  //-------------------------------------------------------------------------
  void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
  {
@@ -778,7 +792,16 @@ index 31994c62..edce8790 100644
  
      if (g_analog == 0) {
          g_analog = 1;
-@@ -1708,32 +1720,62 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+@@ -1699,6 +1710,8 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+         m_togBtnAnalog->SetLabel(wxT("Switch to A&nalog"));
+     }
+ 
++    updateFreqBoxLabel_();
++
+     // Report analog change to registered reporters
+     for (auto& obj : wxGetApp().m_reporters)
+     {
+@@ -1708,32 +1721,62 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
          }
      }
      
@@ -810,11 +833,11 @@ index 31994c62..edce8790 100644
 +        // voice mode (wasAnalog / g_analog).
 +        auto oldMode = GetModeForFrequency(reportingFreq, hamlibUseAnalogModes, wasAnalog);
 +        uint64_t dialFreq = DisplayToDialFreq(reportingFreq, oldMode, wasAnalog);
-+
-+        uint64_t spot = DialToDisplayFreq(dialFreq, oldMode, false);
  
 -        constexpr int LSB_USB_FREQ_SHIFT_HZ = 3000;
 -        if (currentMode == HamlibRigController::LSB && g_analog)
++        uint64_t spot = DialToDisplayFreq(dialFreq, oldMode, false);
++
 +        auto newMode = GetModeForFrequency(dialFreq, hamlibUseAnalogModes, g_analog != 0);
 +        newDialFreq = DisplayToDialFreq(spot, newMode, false);
 +        dialFreqChanged = newDialFreq != dialFreq;
@@ -860,7 +883,7 @@ index 31994c62..edce8790 100644
      }
  
      g_State.store(0, std::memory_order_release);
-@@ -1982,11 +2024,15 @@ void MainFrame::OnChangeReportFrequency( wxCommandEvent& )
+@@ -1982,11 +2025,15 @@ void MainFrame::OnChangeReportFrequency( wxCommandEvent& )
              wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0 && 
              (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges || wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqChangesOnly))
          {
@@ -879,7 +902,31 @@ index 31994c62..edce8790 100644
              }
          }
      }
-@@ -2087,7 +2133,7 @@ void MainFrame::updateReportingFreqList_()
+@@ -2066,6 +2113,23 @@ void MainFrame::OnCenterRx(wxCommandEvent&)
+     clickTune(FDMDV_FCENTRE);
+ }
+ 
++void MainFrame::updateFreqBoxLabel_()
++{
++    // The centre-frequency convention only makes sense in digital mode (see
++    // GetCentreFreqOffsetHz() in FrequencyOps.h, which returns a zero offset
++    // whenever analog is active) -- in Analog mode the displayed value *is*
++    // the radio's dial frequency, so the label needs to say so.
++    bool asKhz = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz;
++    if (g_analog)
++    {
++        m_freqBox->SetLabel(asKhz ? _("Radio Freq. (kHz)") : _("Radio Freq. (MHz)"));
++    }
++    else
++    {
++        m_freqBox->SetLabel(asKhz ? _("Center Freq. (kHz)") : _("Center Freq. (MHz)"));
++    }
++}
++
+ void MainFrame::updateReportingFreqList_()
+ {
+     uint64_t prevFreqInt = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency;
+@@ -2087,7 +2151,7 @@ void MainFrame::updateReportingFreqList_()
      }
      m_cboReportFrequency->Clear();
      
@@ -888,20 +935,26 @@ index 31994c62..edce8790 100644
      {
          m_cboReportFrequency->Append(item);
      }
-@@ -2102,11 +2148,11 @@ void MainFrame::updateReportingFreqList_()
-     // Update associated label if the units have changed
-     if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
-     {
+@@ -2098,16 +2162,9 @@ void MainFrame::updateReportingFreqList_()
+         m_cboReportFrequency->SetSelection(idx);
+     }
+     m_cboReportFrequency->SetValue(prevSelected);
+-    
+-    // Update associated label if the units have changed
+-    if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
+-    {
 -        m_freqBox->SetLabel(_("Radio Freq. (kHz)"));
-+        m_freqBox->SetLabel(_("Center Freq. (kHz)"));
-     }
-     else
-     {
+-    }
+-    else
+-    {
 -        m_freqBox->SetLabel(_("Radio Freq. (MHz)"));
-+        m_freqBox->SetLabel(_("Center Freq. (MHz)"));
-     }
+-    }
++
++    // Update associated label if the units/mode have changed
++    updateFreqBoxLabel_();
  }
  
+ void MainFrame::OnResetMicSpkrLevel(wxMouseEvent&)
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
 index 7f593d66..67e49096 100644
 --- a/src/topFrame.cpp
