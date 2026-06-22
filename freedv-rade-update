@@ -176,11 +176,23 @@ if (( ${#prbranches[@]} == 0 )); then
         base_branch="${base_entry:-$default}"
 
         if [[ -n "$base_entry" ]]; then
-            if git checkout "$base_entry" | grep -q "error:"; then
-                echo -e "\nError finding $base_entry - closing.\n"
-                exit 1
+            if git rev-parse --verify -q "origin/$base_entry" >/dev/null; then
+                # Remote branch - force-sync local ref to origin, same as $default,
+                # so a prior run's leftover local commits (e.g. from patches applied
+                # directly to this branch name) can't cause a "divergent branches"
+                # pull failure here.
+                if ! git checkout -B "$base_entry" "origin/$base_entry"; then
+                    echo -e "\nError finding $base_entry - closing.\n"
+                    exit 1
+                fi
+                git reset --hard "origin/$base_entry" || { echo "ERROR: failed to reset $base_entry to origin/$base_entry"; exit 1; }
+            else
+                # Not a remote branch (e.g. a tag) - check it out as-is, no sync needed.
+                if git checkout "$base_entry" | grep -q "error:"; then
+                    echo -e "\nError finding $base_entry - closing.\n"
+                    exit 1
+                fi
             fi
-            git pull
             _bi_base="${base_entry} @ $(git rev-parse --short HEAD)"
         fi
 
