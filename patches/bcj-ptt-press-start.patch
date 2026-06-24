@@ -1,0 +1,163 @@
+From 67175fc6ddab7c4065b2c329ed110a165a8f6333 Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@mageia.org>
+Date: Wed, 24 Jun 2026 15:21:54 +0100
+Subject: [PATCH] Start TX immediately on XMIT button press rather than
+ release.
+
+Rebinds to LEFT_DOWN (reverting 767a7979) and calls togglePTT() directly
+there. A m_suppressNextPTTClick_ flag causes OnTogBtnPTT to discard the
+redundant wxEVT_COMMAND_TOGGLEBUTTON_CLICKED that wxToggleButton fires on
+LEFT_UP, undoing its auto-toggle so state remains consistent. The button
+value is pre-set to the intended post-toggle direction before togglePTT()
+runs, making the suppress/undo timing-safe regardless of where togglePTT()
+is in its TX delay when LEFT_UP arrives. OnTogBtnPTTMouseLeave gains a
+txChangeoverOccurring_ guard so it cannot reset the pre-empt colour while
+togglePTT() is running its start delay.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/main.cpp  |  2 +-
+ src/main.h    |  9 +++++++--
+ src/ongui.cpp | 52 +++++++++++++++++++++++++++++++++++----------------
+ 3 files changed, 44 insertions(+), 19 deletions(-)
+
+diff --git a/src/main.cpp b/src/main.cpp
+index e8b5a428..70dfe3aa 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1255,7 +1255,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+ 
+     m_togBtnOnOff->Connect(wxEVT_UPDATE_UI, wxUpdateUIEventHandler(MainFrame::OnTogBtnOnOffUI), NULL, this);
+     m_togBtnAnalog->Connect(wxEVT_UPDATE_UI, wxUpdateUIEventHandler(MainFrame::OnTogBtnAnalogClickUI), NULL, this);
+-    m_btnTogPTT->Bind(wxEVT_LEFT_UP, &MainFrame::OnTogBtnPTTMouseDown, this);
++    m_btnTogPTT->Bind(wxEVT_LEFT_DOWN, &MainFrame::OnTogBtnPTTMouseDown, this);
+     m_btnTogPTT->Bind(wxEVT_LEFT_DCLICK, &MainFrame::OnTogBtnPTTMouseDown, this);
+     m_btnTogPTT->Bind(wxEVT_LEAVE_WINDOW, &MainFrame::OnTogBtnPTTMouseLeave, this);
+ 
+diff --git a/src/main.h b/src/main.h
+index 9ff3dccc..0e95b925 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -369,6 +369,11 @@ class MainFrame : public TopFrame
+         // if it's set, instead of leaving the radio keyed indefinitely.
+         bool                    m_momentaryKeyReleasedDuringChangeover_{false};
+ 
++        // Set by OnTogBtnPTTMouseDown after it calls togglePTT() directly on
++        // LEFT_DOWN. Causes OnTogBtnPTT to discard the redundant click event
++        // that wxToggleButton fires on LEFT_UP and undo its auto-toggle.
++        bool                    m_suppressNextPTTClick_{false};
++
+         // TOT beep state
+         std::chrono::time_point<std::chrono::high_resolution_clock> m_totLastBeepTime_;
+ 
+@@ -447,8 +452,8 @@ class MainFrame : public TopFrame
+         void OnTogBtnPTT( wxCommandEvent& event ) override;
+         void OnTogBtnPTTRightClick( wxContextMenuEvent& event ) override;
+ 
+-        // NOTE: sets TX colour on press to avoid a GTK blue-flash during the TX delay.
+-        // Upstream may prefer a different approach (e.g. true press-to-start TX).
++        // Starts/stops TX immediately on LEFT_DOWN; consumes the event to prevent a
++        // redundant wxEVT_COMMAND_TOGGLEBUTTON_CLICKED from firing on LEFT_UP.
+         void OnTogBtnPTTMouseDown( wxMouseEvent& event );
+         void OnTogBtnPTTMouseLeave( wxMouseEvent& event );
+ 
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index 92b87768..8313bf41 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1192,43 +1192,54 @@ void MainFrame::OnTogBtnPTTRightClick( wxContextMenuEvent& )
+ 
+ //-------------------------------------------------------------------------
+ // OnTogBtnPTTMouseDown()
+-// Set TX colour immediately on mouse press when going RX->TX, avoiding a GTK
+-// blue-flash during the TX delay before togglePTT() sets it on release.
+-// Only fires when the pipeline is genuinely in RX (g_tx false); during the
+-// TX->RX drain g_tx is still true, so clicks there are correctly ignored.
+-// NOTE for upstream: this is a simple cosmetic fix. A fuller alternative would
+-// be to start TX here on press and suppress the togglePTT() call on release.
++// Start/stop TX immediately on LEFT_DOWN rather than waiting for release.
++// Pre-sets the button value and sets m_suppressNextPTTClick_ so that the
++// redundant wxEVT_COMMAND_TOGGLEBUTTON_CLICKED that wxToggleButton fires on
++// LEFT_UP is discarded by OnTogBtnPTT without double-toggling.
+ //-------------------------------------------------------------------------
+ void MainFrame::OnTogBtnPTTMouseDown(wxMouseEvent& event)
+ {
+-    if (txChangeoverOccurring_) return;
++    if (txChangeoverOccurring_) { event.Skip(); return; }
+ 
+-    if (!m_btnTogPTT->GetValue() && !g_tx.load(std::memory_order_acquire))
++    // Pre-empt GTK's blue active-state for the RX->TX direction.
++    if (!g_tx.load(std::memory_order_acquire))
+     {
+         m_btnTogPTT->SetBackgroundColour(*wxRED);
+ #if !defined(__APPLE__)
+-        // macOS limitations prevent the foreground color of toggle buttons from being 
+-        // reliably set, so don't mess with it in the first place.
+         m_btnTogPTT->SetForegroundColour(*wxBLACK);
+ #endif // !defined(__APPLE__)
+         m_btnTogPTT->Refresh();
+     }
++
++    // Pre-set the button value to the intended post-toggle state. This means
++    // that when OnTogBtnPTT fires on LEFT_UP and suppresses the click, it can
++    // simply invert GetValue() to undo the widget's auto-toggle -- regardless
++    // of where togglePTT() is in its TX delay at that moment.
++    m_btnTogPTT->SetValue(!m_btnTogPTT->GetValue());
++    m_suppressNextPTTClick_ = true;
++
++    if (vk_state == VK_TX)
++        VoiceKeyerProcessEvent(VK_SPACE_BAR);
++    else
++        togglePTT();
++
+     event.Skip();
+ }
+ 
+ //-------------------------------------------------------------------------
+ // OnTogBtnPTTMouseLeave()
+-// Reset premature TX colour if mouse leaves button before release and TX
+-// has not actually started, preventing a stuck-red button.
++// Reset pre-empt colour if mouse leaves during the TX start delay before
++// g_tx and GetValue() have been updated by togglePTT(). The
++// txChangeoverOccurring_ guard prevents this firing while togglePTT() is
++// running (it would see g_tx/GetValue() still false and wrongly reset colour).
+ //-------------------------------------------------------------------------
+ void MainFrame::OnTogBtnPTTMouseLeave(wxMouseEvent& event)
+ {
+-    if (!m_btnTogPTT->GetValue() && !g_tx.load(std::memory_order_acquire))
++    if (!m_btnTogPTT->GetValue() && !g_tx.load(std::memory_order_acquire)
++        && !txChangeoverOccurring_)
+     {
+         m_btnTogPTT->SetBackgroundColour(wxNullColour);
+ #if !defined(__APPLE__)
+-        // macOS limitations prevent the foreground color of toggle buttons from being 
+-        // reliably set, so don't mess with it in the first place.
+         m_btnTogPTT->SetForegroundColour(wxNullColour);
+ #endif // !defined(__APPLE__)
+         m_btnTogPTT->Refresh();
+@@ -1241,12 +1252,21 @@ void MainFrame::OnTogBtnPTTMouseLeave(wxMouseEvent& event)
+ //-------------------------------------------------------------------------
+ void MainFrame::OnTogBtnPTT (wxCommandEvent&)
+ {
++    // OnTogBtnPTTMouseDown already called togglePTT() on LEFT_DOWN; discard
++    // this redundant click event and undo the widget's auto-toggle.
++    if (m_suppressNextPTTClick_)
++    {
++        m_suppressNextPTTClick_ = false;
++        m_btnTogPTT->SetValue(!m_btnTogPTT->GetValue());
++        return;
++    }
++
+     if (vk_state == VK_TX)
+     {
+         // Disable TX via VK code to prevent state inconsistencies.
+         VoiceKeyerProcessEvent(VK_SPACE_BAR);
+     }
+-    else 
++    else
+     {
+         togglePTT();
+     }
+-- 
+2.52.0
+
