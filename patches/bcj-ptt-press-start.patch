@@ -1,7 +1,7 @@
 From 67175fc6ddab7c4065b2c329ed110a165a8f6333 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Wed, 24 Jun 2026 15:21:54 +0100
-Subject: [PATCH 1/2] Start TX immediately on XMIT button press rather than
+Subject: [PATCH 1/3] Start TX immediately on XMIT button press rather than
  release.
 
 Rebinds to LEFT_DOWN (reverting 767a7979) and calls togglePTT() directly
@@ -165,7 +165,7 @@ index 92b87768..8313bf41 100644
 From 524b22a0231dced2c8dfca07a783ecda32d9a9c2 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Wed, 24 Jun 2026 15:56:56 +0100
-Subject: [PATCH 2/2] Fix suppress flag stuck and momentary mouse stop on
+Subject: [PATCH 2/3] Fix suppress flag stuck and momentary mouse stop on
  release.
 
 Three fixes:
@@ -241,6 +241,82 @@ index 8313bf41..3ec2ab0b 100644
      else
      {
          togglePTT();
+-- 
+2.52.0
+
+
+From 57bea97d9b32ffcf3d117d27d4580f7a2c828ca2 Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@mageia.org>
+Date: Wed, 24 Jun 2026 16:06:41 +0100
+Subject: [PATCH 3/3] Fix XMIT button blue hover after TX cycle on wxGTK.
+
+Resetting SetBackgroundColour(wxNullColour) removes the CSS provider that
+was installed when the button was coloured red for TX. This leaves the GTK
+widget in a different internal state from buttons that were never styled,
+causing GTK's hover/prelight to apply a blue tint on mouseover. The tint
+only appears after the first TX->RX transition, not before, and disappears
+after a modem restart -- exactly matching removal/reinstallation of the
+CSS provider.
+
+Fix: replace all wxNullColour resets on m_btnTogPTT with explicit
+wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE/BTNTEXT). This keeps an
+invisible CSS provider on the widget at all times so the hover state has
+no opening to apply a tint, matching the visual behaviour of other buttons.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/ongui.cpp | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index 3ec2ab0b..a6d64ab0 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1149,7 +1149,7 @@ int MainApp::FilterEvent(wxEvent& event)
+                 if (frame->vk_state == VK_IDLE) {
+                     if (g_tx.load(std::memory_order_acquire)) {
+                         frame->m_btnTogPTT->SetValue(false);
+-                        frame->m_btnTogPTT->SetBackgroundColour(wxNullColour);
++                        frame->m_btnTogPTT->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
+                         frame->togglePTT();
+                     } else if (frame->m_btnTogPTT->GetValue()) {
+                         // Key released before g_tx caught up -- likely still inside
+@@ -1246,9 +1246,9 @@ void MainFrame::OnTogBtnPTTMouseLeave(wxMouseEvent& event)
+     if (!m_btnTogPTT->GetValue() && !g_tx.load(std::memory_order_acquire)
+         && !txChangeoverOccurring_)
+     {
+-        m_btnTogPTT->SetBackgroundColour(wxNullColour);
++        m_btnTogPTT->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
+ #if !defined(__APPLE__)
+-        m_btnTogPTT->SetForegroundColour(wxNullColour);
++        m_btnTogPTT->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_BTNTEXT));
+ #endif // !defined(__APPLE__)
+         m_btnTogPTT->Refresh();
+     }
+@@ -1735,11 +1735,11 @@ void MainFrame::togglePTT(void) {
+     // using the voice keyer).
+     m_btnTogPTT->SetValue(newTx);
+     m_btnTogPTT->SetLabel(_("&XMIT"));
+-    m_btnTogPTT->SetBackgroundColour(m_btnTogPTT->GetValue() ? *wxRED : wxNullColour);
++    m_btnTogPTT->SetBackgroundColour(m_btnTogPTT->GetValue() ? *wxRED : wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
+ #if !defined(__APPLE__)
+-    // macOS limitations prevent the foreground color of toggle buttons from being 
++    // macOS limitations prevent the foreground color of toggle buttons from being
+     // reliably set, so don't mess with it in the first place.
+-    m_btnTogPTT->SetForegroundColour(m_btnTogPTT->GetValue() ? *wxBLACK : wxNullColour);
++    m_btnTogPTT->SetForegroundColour(m_btnTogPTT->GetValue() ? *wxBLACK : wxSystemSettings::GetColour(wxSYS_COLOUR_BTNTEXT));
+ #endif // !defined(__APPLE__)
+     
+     // The Report Frequency drop-down should not be modifiable during TX.
+@@ -1779,7 +1779,7 @@ void MainFrame::togglePTT(void) {
+         log_info("Momentary PTT key was released while TX was starting -- stopping now");
+         CallAfter([this]() {
+             m_btnTogPTT->SetValue(false);
+-            m_btnTogPTT->SetBackgroundColour(wxNullColour);
++            m_btnTogPTT->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
+             togglePTT();
+         });
+     }
 -- 
 2.52.0
 
