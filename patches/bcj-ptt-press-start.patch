@@ -1,7 +1,7 @@
 From 67175fc6ddab7c4065b2c329ed110a165a8f6333 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Wed, 24 Jun 2026 15:21:54 +0100
-Subject: [PATCH 1/5] Start TX immediately on XMIT button press rather than
+Subject: [PATCH 1/6] Start TX immediately on XMIT button press rather than
  release.
 
 Rebinds to LEFT_DOWN (reverting 767a7979) and calls togglePTT() directly
@@ -165,7 +165,7 @@ index 92b87768..8313bf41 100644
 From 524b22a0231dced2c8dfca07a783ecda32d9a9c2 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Wed, 24 Jun 2026 15:56:56 +0100
-Subject: [PATCH 2/5] Fix suppress flag stuck and momentary mouse stop on
+Subject: [PATCH 2/6] Fix suppress flag stuck and momentary mouse stop on
  release.
 
 Three fixes:
@@ -248,7 +248,7 @@ index 8313bf41..3ec2ab0b 100644
 From 57bea97d9b32ffcf3d117d27d4580f7a2c828ca2 Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Wed, 24 Jun 2026 16:06:41 +0100
-Subject: [PATCH 3/5] Fix XMIT button blue hover after TX cycle on wxGTK.
+Subject: [PATCH 3/6] Fix XMIT button blue hover after TX cycle on wxGTK.
 
 Resetting SetBackgroundColour(wxNullColour) removes the CSS provider that
 was installed when the button was coloured red for TX. This leaves the GTK
@@ -324,7 +324,7 @@ index 3ec2ab0b..a6d64ab0 100644
 From 601dfd5fe1badd980756cfaee873abf34bef539e Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Wed, 24 Jun 2026 17:27:41 +0100
-Subject: [PATCH 4/5] Fix momentary mode XMIT button restarting TX after TOT
+Subject: [PATCH 4/6] Fix momentary mode XMIT button restarting TX after TOT
  expiry.
 
 When TOT fires and stops TX while the XMIT button is held in momentary
@@ -379,7 +379,7 @@ index a6d64ab0..44643782 100644
 From 8a1940ff856c24dd566bd9ca3556e96af93dacff Mon Sep 17 00:00:00 2001
 From: Barry Jackson <barjac@mageia.org>
 Date: Wed, 24 Jun 2026 18:35:28 +0100
-Subject: [PATCH 5/5] Fix PTT button not greying when modem stopped after TX
+Subject: [PATCH 5/6] Fix PTT button not greying when modem stopped after TX
  cycle.
 
 SetBackgroundColour() installs a GTK CSS provider that overrides the
@@ -447,6 +447,62 @@ index 70dfe3aa..f02e072a 100644
                  optionsDlg->setSessionActive(m_RxRunning);
                  m_togBtnOnOff->SetValue(m_RxRunning);
                  m_togBtnOnOff->SetLabel(wxT("&Start Modem"));
+-- 
+2.52.0
+
+
+From d327864de994af16e959a748d21ad1eba0fd5a39 Mon Sep 17 00:00:00 2001
+From: Barry Jackson <barjac@mageia.org>
+Date: Wed, 24 Jun 2026 19:08:09 +0100
+Subject: [PATCH 6/6] Fix PTT button not greying at program start or after
+ hover on disabled button.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Two gaps: (1) the constructor's initial Disable() lacked the wxNullColour
+reset added to the other disable sites, so GTK never re-evaluated the
+:disabled state on first show; (2) OnTogBtnPTTMouseLeave had no IsEnabled()
+guard — GTK still delivers crossing events to disabled widgets, so hovering
+over/off the disabled button re-installed the CSS provider and killed the
+grey appearance.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/main.cpp  | 4 ++++
+ src/ongui.cpp | 4 ++--
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/main.cpp b/src/main.cpp
+index f02e072a..36a4e511 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1039,6 +1039,10 @@ setDefaultMode:
+     
+     m_togBtnAnalog->Disable();
+     m_btnTogPTT->Disable();
++    m_btnTogPTT->SetBackgroundColour(wxNullColour);
++#if !defined(__APPLE__)
++    m_btnTogPTT->SetForegroundColour(wxNullColour);
++#endif // !defined(__APPLE__)
+     m_togBtnVoiceKeyer->Disable();
+ 
+     // squelch settings
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index 44643782..0e8f0e88 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1247,8 +1247,8 @@ void MainFrame::OnTogBtnPTTMouseLeave(wxMouseEvent& event)
+ {
+     m_suppressNextPTTClick_ = false;
+ 
+-    if (!m_btnTogPTT->GetValue() && !g_tx.load(std::memory_order_acquire)
+-        && !txChangeoverOccurring_)
++    if (m_btnTogPTT->IsEnabled() && !m_btnTogPTT->GetValue()
++        && !g_tx.load(std::memory_order_acquire) && !txChangeoverOccurring_)
+     {
+         m_btnTogPTT->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
+ #if !defined(__APPLE__)
 -- 
 2.52.0
 
