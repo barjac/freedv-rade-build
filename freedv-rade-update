@@ -558,7 +558,7 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
     if [[ -d "$_patch_dir" ]]; then
         while IFS= read -r _f; do
             _available+=("$(basename "$_f")")
-        done < <(find "$_patch_dir" -maxdepth 1 -name '*.patch' | sort)
+        done < <(find "$_patch_dir" -maxdepth 1 -name '*.patch' -printf '%T@ %p\n' | sort -rn | awk '{print $2}')
     fi
 
     # Offer to reuse recent patches
@@ -687,7 +687,10 @@ fi
 
 # Ask about a specific commit (skipped if a patch sidecar already set one)
 if (( fastupdt == 1 )) && [[ -z "$cname" ]] && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
-    read -r -p "Enter the commit git#:" cname
+    read -r -p "Enter the commit git#: " cname
+    if [[ -n "$cname" ]]; then
+        read -r -e -i "$cname" -p "Edit if needed, Enter to confirm: " cname
+    fi
 fi
 
 if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup = 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )) && (( switch != 1 )); then
