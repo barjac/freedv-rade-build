@@ -1,8 +1,8 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index 1fe7dcc2..08d8b2d6 100644
+index 1fe7dcc2..24f89416 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -111,6 +111,18 @@ if(LINUX AND STATIC_LIBGCC)
+@@ -111,6 +111,19 @@ if(LINUX AND STATIC_LIBGCC)
      target_link_options(freedv PRIVATE -static-libgcc -static-libstdc++)
  endif(LINUX AND STATIC_LIBGCC)
  
@@ -14,6 +14,7 @@ index 1fe7dcc2..08d8b2d6 100644
 +        pkg_check_modules(GTK3 QUIET gtk+-3.0)
 +        if(GTK3_FOUND)
 +            target_include_directories(freedv PRIVATE ${GTK3_INCLUDE_DIRS})
++            target_link_libraries(freedv ${GTK3_LIBRARIES})
 +        endif(GTK3_FOUND)
 +    endif(PkgConfig_FOUND)
 +endif(LINUX)
