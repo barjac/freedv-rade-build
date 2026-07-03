@@ -11,7 +11,7 @@ index ecd67076..229c303e 100644
          void initializeFreeDVReporter_();
          void updateVoiceKeyerButtonLabel_();
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index 3b2a5987..ce5a1bf5 100644
+index 3b2a5987..7b08780b 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
 @@ -542,6 +542,7 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
@@ -63,7 +63,7 @@ index 3b2a5987..ce5a1bf5 100644
 +        dialFreqString = wxNumberFormatter::ToString(dialFreq / 1000.0 / 1000.0, 4) + _(" MHz");
 +    }
 +
-+    m_cboReportFrequency->SetToolTip(wxString::Format(_("SSB radio dial frequency: %s"), dialFreqString));
++    m_cboReportFrequency->SetToolTip(wxString::Format(_("SSB radio dial: %s"), dialFreqString));
  }
  
  void MainFrame::updateReportingFreqList_()
