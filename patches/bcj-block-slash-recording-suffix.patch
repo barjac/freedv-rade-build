@@ -115,3 +115,21 @@ index 95902f90..ba9bb2f0 100644
          wxTextCtrl *recordingSuffix_;
          wxRadioButton *rawRecording_;
          wxRadioButton *decodedRecording_;
+diff --git a/src/voicekeyer.cpp b/src/voicekeyer.cpp
+index bdcdafbf..341c8892 100644
+--- a/src/voicekeyer.cpp
++++ b/src/voicekeyer.cpp
+@@ -143,7 +143,13 @@ void MainFrame::OnChooseAlternateVoiceKeyerFile( wxCommandEvent& )
+         wxT("Select Voice Keyer File"),
+         wxGetApp().appConfiguration.voiceKeyerWaveFilePath,
+         wxEmptyString,
++#if !defined(SNDFILE_NO_MP3_SUPPORT)
++        wxT("Sound files (*.wav;*.mp3)|*.wav;*.mp3|")
+         wxT("WAV files (*.wav)|*.wav|")
++        wxT("MP3 files (*.mp3)|*.mp3|")
++#else
++        wxT("WAV files (*.wav)|*.wav|")
++#endif // !defined(SNDFILE_NO_MP3_SUPPORT)
+         wxT("All files (*.*)|*.*"),
+         wxFD_OPEN | wxFD_FILE_MUST_EXIST
+         );
