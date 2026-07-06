@@ -1,0 +1,58 @@
+diff --git a/src/gui/dialogs/dlg_easy_setup.cpp b/src/gui/dialogs/dlg_easy_setup.cpp
+index 1aba5e26..18c8734f 100644
+--- a/src/gui/dialogs/dlg_easy_setup.cpp
++++ b/src/gui/dialogs/dlg_easy_setup.cpp
+@@ -270,7 +270,9 @@ EasySetupDialog::EasySetupDialog(wxWindow* parent, wxWindowID id, const wxString
+     wxStaticText* labelPskCallsign = new wxStaticText(setupPskReporterBox, wxID_ANY, wxT("Callsign: "), wxDefaultPosition, wxDefaultSize, 0);
+     sbSizer_psk->Add(labelPskCallsign, 0,  wxALL | wxALIGN_CENTER_VERTICAL, 2);
+     
+-    m_txt_callsign = new wxTextCtrl(setupPskReporterBox, wxID_ANY,  wxEmptyString, wxDefaultPosition, wxSize(180,-1), 0, wxTextValidator(wxFILTER_ALPHANUMERIC));
++    wxTextValidator callsignValidator(wxFILTER_INCLUDE_CHAR_LIST);
++    callsignValidator.SetCharIncludes(wxT("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/"));
++    m_txt_callsign = new wxTextCtrl(setupPskReporterBox, wxID_ANY,  wxEmptyString, wxDefaultPosition, wxSize(180,-1), 0, callsignValidator);
+     sbSizer_psk->Add(m_txt_callsign, 0, wxALL | wxALIGN_CENTER_VERTICAL, 2);
+     
+     wxStaticText* labelPskGridSquare = new wxStaticText(setupPskReporterBox, wxID_ANY, wxT("Grid Square/Locator: "), wxDefaultPosition, wxDefaultSize, 0);
+diff --git a/src/gui/dialogs/dlg_options.cpp b/src/gui/dialogs/dlg_options.cpp
+index a896ed51..128042c3 100644
+--- a/src/gui/dialogs/dlg_options.cpp
++++ b/src/gui/dialogs/dlg_options.cpp
+@@ -163,7 +163,9 @@ OptionsDlg::OptionsDlg(wxWindow* parent, wxWindowID id, const wxString& title, c
+     wxStaticText* labelPskCallsign = new wxStaticText(sbReporting, wxID_ANY, wxT("Callsign:"), wxDefaultPosition, wxDefaultSize, 0);
+     sbSizerReportingGeneral->Add(labelPskCallsign, 0,  wxALL | wxALIGN_CENTER_VERTICAL, 5);
+     
+-    m_txt_callsign = new wxTextCtrl(sbReporting, wxID_ANY,  wxEmptyString, wxDefaultPosition, wxSize(180,-1), 0, wxTextValidator(wxFILTER_ALPHANUMERIC));
++    wxTextValidator callsignValidator(wxFILTER_INCLUDE_CHAR_LIST);
++    callsignValidator.SetCharIncludes(wxT("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/"));
++    m_txt_callsign = new wxTextCtrl(sbReporting, wxID_ANY,  wxEmptyString, wxDefaultPosition, wxSize(180,-1), 0, callsignValidator);
+     sbSizerReportingGeneral->Add(m_txt_callsign, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+     
+     wxStaticText* labelPskGridSquare = new wxStaticText(sbReporting, wxID_ANY, wxT("Grid Square/Locator:"), wxDefaultPosition, wxDefaultSize, 0);
+diff --git a/src/main.cpp b/src/main.cpp
+index 9b475531..3bac6089 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -2617,9 +2617,22 @@ void MainFrame::performFreeDVOn_()
+         }
+         else
+         {
++            // The over-the-air "Reliable Text"/EOO encoding uses a 6-bit alphabet that
++            // can't represent '/' (it collides with '0') and can't carry more than 8
++            // characters. Rather than silently sending a corrupted callsign, skip OTA
++            // callsign transmission entirely for callsigns that don't fit; the callsign
++            // still reaches FreeDV Reporter, PSK Reporter and UDP logging correctly since
++            // those read the configured callsign directly, not via this encoding.
++            wxString callsignForOta = wxGetApp().appConfiguration.reportingConfiguration.reportingCallsign;
++            if (callsignForOta.length() > 8 || callsignForOta.Find('/') != wxNOT_FOUND)
++            {
++                log_info("Callsign '%s' can't be sent over the air (contains '/' or is longer than 8 characters); disabling OTA callsign transmission", (const char*)callsignForOta.ToUTF8());
++                callsignForOta = wxEmptyString;
++            }
++
+             char temp[9];
+             memset(temp, 0, 9);
+-            strncpy(temp, wxGetApp().appConfiguration.reportingConfiguration.reportingCallsign->ToUTF8(), 8); // One less than the size of temp to ensure we don't overwrite the null.
++            strncpy(temp, callsignForOta.ToUTF8(), 8); // One less than the size of temp to ensure we don't overwrite the null.
+             log_info("Setting callsign to %s", temp);
+             freedvInterface.setReliableText(temp);
+             
