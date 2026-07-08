@@ -1,0 +1,59 @@
+diff --git a/src/gui/controls/plot_scalar.cpp b/src/gui/controls/plot_scalar.cpp
+index 544dc6da..496dd6a7 100644
+--- a/src/gui/controls/plot_scalar.cpp
++++ b/src/gui/controls/plot_scalar.cpp
+@@ -511,21 +511,15 @@ void PlotScalar::drawGraticuleFast(wxGraphicsContext* ctx, bool repaintDataOnly)
+         {
+             if (drawPlotLines) plotCtx->StrokeLine(0, y, plotWidth, y);
+             y += PLOT_BORDER;
+-            if (!repaintDataOnly) 
++            if (!repaintDataOnly)
+             {
+-                auto top = y-text_h/2;
+-                if (a == m_a_min)
+-                {
+-                    top -= text_h/2;
+-                }
+-                else if ((a + m_graticule_a_step) > m_a_max)
+-                {
+-                    top += text_h/2;
+-                }
+-
+-                snprintf(buf, STR_LENGTH, m_a_fmt, a);
++                // Avoid "-0.0" from floating point drift when accumulating
++                // m_graticule_a_step from m_a_min (e.g. -1.0 + 0.2*5 != 0.0).
++                float labelValue = (fabsf(a) < m_graticule_a_step * 0.001f) ? 0.0f : a;
++                snprintf(buf, STR_LENGTH, m_a_fmt, labelValue);
+                 GetTextExtent(buf, &text_w, &text_h);
+-                
++                auto top = y - text_h/2;
++
+                 if (!disableFirstLastLabels_ || (a > m_a_min && a < m_a_max))
+                 {
+                     ctx->DrawText(buf, PLOT_BORDER + leftOffset_ - text_w - XLEFT_TEXT_OFFSET, top);
+diff --git a/src/gui/controls/plot_spectrum.cpp b/src/gui/controls/plot_spectrum.cpp
+index 9fcef393..f5c026c8 100644
+--- a/src/gui/controls/plot_spectrum.cpp
++++ b/src/gui/controls/plot_spectrum.cpp
+@@ -291,8 +291,6 @@ void PlotSpectrum::drawGraticuleFast(wxGraphicsContext* ctx, bool repaintDataOnl
+ 
+     ctx->SetPen(m_penDotDash);
+     for(mag=m_min_mag_db; mag<=m_max_mag_db; mag+=STEP_MAG_DB) {
+-        if (mag == m_min_mag_db || mag == m_max_mag_db)
+-            continue;
+         y = -(mag - m_max_mag_db) * mag_dB_to_py;
+         y += PLOT_BORDER + bottomOffset_;
+         ctx->StrokeLine(PLOT_BORDER + leftOffset_, y,
+diff --git a/src/main.cpp b/src/main.cpp
+index 9b475531..ec740418 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1306,7 +1306,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+     m_auiNbookCtrl->AddPage(m_panelSpeechOut, _("Frm Decoder"), false, wxNullBitmap);
+ 
+     // Add SNR window
+-    m_panelSNR = new PlotScalar(m_auiNbookCtrl, SNR_PLOT_SECONDS, DT, NO_SNR_VAL, MAX_SNR_VAL, SNR_PLOT_SECONDS / SNR_PLOT_SECOND_SEGMENTS, 5, "%.0f", 0, "", true, NO_SNR_VAL, true);
++    m_panelSNR = new PlotScalar(m_auiNbookCtrl, SNR_PLOT_SECONDS, DT, NO_SNR_VAL, MAX_SNR_VAL, SNR_PLOT_SECONDS / SNR_PLOT_SECOND_SEGMENTS, 5, "%.0f", 0, "", true, NO_SNR_VAL, false);
+     m_auiNbookCtrl->AddPage(m_panelSNR, _("SNR"), false, wxNullBitmap);
+ 
+     m_togBtnOnOff->Connect(wxEVT_UPDATE_UI, wxUpdateUIEventHandler(MainFrame::OnTogBtnOnOffUI), NULL, this);
