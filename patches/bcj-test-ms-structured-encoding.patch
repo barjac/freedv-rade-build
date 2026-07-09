@@ -13,10 +13,10 @@ index da1bc854..f25ddfca 100644
  FetchContent_MakeAvailable(freedv_backend)
 diff --git a/ms-text-structured-encoding-README.md b/ms-text-structured-encoding-README.md
 new file mode 100644
-index 00000000..2ade26aa
+index 00000000..3884f7a6
 --- /dev/null
 +++ b/ms-text-structured-encoding-README.md
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,69 @@
 +# Testing Mooneer's structured EOO callsign encoding
 +
 +This branch exists purely to make it quick to re-test Mooneer's WIP
@@ -35,14 +35,32 @@ index 00000000..2ade26aa
 +
 +- `cmake/BuildFreeDVBackend.cmake`: `GIT_TAG` changed from `main` to
 +  `ms-text-structured-encoding` (tmiw/freedv-backend). This is the only
-+  functional change — it just controls which branch of the RADE backend
-+  gets fetched and compiled.
-+- `ms-text-structured-encoding-extra-tests.patch`: a patch (against
-+  `tmiw/freedv-backend`, NOT this repo) that adds issue-#1423 real-world
-+  callsigns to `RadeTextUnitTest.cpp`'s test 7, plus a diagnostic printf
-+  showing what actually got decoded on failure. The fetched backend source
-+  lives outside of this repo's git tree (`build_linux/_deps/freedv_backend-src/`),
-+  so this patch is the only record of those additions.
++  functional change to freedv-gui itself — it just controls which branch
++  of the RADE backend gets fetched and compiled.
++- `ms-text-structured-encoding-digit-drop-fix.patch`: a patch against
++  `tmiw/freedv-backend` (NOT this repo — the fetched backend source lives
++  outside this repo's git tree, at `build_linux/_deps/freedv_backend-src/`,
++  so this patch is the only record of the change). Base:
++  `origin/ms-text-structured-encoding` @ `850db4d` (2026-07-08, after
++  Mooneer's own `d77813f` DIGIT_NONE fix). Contains:
++  - `rade_text.cpp`: lets the routing-prefix parser
++    (`try_parse_structured()`) accept its longest table match plus exactly
++    one leftover call-district digit, dropping the digit rather than
++    failing the whole structured parse (e.g. `EA7/G9ZZZ` -> `EA/G9ZZZ`
++    instead of falling back to garbled 7-char free-text truncation).
++    Restricted to *exactly one* trailing digit so garbage input still
++    correctly falls through (see adversarial test cases below).
++  - Also fixes a real bug this surfaced: `rade_text_generate_tx_string()`
++    computed the CRC over the raw input string, not the reconstructed
++    canonical string. For an exact-match parse those are identical, but
++    for the new lossy digit-drop match they differ (e.g. input has the
++    digit, reconstruction doesn't) — TX and RX ended up CRC-checking two
++    different strings, so decode silently failed 100% of the time. Fixed
++    by computing the CRC over `reconstruct_structured()`'s output.
++  - `RadeTextUnitTest.cpp`: added digit-drop test cases (`EA7/G9ZZZ`,
++    `3DA0/VK6AQ`, `W4/G9ZZZ`, `EA7/G9ZZZ/P`) asserting the *exact* expected
++    decoded string, plus adversarial cases (`EA77/G9ZZZ`, `EAX/G9ZZZ`,
++    `ZZ9/G9ZZZ`) asserting they're correctly NOT accepted as structured.
 +
 +## How to re-test
 +
@@ -51,10 +69,10 @@ index 00000000..2ade26aa
 +cmake -S . -B build_linux -DBUILD_BACKEND_UNITTESTS=ON
 +cmake --build build_linux -j$(nproc)
 +
-+# 2. Apply the extra test cases to the fetched backend source, then rebuild
-+#    just the test target:
++# 2. Apply the fix patch to the fetched backend source, then rebuild just
++#    the test target:
 +cd build_linux/_deps/freedv_backend-src
-+git apply /path/to/ms-text-structured-encoding-extra-tests.patch
++git apply /path/to/ms-text-structured-encoding-digit-drop-fix.patch
 +cd -
 +cmake --build build_linux --target RadeTextUnitTest -j$(nproc)
 +
@@ -62,12 +80,12 @@ index 00000000..2ade26aa
 +./build_linux/_deps/freedv_backend-build/src/pipeline/RadeTextUnitTest
 +```
 +
-+Known result as of 2026-07-08: `/` collision is fixed; short compound calls
-+(`K6AQ/5`, `VK/K6AQ`, `VP8/G4ABC`, `JA1ABC/MM`, `OE/MW0CQU/P`) round-trip
-+correctly. `EA7/G9ZZZ` and `3DA0/VK6AQ` still fail — the routing-prefix
-+parser rejects a trailing call-area digit that the base-callsign parser
-+already handles. Reported to Mooneer:
++## Status as of 2026-07-09
++
++Full 15-test suite passes, including the new digit-drop and adversarial
++cases (no regressions). Reported to Mooneer:
 +https://github.com/drowe67/freedv-gui/issues/1423#issuecomment-4919100750
++(original gap report) — follow-up with these results pending.
 diff --git a/ms-text-structured-encoding-digit-drop-fix.patch b/ms-text-structured-encoding-digit-drop-fix.patch
 new file mode 100644
 index 00000000..fb02ec30
