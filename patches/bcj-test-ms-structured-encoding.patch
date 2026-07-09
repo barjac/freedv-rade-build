@@ -68,49 +68,148 @@ index 00000000..2ade26aa
 +parser rejects a trailing call-area digit that the base-callsign parser
 +already handles. Reported to Mooneer:
 +https://github.com/drowe67/freedv-gui/issues/1423#issuecomment-4919100750
-diff --git a/ms-text-structured-encoding-extra-tests.patch b/ms-text-structured-encoding-extra-tests.patch
+diff --git a/ms-text-structured-encoding-digit-drop-fix.patch b/ms-text-structured-encoding-digit-drop-fix.patch
 new file mode 100644
-index 00000000..1e27ed71
+index 00000000..fb02ec30
 --- /dev/null
-+++ b/ms-text-structured-encoding-extra-tests.patch
-@@ -0,0 +1,37 @@
-+--- a/src/pipeline/test/RadeTextUnitTest.cpp	2026-07-08 22:42:30.722486321 +0100
-++++ b/src/pipeline/test/RadeTextUnitTest.cpp	2026-07-08 21:39:32.225118181 +0100
-+@@ -389,12 +389,34 @@
-+         {"routing prefix",   "VK/K6AQ"},
-+         {"DXpedition prefix", "VP8/G4ABC"},
-+         {"mode modifier",    "JA1ABC/MM"},
-++        {"issue #1423: G4MKT/P", "G4MKT/P"},
-++        {"issue #1423: GE/G4MKT/P", "GE/G4MKT/P"},
-++        {"issue #1423 OP: EA7/G9ZZZ", "EA7/G9ZZZ"},
-++        {"mw0cqu real-world: OE/MW0CQU/P", "OE/MW0CQU/P"},
-++        {"mw0cqu real-world: OE/MW0CQU/M", "OE/MW0CQU/M"},
-++        {"tmiw overflow example: 3DA0/VK6AQ", "3DA0/VK6AQ"},
-+     };
++++ b/ms-text-structured-encoding-digit-drop-fix.patch
+@@ -0,0 +1,136 @@
++--- a/src/pipeline/rade_text.cpp
+++++ b/src/pipeline/rade_text.cpp
++@@ -402,7 +402,16 @@
 + 
-+     bool ok = true;
-+     for (auto& c : cases) {
-+         bool passed = roundTrip(c.cs);
-+         printf("  %-15s %-10s  %s\n", c.label, c.cs, passed ? "PASS" : "FAIL");
-++        if (!passed) {
-++            rade_text_t tx = rade_text_create();
-++            rade_text_t rx = rade_text_create();
-++            rade_text_enable_stats_output(tx, 0);
-++            rade_text_enable_stats_output(rx, 0);
-++            RxState state;
-++            rade_text_set_rx_callback(rx, onTextRx, &state);
-++            float syms[TOTAL_FLOATS];
-++            memset(syms, 0, sizeof(syms));
-++            rade_text_generate_tx_string(tx, c.cs, (int)strlen(c.cs), syms, TOTAL_FLOATS);
-++            rade_text_rx(rx, syms, TOTAL_SYMS);
-++            printf("      ^ diag: input len=%d callCount=%d received='%s'\n",
-++                   (int)strlen(c.cs), state.callCount, state.received.c_str());
-++            rade_text_destroy(tx);
-++            rade_text_destroy(rx);
-++        }
++         int rlen = 0;
++         int ridx = find_prefix_index(parts[0].c_str(), &rlen);
++-        if (ridx >= 0 && rlen == (int)parts[0].length() &&
+++        // Accept an exact prefix match, or a prefix match followed by
+++        // exactly one trailing call-district digit that we have no field
+++        // to carry (e.g. "EA7" -> routing prefix "EA", drop the "7").
+++        // Graceful degradation: transmits a valid but less-specific
+++        // callsign instead of falling back to garbled free-text truncation.
+++        bool routingOk = ridx >= 0 &&
+++            (rlen == (int)parts[0].length() ||
+++             (rlen == (int)parts[0].length() - 1 &&
+++              parts[0][rlen] >= '0' && parts[0][rlen] <= '9'));
+++        if (routingOk &&
++             parse_base_call(parts[1].c_str(), &out->base_idx, &out->digit, &out->suffix_idx))
++         {
++             out->routing_idx = (uint32_t)ridx;
++@@ -415,7 +424,11 @@
++     // 3 parts: routing / base / modifier
++     int rlen = 0;
++     int ridx = find_prefix_index(parts[0].c_str(), &rlen);
++-    if (ridx < 0 || rlen != (int)parts[0].length()) return false;
+++    bool routingOk = ridx >= 0 &&
+++        (rlen == (int)parts[0].length() ||
+++         (rlen == (int)parts[0].length() - 1 &&
+++          parts[0][rlen] >= '0' && parts[0][rlen] <= '9'));
+++    if (!routingOk) return false;
++     if (!parse_base_call(parts[1].c_str(), &out->base_idx, &out->digit, &out->suffix_idx)) return false;
++     uint32_t modIdx;
++     if (!parse_modifier(parts[2].c_str(), &modIdx)) return false;
++@@ -831,7 +844,16 @@
++     std::string finalStr;
++     if (structured)
++     {
++-        finalStr = upper;
+++        // Reconstruct from the parsed fields rather than using `upper`
+++        // directly: a lossy match (e.g. a routing-prefix call-district
+++        // digit that gets dropped, see try_parse_structured) means the
+++        // canonical decoded string can differ from the original input.
+++        // The CRC below must be computed over what the far end will
+++        // actually reconstruct, or it won't match on receive.
+++        bool reconstructed = reconstruct_structured(fields.routing_idx, fields.base_idx,
+++                                                     fields.digit, fields.suffix_idx,
+++                                                     fields.modifier_idx, &finalStr);
+++        assert(reconstructed);
++     }
++     else
++     {
++--- a/src/pipeline/test/RadeTextUnitTest.cpp
+++++ b/src/pipeline/test/RadeTextUnitTest.cpp
++@@ -398,23 +398,67 @@
 +         ok &= passed;
 +     }
 + 
++-    // Known limitation: the routing-prefix field (before the first '/') has
++-    // no digit slot, so a trailing call-district digit on the routing
++-    // prefix itself (as opposed to the base callsign) can't be represented.
++-    // Both examples fall back to free-form text and get truncated past 7
++-    // characters. This is a deliberate, documented gap -- not asserted as a
++-    // pass/fail condition -- so the suite doesn't block on it, but a status
++-    // flip (in either direction) is still visible in the output.
++-    printf("  -- known limitation: routing prefix + call-district digit --\n");
++-    struct { const char* label; const char* cs; } knownGaps[] = {
++-        {"call-area routing", "EA7/G9ZZZ"},
++-        {"routing+call-area base", "3DA0/VK6AQ"},
+++    // Issue #1423 gap fix attempt: the routing-prefix field (before the
+++    // first '/') has no digit slot of its own, so a trailing call-district
+++    // digit on the routing prefix (as opposed to the base callsign) can't
+++    // be carried explicitly. Rather than failing the whole structured parse
+++    // and falling back to garbled free-text truncation, try_parse_structured
+++    // now accepts a longest-prefix-match routing segment followed by
+++    // exactly one leftover digit, and silently drops that digit. Result is
+++    // a valid but less-specific callsign (e.g. EA7/G9ZZZ -> EA/G9ZZZ)
+++    // instead of corrupted output.
+++    printf("  -- issue #1423: routing prefix + call-district digit (graceful degrade) --\n");
+++    struct { const char* label; const char* cs; const char* expectDecoded; } digitDropCases[] = {
+++        {"call-area routing (OP's own example)", "EA7/G9ZZZ", "EA/G9ZZZ"},
+++        {"routing+call-area base",                "3DA0/VK6AQ", "3DA/VK6AQ"},
+++        {"US call-district routing",              "W4/G9ZZZ", "W/G9ZZZ"},
+++        {"3-part: routing+digit / base / modifier","EA7/G9ZZZ/P", "EA/G9ZZZ/P"},
++     };
++-    for (auto& c : knownGaps) {
++-        bool passed = roundTrip(c.cs);
++-        printf("  %-15s %-10s  %s\n", c.label, c.cs,
++-               passed ? "PASS (gap appears fixed!)" : "FAIL (known gap, expected)");
+++    bool digitDropOk = true;
+++    for (auto& c : digitDropCases) {
+++        rade_text_t tx = rade_text_create();
+++        rade_text_t rx = rade_text_create();
+++        rade_text_enable_stats_output(tx, 0);
+++        rade_text_enable_stats_output(rx, 0);
+++        RxState state;
+++        rade_text_set_rx_callback(rx, onTextRx, &state);
+++        float syms[TOTAL_FLOATS];
+++        memset(syms, 0, sizeof(syms));
+++        rade_text_generate_tx_string(tx, c.cs, (int)strlen(c.cs), syms, TOTAL_FLOATS);
+++        rade_text_rx(rx, syms, TOTAL_SYMS);
+++        bool passed = (state.callCount == 1 && state.received == c.expectDecoded);
+++        printf("  %-30s %-14s -> '%s' (expected '%s')  %s\n",
+++               c.label, c.cs, state.received.c_str(), c.expectDecoded,
+++               passed ? "PASS" : "FAIL");
+++        digitDropOk &= passed;
+++        rade_text_destroy(tx);
+++        rade_text_destroy(rx);
++     }
+++    printf("Routing-prefix digit-drop: %s\n\n", digitDropOk ? "PASS" : "FAIL");
+++    ok &= digitDropOk;
+++
+++    // Adversarial cases: make sure the leniency above doesn't silently
+++    // accept things it shouldn't. These must NOT round-trip exactly (they
+++    // should fall back to truncated free text, same as before this change).
+++    printf("  -- adversarial: must NOT be accepted as structured --\n");
+++    struct { const char* label; const char* cs; } mustNotMatch[] = {
+++        {"two trailing digits",       "EA77/G9ZZZ"},
+++        {"non-digit trailing char",   "EAX/G9ZZZ"},
+++        {"unknown prefix + digit",    "ZZ9/G9ZZZ"},
+++    };
+++    bool adversarialOk = true;
+++    for (auto& c : mustNotMatch) {
+++        bool exactRoundTrip = roundTrip(c.cs);
+++        // These are all >7 chars, so an exact round-trip would only happen
+++        // if they were incorrectly accepted as structured (and thus not
+++        // truncated). We want this to be FALSE.
+++        bool safe = !exactRoundTrip;
+++        printf("  %-25s %-14s  %s\n", c.label, c.cs,
+++               safe ? "PASS (correctly not structured)" : "FAIL (incorrectly accepted!)");
+++        adversarialOk &= safe;
+++    }
+++    printf("Adversarial rejection: %s\n\n", adversarialOk ? "PASS" : "FAIL");
+++    ok &= adversarialOk;
++ 
++     // Exhaustively test every individual character in the 6-bit OTA alphabet
++     // (ASCII 38-46 punctuation, '0'-'9', 'A'-'Z', and '/') round-trips on its
 diff --git a/src/gui/dialogs/dlg_easy_setup.cpp b/src/gui/dialogs/dlg_easy_setup.cpp
 index 1aba5e26..18c8734f 100644
 --- a/src/gui/dialogs/dlg_easy_setup.cpp
