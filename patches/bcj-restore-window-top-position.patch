@@ -1,0 +1,31 @@
+diff --git a/src/main.cpp b/src/main.cpp
+index 935f5449..6c729757 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -917,12 +917,24 @@ void MainFrame::loadConfiguration_()
+     g_SquelchLevel = wxGetApp().appConfiguration.squelchLevel;
+     g_SquelchLevel /= 2.0;
+     
+-    Move(x, y);
+     wxSize size = GetMinSize();
+ 
+     if (w < size.GetWidth()) w = size.GetWidth();
+     if (h < size.GetHeight()) h = size.GetHeight();
+-    
++
++    // XXX - Some window managers (e.g. GNOME/Mutter, on both X11 and XWayland)
++    // apply stricter "initial placement" constraints to a not-yet-mapped window
++    // than to one that's already on screen -- notably, they refuse to honor a
++    // requested position that would place the (still invisible, undecorated)
++    // top edge flush with the screen's top edge, silently recentering the
++    // window instead. Deferring the Move() until after the frame is shown
++    // (mirroring the resize workaround below) makes the window manager treat
++    // it as a user-initiated move, which is honored literally.
++    CallAfter([=]()
++    {
++        Move(x, y);
++    });
++
+     // XXX - with really short windows, wxWidgets sometimes doesn't size
+     // the components properly until the user resizes the window (even if only
+     // by a pixel or two). As a really hacky workaround, we emulate this behavior
