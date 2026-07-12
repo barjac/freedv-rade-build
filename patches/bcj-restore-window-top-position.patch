@@ -1,8 +1,8 @@
 diff --git a/src/main.cpp b/src/main.cpp
-index 935f5449..fe40f438 100644
+index 935f5449..7ffa935a 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
-@@ -812,6 +812,36 @@ static void SuppressButtonPressFlicker_()
+@@ -812,6 +812,47 @@ static void SuppressButtonPressFlicker_()
      g_free(cssColour);
      g_object_unref(provider);
  }
@@ -27,7 +27,18 @@ index 935f5449..fe40f438 100644
 +static gboolean OnFrameMapEvent_(GtkWidget* widget, GdkEventAny*, gpointer userData)
 +{
 +    auto* ctx = static_cast<MoveOnMapContext_*>(userData);
++    log_info("DIAG: map-event fired, moving to (%d, %d)", ctx->x, ctx->y);
 +    ctx->frame->Move(ctx->x, ctx->y);
++    wxPoint immediatePos = ctx->frame->GetPosition();
++    log_info("DIAG: position immediately after Move(): (%d, %d)", immediatePos.x, immediatePos.y);
++
++    auto* posCheckTimer = new wxTimer();
++    wxFrame* frame = ctx->frame;
++    posCheckTimer->Bind(wxEVT_TIMER, [frame](wxTimerEvent&) {
++        wxPoint pos = frame->GetPosition();
++        log_info("DIAG: position 1500ms after map-event: (%d, %d)", pos.x, pos.y);
++    });
++    posCheckTimer->StartOnce(1500);
 +
 +    // Only the first map (initial startup) should apply the saved position --
 +    // later maps, e.g. un-minimizing, should leave the window where the user
@@ -39,7 +50,7 @@ index 935f5449..fe40f438 100644
  #endif // defined(__WXGTK__) && defined(HAS_GTK3)
  
  // OnInit()
-@@ -917,12 +947,37 @@ void MainFrame::loadConfiguration_()
+@@ -917,12 +958,38 @@ void MainFrame::loadConfiguration_()
      g_SquelchLevel = wxGetApp().appConfiguration.squelchLevel;
      g_SquelchLevel /= 2.0;
      
@@ -57,6 +68,7 @@ index 935f5449..fe40f438 100644
 +    // preprocessor splits macro arguments on commas that aren't inside
 +    // parentheses; braces don't protect them, so a brace-init here would
 +    // silently mis-split the macro's argument list.)
++    log_info("DIAG: connecting map-event handler, target position (%d, %d)", x, y);
 +    auto* moveOnMapContext = new MoveOnMapContext_{this, x, y};
 +    g_signal_connect(
 +        GTK_WIDGET(GetHandle()), "map-event",
