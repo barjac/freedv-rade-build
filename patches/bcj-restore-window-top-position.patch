@@ -1,5 +1,5 @@
 diff --git a/src/main.cpp b/src/main.cpp
-index 935f5449..93a92863 100644
+index 935f5449..fe40f438 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -812,6 +812,36 @@ static void SuppressButtonPressFlicker_()
@@ -39,7 +39,7 @@ index 935f5449..93a92863 100644
  #endif // defined(__WXGTK__) && defined(HAS_GTK3)
  
  // OnInit()
-@@ -917,12 +947,31 @@ void MainFrame::loadConfiguration_()
+@@ -917,12 +947,37 @@ void MainFrame::loadConfiguration_()
      g_SquelchLevel = wxGetApp().appConfiguration.squelchLevel;
      g_SquelchLevel /= 2.0;
      
@@ -52,9 +52,15 @@ index 935f5449..93a92863 100644
 +
 +#if defined(__WXGTK__) && defined(HAS_GTK3)
 +    // See OnFrameMapEvent_ for why this doesn't just use CallAfter().
++    // (The context is built as its own statement, not inline in the
++    // g_signal_connect() call -- g_signal_connect is a macro, and the
++    // preprocessor splits macro arguments on commas that aren't inside
++    // parentheses; braces don't protect them, so a brace-init here would
++    // silently mis-split the macro's argument list.)
++    auto* moveOnMapContext = new MoveOnMapContext_{this, x, y};
 +    g_signal_connect(
 +        GTK_WIDGET(GetHandle()), "map-event",
-+        G_CALLBACK(OnFrameMapEvent_), new MoveOnMapContext_{this, x, y});
++        G_CALLBACK(OnFrameMapEvent_), moveOnMapContext);
 +#else
 +    // XXX - Some window managers apply stricter "initial placement"
 +    // constraints to a not-yet-mapped window than to one that's already on
