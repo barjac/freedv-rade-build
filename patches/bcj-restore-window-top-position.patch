@@ -1,25 +1,52 @@
-diff --git a/src/main.cpp b/src/main.cpp
-index 935f5449..4b687f65 100644
---- a/src/main.cpp
-+++ b/src/main.cpp
-@@ -812,6 +812,56 @@ static void SuppressButtonPressFlicker_()
-     g_free(cssColour);
-     g_object_unref(provider);
- }
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 76339c78..21e80daf 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -10,6 +10,7 @@ set(FREEDV_SOURCES
+     playrec.cpp
+     ongui.cpp
+     freedv_interface.cpp
++    gui/util/WindowPositionRestore.cpp
+ )
+ 
+ set(FREEDV_LINK_LIBS_OSX
+diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
+index 786067da..632e3abb 100644
+--- a/src/gui/dialogs/freedv_reporter.cpp
++++ b/src/gui/dialogs/freedv_reporter.cpp
+@@ -30,6 +30,7 @@
+ #include <wx/textdlg.h>
+ #include "../controls/MsgListPopup.h"
+ #include "../util/FrequencyOps.h"
++#include "../util/WindowPositionRestore.h"
+ 
+ #if wxCHECK_VERSION(3,2,0)
+ #include <wx/uilocale.h>
+@@ -493,7 +494,7 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
+     }
+     wxGetApp().appConfiguration.reporterWindowLeft = actualPos.x;
+     wxGetApp().appConfiguration.reporterWindowTop = actualPos.y;
+-    SetPosition(actualPos);
++    RestoreWindowPosition(this, actualPos.x, actualPos.y);
+ 
+     // Set up timers. Highlight clear timer has a slightly longer interval
+     // to reduce CPU usage.
+diff --git a/src/gui/util/WindowPositionRestore.cpp b/src/gui/util/WindowPositionRestore.cpp
+new file mode 100644
+index 00000000..59c5bd69
+--- /dev/null
++++ b/src/gui/util/WindowPositionRestore.cpp
+@@ -0,0 +1,71 @@
++#include "WindowPositionRestore.h"
 +
-+// Restores the saved main window position, fighting off the window
-+// manager's own initial-placement policy if necessary.
-+//
-+// This isn't a timing race that can be won by moving earlier or later --
-+// instrumented logging (KWin on Plasma 6/Wayland+XWayland) showed the
-+// window *does* move to the saved position immediately when asked, but the
-+// WM then applies its own "smart" placement (e.g. centered) to the window
-+// asynchronously, ~350ms after mapping, unconditionally overriding whatever
-+// the client requested. So instead of trying to out-race it, this watches
-+// every subsequent configure-event (geometry change) and, if the WM has
-+// knocked the window off the target position, simply re-issues Move() to
-+// put it back. It gives up after a handful of attempts or once the position
-+// matches, so it won't fight the user's own later repositioning.
++#include <wx/frame.h>
++
++#if defined(__WXGTK__) && defined(HAS_GTK3)
++#include <gtk/gtk.h>
++
++namespace
++{
++
 +struct SettlePositionContext_
 +{
 +    wxFrame* frame;
@@ -28,7 +55,7 @@ index 935f5449..4b687f65 100644
 +    int attemptsLeft;
 +};
 +
-+static gboolean OnFrameConfigureEvent_(GtkWidget* widget, GdkEventConfigure*, gpointer userData)
++gboolean OnFrameConfigureEvent_(GtkWidget* widget, GdkEventConfigure*, gpointer userData)
 +{
 +    auto* ctx = static_cast<SettlePositionContext_*>(userData);
 +    wxPoint pos = ctx->frame->GetPosition();
@@ -45,7 +72,7 @@ index 935f5449..4b687f65 100644
 +    return FALSE;
 +}
 +
-+static gboolean OnFrameMapEvent_(GtkWidget* widget, GdkEventAny*, gpointer userData)
++gboolean OnFrameMapEvent_(GtkWidget* widget, GdkEventAny*, gpointer userData)
 +{
 +    auto* ctx = static_cast<SettlePositionContext_*>(userData);
 +    ctx->frame->Move(ctx->targetX, ctx->targetY);
@@ -56,10 +83,74 @@ index 935f5449..4b687f65 100644
 +    g_signal_handlers_disconnect_by_func(widget, (gpointer)OnFrameMapEvent_, userData);
 +    return FALSE;
 +}
++
++} // namespace
++
++void RestoreWindowPosition(wxFrame* frame, int x, int y)
++{
++    auto* settleContext = new SettlePositionContext_{frame, x, y, 10};
++    g_signal_connect(
++        GTK_WIDGET(frame->GetHandle()), "map-event",
++        G_CALLBACK(OnFrameMapEvent_), settleContext);
++    g_signal_connect(
++        GTK_WIDGET(frame->GetHandle()), "configure-event",
++        G_CALLBACK(OnFrameConfigureEvent_), settleContext);
++}
++
++#else
++
++void RestoreWindowPosition(wxFrame* frame, int x, int y)
++{
++    frame->CallAfter([frame, x, y]()
++    {
++        frame->Move(x, y);
++    });
++}
++
++#endif // defined(__WXGTK__) && defined(HAS_GTK3)
+diff --git a/src/gui/util/WindowPositionRestore.h b/src/gui/util/WindowPositionRestore.h
+new file mode 100644
+index 00000000..ffe51c50
+--- /dev/null
++++ b/src/gui/util/WindowPositionRestore.h
+@@ -0,0 +1,16 @@
++#pragma once
++
++class wxFrame;
++
++// Restores a top-level frame's position from saved configuration.
++//
++// Must be called before the frame is shown. On Linux/GTK3, some window
++// managers (observed: KWin on Plasma 6) apply their own asynchronous
++// initial-placement policy shortly after the window is mapped, silently
++// overriding whatever position the client already set -- no matter how
++// early or late the client's own move happens. This watches for that and
++// re-asserts the requested position if the WM knocks it off, giving up
++// after a handful of attempts (or once the position matches) so it won't
++// fight the user's own later repositioning. On other platforms this is
++// just a straightforward deferred move.
++void RestoreWindowPosition(wxFrame* frame, int x, int y);
+diff --git a/src/main.cpp b/src/main.cpp
+index 935f5449..45d6a441 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -56,6 +56,7 @@
+ #include "gui/dialogs/dlg_filter.h"
+ #include "gui/dialogs/dlg_easy_setup.h"
+ #include "gui/dialogs/freedv_reporter.h"
++#include "gui/util/WindowPositionRestore.h"
+ 
+ #include "util/logging/ulog.h"
+ #include "util/audio_spin_mutex.h"
+@@ -812,6 +813,7 @@ static void SuppressButtonPressFlicker_()
+     g_free(cssColour);
+     g_object_unref(provider);
+ }
++
  #endif // defined(__WXGTK__) && defined(HAS_GTK3)
  
  // OnInit()
-@@ -917,12 +967,40 @@ void MainFrame::loadConfiguration_()
+@@ -917,12 +919,13 @@ void MainFrame::loadConfiguration_()
      g_SquelchLevel = wxGetApp().appConfiguration.squelchLevel;
      g_SquelchLevel /= 2.0;
      
@@ -70,34 +161,7 @@ index 935f5449..4b687f65 100644
      if (h < size.GetHeight()) h = size.GetHeight();
 -    
 +
-+#if defined(__WXGTK__) && defined(HAS_GTK3)
-+    // See SettlePositionContext_ for why this needs both handlers.
-+    // (The context is built as its own statement, not inline in the
-+    // g_signal_connect() call -- g_signal_connect is a macro, and the
-+    // preprocessor splits macro arguments on commas that aren't inside
-+    // parentheses; braces don't protect them, so a brace-init here would
-+    // silently mis-split the macro's argument list.)
-+    auto* settleContext = new SettlePositionContext_{this, x, y, 10};
-+    g_signal_connect(
-+        GTK_WIDGET(GetHandle()), "map-event",
-+        G_CALLBACK(OnFrameMapEvent_), settleContext);
-+    g_signal_connect(
-+        GTK_WIDGET(GetHandle()), "configure-event",
-+        G_CALLBACK(OnFrameConfigureEvent_), settleContext);
-+#else
-+    // XXX - Some window managers apply stricter "initial placement"
-+    // constraints to a not-yet-mapped window than to one that's already on
-+    // screen -- notably, they may refuse to honor a requested position that
-+    // would place the (still invisible, undecorated) top edge flush with the
-+    // screen's top edge, silently recentering the window instead. Deferring
-+    // the Move() until after the frame is shown (mirroring the resize
-+    // workaround below) makes the window manager treat it as a user-initiated
-+    // move, which is honored literally.
-+    CallAfter([=]()
-+    {
-+        Move(x, y);
-+    });
-+#endif // defined(__WXGTK__) && defined(HAS_GTK3)
++    RestoreWindowPosition(this, x, y);
 +
      // XXX - with really short windows, wxWidgets sometimes doesn't size
      // the components properly until the user resizes the window (even if only
