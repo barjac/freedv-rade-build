@@ -11,7 +11,7 @@ index 76339c78..21e80daf 100644
  
  set(FREEDV_LINK_LIBS_OSX
 diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
-index 786067da..0ed959cc 100644
+index 786067da..f5cbb158 100644
 --- a/src/gui/dialogs/freedv_reporter.cpp
 +++ b/src/gui/dialogs/freedv_reporter.cpp
 @@ -30,6 +30,7 @@
@@ -48,7 +48,19 @@ index 786067da..0ed959cc 100644
  
      // Set up timers. Highlight clear timer has a slightly longer interval
      // to reduce CPU usage.
-@@ -1040,7 +1043,8 @@ void FreeDVReporterDialog::OnSize(wxSizeEvent& event)
+@@ -662,6 +665,11 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
+     }
+ }
+ 
++void FreeDVReporterDialog::stopTrackingPosition()
++{
++    this->Disconnect(wxEVT_MOVE, wxMoveEventHandler(FreeDVReporterDialog::OnMove));
++}
++
+ FreeDVReporterDialog::~FreeDVReporterDialog()
+ {
+     m_highlightClearTimer->Stop();
+@@ -1040,7 +1048,8 @@ void FreeDVReporterDialog::OnSize(wxSizeEvent& event)
  void FreeDVReporterDialog::OnMove(wxMoveEvent& event)
  {
      auto pos = event.GetPosition();
@@ -58,16 +70,34 @@ index 786067da..0ed959cc 100644
      wxGetApp().appConfiguration.reporterWindowLeft = pos.x;
      wxGetApp().appConfiguration.reporterWindowTop = pos.y;
      
+diff --git a/src/gui/dialogs/freedv_reporter.h b/src/gui/dialogs/freedv_reporter.h
+index 51784700..fc76be8f 100644
+--- a/src/gui/dialogs/freedv_reporter.h
++++ b/src/gui/dialogs/freedv_reporter.h
+@@ -68,6 +68,14 @@ class FreeDVReporterDialog : public wxFrame
+         void setReporter(std::shared_ptr<FreeDVReporter> const& reporter);
+         void refreshQSYButtonState();
+         void refreshLayout();
++
++        // Stops the window from live-tracking/persisting its own position via
++        // OnMove. Callers should invoke this after deliberately grabbing and
++        // saving the final position but before Close()/Destroy() -- closing
++        // can trigger one last stray wxEVT_MOVE (observed reporting a
++        // position with the title bar's height already stripped off) that
++        // would otherwise silently overwrite the correct saved position.
++        void stopTrackingPosition();
+         
+         void setBandFilter(FilterFrequency freq);
+ 
 diff --git a/src/gui/util/WindowPositionRestore.cpp b/src/gui/util/WindowPositionRestore.cpp
 new file mode 100644
-index 00000000..46bddbfa
+index 00000000..59c5bd69
 --- /dev/null
 +++ b/src/gui/util/WindowPositionRestore.cpp
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,71 @@
 +#include "WindowPositionRestore.h"
 +
 +#include <wx/frame.h>
-+#include "util/logging/ulog.h"
 +
 +#if defined(__WXGTK__) && defined(HAS_GTK3)
 +#include <gtk/gtk.h>
@@ -90,16 +120,12 @@ index 00000000..46bddbfa
 +
 +    if ((pos.x == ctx->targetX && pos.y == ctx->targetY) || ctx->attemptsLeft <= 0)
 +    {
-+        log_info("DIAG: RestoreWindowPosition settled for frame %p at (%d, %d), target was (%d, %d), %d attempts remained",
-+            (void*)ctx->frame, pos.x, pos.y, ctx->targetX, ctx->targetY, ctx->attemptsLeft);
 +        g_signal_handlers_disconnect_by_func(widget, (gpointer)OnFrameConfigureEvent_, userData);
 +        delete ctx;
 +        return FALSE;
 +    }
 +
 +    ctx->attemptsLeft--;
-+    log_info("DIAG: RestoreWindowPosition re-asserting for frame %p, was (%d, %d), moving to (%d, %d), %d attempts left",
-+        (void*)ctx->frame, pos.x, pos.y, ctx->targetX, ctx->targetY, ctx->attemptsLeft);
 +    ctx->frame->Move(ctx->targetX, ctx->targetY);
 +    return FALSE;
 +}
@@ -107,8 +133,6 @@ index 00000000..46bddbfa
 +gboolean OnFrameMapEvent_(GtkWidget* widget, GdkEventAny*, gpointer userData)
 +{
 +    auto* ctx = static_cast<SettlePositionContext_*>(userData);
-+    log_info("DIAG: RestoreWindowPosition map-event for frame %p, moving to (%d, %d)",
-+        (void*)ctx->frame, ctx->targetX, ctx->targetY);
 +    ctx->frame->Move(ctx->targetX, ctx->targetY);
 +
 +    // Only the first map (initial startup) should apply the saved position --
@@ -122,7 +146,6 @@ index 00000000..46bddbfa
 +
 +void RestoreWindowPosition(wxFrame* frame, int x, int y)
 +{
-+    log_info("DIAG: RestoreWindowPosition called for frame %p, target (%d, %d)", (void*)frame, x, y);
 +    auto* settleContext = new SettlePositionContext_{frame, x, y, 10};
 +    g_signal_connect(
 +        GTK_WIDGET(frame->GetHandle()), "map-event",
@@ -166,7 +189,7 @@ index 00000000..ffe51c50
 +// just a straightforward deferred move.
 +void RestoreWindowPosition(wxFrame* frame, int x, int y);
 diff --git a/src/main.cpp b/src/main.cpp
-index 935f5449..c6d957e1 100644
+index 935f5449..58592cb0 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -56,6 +56,7 @@
@@ -201,22 +224,44 @@ index 935f5449..c6d957e1 100644
      // XXX - with really short windows, wxWidgets sometimes doesn't size
      // the components properly until the user resizes the window (even if only
      // by a pixel or two). As a really hacky workaround, we emulate this behavior
-@@ -1670,6 +1673,7 @@ MainFrame::~MainFrame()
-         // wxWidgets doesn't fire wxEVT_MOVE events on Linux for some
-         // reason, so we need to grab and save the current position again.
+@@ -1667,11 +1670,17 @@ MainFrame::~MainFrame()
+     
+     if (m_reporterDialog != nullptr)
+     {
+-        // wxWidgets doesn't fire wxEVT_MOVE events on Linux for some
+-        // reason, so we need to grab and save the current position again.
++        // Grab and save the final position explicitly rather than relying
++        // solely on OnMove's live tracking -- Close()/Destroy() below
++        // trigger one last stray wxEVT_MOVE reporting a position with the
++        // title bar's height already stripped off, so position tracking
++        // must be stopped first or that stray event silently overwrites
++        // the correct value saved here.
          auto pos = m_reporterDialog->GetPosition();
 +        log_info("DIAG: ~MainFrame() grabbing reporter position (%d, %d) to save", pos.x, pos.y);
          wxGetApp().appConfiguration.reporterWindowLeft = pos.x;
          wxGetApp().appConfiguration.reporterWindowTop = pos.y;
++        m_reporterDialog->stopTrackingPosition();
  
-@@ -2406,9 +2410,10 @@ void MainFrame::topFrame_OnClose( wxCloseEvent& event )
-     // wxWidgets doesn't fire wxEVT_MOVE events on Linux for some
-     // reason, so we need to grab and save the current position again.
+         m_reporterDialog->setReporter(nullptr);
+         wxGetApp().SafeYield(nullptr, false); // make sure we handle any remaining Reporter messages before dispose
+@@ -2403,12 +2412,18 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+ 
+ void MainFrame::topFrame_OnClose( wxCloseEvent& event )
+ {
+-    // wxWidgets doesn't fire wxEVT_MOVE events on Linux for some
+-    // reason, so we need to grab and save the current position again.
++    // Grab and save the final position explicitly rather than relying
++    // solely on OnMove's live tracking -- Close()/Destroy() below trigger
++    // one last stray wxEVT_MOVE reporting a position with the title bar's
++    // height already stripped off, so position tracking must be stopped
++    // first or that stray event silently overwrites the correct value
++    // saved here.
      auto pos = m_reporterDialog->GetPosition();
 +    log_info("DIAG: topFrame_OnClose grabbing reporter position (%d, %d) to save", pos.x, pos.y);
      wxGetApp().appConfiguration.reporterWindowLeft = pos.x;
      wxGetApp().appConfiguration.reporterWindowTop = pos.y;
 -    
++    m_reporterDialog->stopTrackingPosition();
 +
      m_reporterDialog->setReporter(nullptr);
      wxGetApp().SafeYield(nullptr, false); // make sure we handle any remaining Reporter messages before dispose
