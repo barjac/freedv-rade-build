@@ -1,65 +1,67 @@
 diff --git a/src/main.cpp b/src/main.cpp
-index 935f5449..570ccc6e 100644
+index 935f5449..b9d78a8b 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
-@@ -812,6 +812,56 @@ static void SuppressButtonPressFlicker_()
+@@ -812,6 +812,58 @@ static void SuppressButtonPressFlicker_()
      g_free(cssColour);
      g_object_unref(provider);
  }
 +
-+// Applies the saved main window position once the underlying GTK window has
-+// actually been mapped by the window manager. CallAfter()/idle-time deferral
-+// isn't good enough here: it only guarantees "runs on a later iteration of
-+// the event loop", not "runs after the WM has finished placing the window",
-+// and on slower machines the two can drift apart. When that race is lost, a
-+// window manager (observed with KWin on Plasma 6/Wayland+XWayland, plausibly
-+// others) treats the Move() as part of *initial* placement rather than a
-+// later user-driven move, and falls back to its default placement policy
-+// (e.g. centered) instead of honoring the requested coordinates. Binding to
-+// "map-event" removes the race entirely.
-+struct MoveOnMapContext_
++// Restores the saved main window position, fighting off the window
++// manager's own initial-placement policy if necessary.
++//
++// This isn't a timing race that can be won by moving earlier or later --
++// instrumented logging (KWin on Plasma 6/Wayland+XWayland) showed the
++// window *does* move to the saved position immediately when asked, but the
++// WM then applies its own "smart" placement (e.g. centered) to the window
++// asynchronously, ~350ms after mapping, unconditionally overriding whatever
++// the client requested. So instead of trying to out-race it, this watches
++// every subsequent configure-event (geometry change) and, if the WM has
++// knocked the window off the target position, simply re-issues Move() to
++// put it back. It gives up after a handful of attempts or once the position
++// matches, so it won't fight the user's own later repositioning.
++struct SettlePositionContext_
 +{
 +    wxFrame* frame;
-+    int x;
-+    int y;
++    int targetX;
++    int targetY;
++    int attemptsLeft;
 +};
 +
-+static gboolean OnFrameConfigureEvent_(GtkWidget*, GdkEventConfigure* event, gpointer userData)
++static gboolean OnFrameConfigureEvent_(GtkWidget* widget, GdkEventConfigure*, gpointer userData)
 +{
-+    auto* startTimeUs = static_cast<gint64*>(userData);
-+    gint64 elapsedMs = (g_get_monotonic_time() - *startTimeUs) / 1000;
-+    log_info("DIAG: configure-event at +%lldms: x=%d y=%d w=%d h=%d",
-+        (long long)elapsedMs, event->x, event->y, event->width, event->height);
++    auto* ctx = static_cast<SettlePositionContext_*>(userData);
++    wxPoint pos = ctx->frame->GetPosition();
++    log_info("DIAG: configure-event, wx position (%d, %d), target (%d, %d), %d attempts left",
++        pos.x, pos.y, ctx->targetX, ctx->targetY, ctx->attemptsLeft);
++
++    if ((pos.x == ctx->targetX && pos.y == ctx->targetY) || ctx->attemptsLeft <= 0)
++    {
++        g_signal_handlers_disconnect_by_func(widget, (gpointer)OnFrameConfigureEvent_, userData);
++        delete ctx;
++        return FALSE;
++    }
++
++    ctx->attemptsLeft--;
++    ctx->frame->Move(ctx->targetX, ctx->targetY);
 +    return FALSE;
 +}
 +
 +static gboolean OnFrameMapEvent_(GtkWidget* widget, GdkEventAny*, gpointer userData)
 +{
-+    auto* ctx = static_cast<MoveOnMapContext_*>(userData);
-+    log_info("DIAG: map-event fired, moving to (%d, %d)", ctx->x, ctx->y);
-+    ctx->frame->Move(ctx->x, ctx->y);
-+    wxPoint immediatePos = ctx->frame->GetPosition();
-+    log_info("DIAG: position immediately after Move(): (%d, %d)", immediatePos.x, immediatePos.y);
-+
-+    auto* posCheckTimer = new wxTimer();
-+    wxFrame* frame = ctx->frame;
-+    posCheckTimer->Bind(wxEVT_TIMER, [frame](wxTimerEvent&) {
-+        wxPoint pos = frame->GetPosition();
-+        log_info("DIAG: position 1500ms after map-event: (%d, %d)", pos.x, pos.y);
-+    });
-+    posCheckTimer->StartOnce(1500);
++    auto* ctx = static_cast<SettlePositionContext_*>(userData);
++    ctx->frame->Move(ctx->targetX, ctx->targetY);
 +
 +    // Only the first map (initial startup) should apply the saved position --
 +    // later maps, e.g. un-minimizing, should leave the window where the user
 +    // last put it.
 +    g_signal_handlers_disconnect_by_func(widget, (gpointer)OnFrameMapEvent_, userData);
-+    delete ctx;
 +    return FALSE;
 +}
  #endif // defined(__WXGTK__) && defined(HAS_GTK3)
  
  // OnInit()
-@@ -917,12 +967,43 @@ void MainFrame::loadConfiguration_()
+@@ -917,12 +969,40 @@ void MainFrame::loadConfiguration_()
      g_SquelchLevel = wxGetApp().appConfiguration.squelchLevel;
      g_SquelchLevel /= 2.0;
      
@@ -71,22 +73,19 @@ index 935f5449..570ccc6e 100644
 -    
 +
 +#if defined(__WXGTK__) && defined(HAS_GTK3)
-+    // See OnFrameMapEvent_ for why this doesn't just use CallAfter().
++    // See SettlePositionContext_ for why this needs both handlers.
 +    // (The context is built as its own statement, not inline in the
 +    // g_signal_connect() call -- g_signal_connect is a macro, and the
 +    // preprocessor splits macro arguments on commas that aren't inside
 +    // parentheses; braces don't protect them, so a brace-init here would
 +    // silently mis-split the macro's argument list.)
-+    log_info("DIAG: connecting map-event handler, target position (%d, %d)", x, y);
-+    auto* moveOnMapContext = new MoveOnMapContext_{this, x, y};
++    auto* settleContext = new SettlePositionContext_{this, x, y, 10};
 +    g_signal_connect(
 +        GTK_WIDGET(GetHandle()), "map-event",
-+        G_CALLBACK(OnFrameMapEvent_), moveOnMapContext);
-+
-+    auto* diagStartTime = new gint64(g_get_monotonic_time());
++        G_CALLBACK(OnFrameMapEvent_), settleContext);
 +    g_signal_connect(
 +        GTK_WIDGET(GetHandle()), "configure-event",
-+        G_CALLBACK(OnFrameConfigureEvent_), diagStartTime);
++        G_CALLBACK(OnFrameConfigureEvent_), settleContext);
 +#else
 +    // XXX - Some window managers apply stricter "initial placement"
 +    // constraints to a not-yet-mapped window than to one that's already on
