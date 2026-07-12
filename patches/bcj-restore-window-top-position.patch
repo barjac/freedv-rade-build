@@ -11,7 +11,7 @@ index 76339c78..21e80daf 100644
  
  set(FREEDV_LINK_LIBS_OSX
 diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
-index 786067da..f5cbb158 100644
+index 786067da..93c7ce04 100644
 --- a/src/gui/dialogs/freedv_reporter.cpp
 +++ b/src/gui/dialogs/freedv_reporter.cpp
 @@ -30,6 +30,7 @@
@@ -22,15 +22,7 @@ index 786067da..f5cbb158 100644
  
  #if wxCHECK_VERSION(3,2,0)
  #include <wx/uilocale.h>
-@@ -458,13 +459,15 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
-     this->Layout();
-     
-     // Move FreeDV Reporter window back into last saved position
-+    log_info("DIAG: FreeDVReporterDialog ctor loaded position (%d, %d) from config",
-+        (int)wxGetApp().appConfiguration.reporterWindowLeft, (int)wxGetApp().appConfiguration.reporterWindowTop);
-     SetSize(wxSize(
-         wxGetApp().appConfiguration.reporterWindowWidth,
-         wxGetApp().appConfiguration.reporterWindowHeight));
+@@ -464,7 +465,7 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
      SetPosition(wxPoint(
          wxGetApp().appConfiguration.reporterWindowLeft,
          wxGetApp().appConfiguration.reporterWindowTop));
@@ -39,7 +31,7 @@ index 786067da..f5cbb158 100644
      // Make sure we didn't end up placing it off the screen in a location that can't
      // easily be brought back.
  #if wxCHECK_VERSION(3,2,0)
-@@ -493,7 +496,7 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
+@@ -493,7 +494,7 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
      }
      wxGetApp().appConfiguration.reporterWindowLeft = actualPos.x;
      wxGetApp().appConfiguration.reporterWindowTop = actualPos.y;
@@ -48,7 +40,7 @@ index 786067da..f5cbb158 100644
  
      // Set up timers. Highlight clear timer has a slightly longer interval
      // to reduce CPU usage.
-@@ -662,6 +665,11 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
+@@ -662,6 +663,11 @@ FreeDVReporterDialog::FreeDVReporterDialog(wxWindow* parent, wxWindowID id, cons
      }
  }
  
@@ -60,12 +52,11 @@ index 786067da..f5cbb158 100644
  FreeDVReporterDialog::~FreeDVReporterDialog()
  {
      m_highlightClearTimer->Stop();
-@@ -1040,7 +1048,8 @@ void FreeDVReporterDialog::OnSize(wxSizeEvent& event)
+@@ -1040,7 +1046,7 @@ void FreeDVReporterDialog::OnSize(wxSizeEvent& event)
  void FreeDVReporterDialog::OnMove(wxMoveEvent& event)
  {
      auto pos = event.GetPosition();
 -   
-+    log_info("DIAG: FreeDVReporterDialog::OnMove fired, saving (%d, %d)", pos.x, pos.y);
 +
      wxGetApp().appConfiguration.reporterWindowLeft = pos.x;
      wxGetApp().appConfiguration.reporterWindowTop = pos.y;
@@ -189,7 +180,7 @@ index 00000000..ffe51c50
 +// just a straightforward deferred move.
 +void RestoreWindowPosition(wxFrame* frame, int x, int y);
 diff --git a/src/main.cpp b/src/main.cpp
-index 935f5449..58592cb0 100644
+index 935f5449..e9af1fc4 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -56,6 +56,7 @@
@@ -224,7 +215,7 @@ index 935f5449..58592cb0 100644
      // XXX - with really short windows, wxWidgets sometimes doesn't size
      // the components properly until the user resizes the window (even if only
      // by a pixel or two). As a really hacky workaround, we emulate this behavior
-@@ -1667,11 +1670,17 @@ MainFrame::~MainFrame()
+@@ -1667,11 +1670,16 @@ MainFrame::~MainFrame()
      
      if (m_reporterDialog != nullptr)
      {
@@ -237,14 +228,13 @@ index 935f5449..58592cb0 100644
 +        // must be stopped first or that stray event silently overwrites
 +        // the correct value saved here.
          auto pos = m_reporterDialog->GetPosition();
-+        log_info("DIAG: ~MainFrame() grabbing reporter position (%d, %d) to save", pos.x, pos.y);
          wxGetApp().appConfiguration.reporterWindowLeft = pos.x;
          wxGetApp().appConfiguration.reporterWindowTop = pos.y;
 +        m_reporterDialog->stopTrackingPosition();
  
          m_reporterDialog->setReporter(nullptr);
          wxGetApp().SafeYield(nullptr, false); // make sure we handle any remaining Reporter messages before dispose
-@@ -2403,12 +2412,18 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2403,12 +2411,17 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
  
  void MainFrame::topFrame_OnClose( wxCloseEvent& event )
  {
@@ -257,7 +247,6 @@ index 935f5449..58592cb0 100644
 +    // first or that stray event silently overwrites the correct value
 +    // saved here.
      auto pos = m_reporterDialog->GetPosition();
-+    log_info("DIAG: topFrame_OnClose grabbing reporter position (%d, %d) to save", pos.x, pos.y);
      wxGetApp().appConfiguration.reporterWindowLeft = pos.x;
      wxGetApp().appConfiguration.reporterWindowTop = pos.y;
 -    
