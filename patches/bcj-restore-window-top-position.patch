@@ -1,8 +1,8 @@
 diff --git a/src/main.cpp b/src/main.cpp
-index 935f5449..b9d78a8b 100644
+index 935f5449..4b687f65 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
-@@ -812,6 +812,58 @@ static void SuppressButtonPressFlicker_()
+@@ -812,6 +812,56 @@ static void SuppressButtonPressFlicker_()
      g_free(cssColour);
      g_object_unref(provider);
  }
@@ -32,8 +32,6 @@ index 935f5449..b9d78a8b 100644
 +{
 +    auto* ctx = static_cast<SettlePositionContext_*>(userData);
 +    wxPoint pos = ctx->frame->GetPosition();
-+    log_info("DIAG: configure-event, wx position (%d, %d), target (%d, %d), %d attempts left",
-+        pos.x, pos.y, ctx->targetX, ctx->targetY, ctx->attemptsLeft);
 +
 +    if ((pos.x == ctx->targetX && pos.y == ctx->targetY) || ctx->attemptsLeft <= 0)
 +    {
@@ -61,7 +59,7 @@ index 935f5449..b9d78a8b 100644
  #endif // defined(__WXGTK__) && defined(HAS_GTK3)
  
  // OnInit()
-@@ -917,12 +969,40 @@ void MainFrame::loadConfiguration_()
+@@ -917,12 +967,40 @@ void MainFrame::loadConfiguration_()
      g_SquelchLevel = wxGetApp().appConfiguration.squelchLevel;
      g_SquelchLevel /= 2.0;
      
