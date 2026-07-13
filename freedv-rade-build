@@ -177,19 +177,19 @@ case $ID in
     if [[ $ID_LIKE == *"debian"* ]]; then
         # LMDE - use Debian packages
         echo "Detected Linux Mint Debian Edition"
-        run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev \
+        run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev \
             autoconf libtool libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
     else
         MINT_ID=$(echo "$VERSION_ID"|cut -d. -f1)
         if (( MINT_ID >= 22 )); then
-            run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev \
+            run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev \
             autoconf libtool libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
         elif (( MINT_ID == 21 )); then
-            run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev \
+            run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libgtk-3-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev \
             autoconf libtool libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
@@ -225,7 +225,7 @@ case $ID in
             || { echo "apt-get update FAILED"; exit 1; }
         if (( UBUNTU_ID >= 24 )); then
             echo "=== Starting dependency install ==="
-            run_as_root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libwxgtk3.2-dev libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
+            run_as_root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libwxgtk3.2-dev libgtk-3-dev libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libao-dev libasound2-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
             libhamlib-utils fonts-noto-color-emoji automake" \
             || {
@@ -234,7 +234,7 @@ case $ID in
 }
         elif (( UBUNTU_ID >= 22 )); then
             echo "=== Starting dependency install ==="
-            run_as_root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libwxgtk3.0-gtk3-dev libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
+            run_as_root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libwxgtk3.0-gtk3-dev libgtk-3-dev libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
             libhamlib-utils fonts-noto-color-emoji automake" \
             || {
@@ -250,17 +250,17 @@ case $ID in
     groups_to_add+=(dialout plugdev)
     DEBIAN_ID=$(echo "$VERSION_ID"|cut -d. -f1)
         if (( DEBIAN_ID > 12 )); then
-            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libasound2-dev libao-dev \
+            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
                 fonts-noto-color-emoji automake" \
                 || { echo "Deps install failed"; exit 1; }
         elif (( DEBIAN_ID == 12 )); then
-            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libhamlib-dev libasound2-dev libao-dev \
+            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
                 libhamlib-utils fonts-noto-color-emoji automake" \
                 || { echo "Deps install failed"; exit 1; }
         elif (( DEBIAN_ID == 11 )); then
-            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libhamlib-dev libasound2-dev libao-dev \
+            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libgtk-3-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
                 libhamlib-utils fonts-noto-color-emoji automake" \
                 || { echo "Deps install failed"; exit 1; }
