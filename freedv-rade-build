@@ -143,11 +143,11 @@ case $ID in
     MGA_ID=$(echo "$VERSION_ID"|cut -d. -f1)
     if (( MGA_ID > 9 )); then
             run_as_root "urpmi --auto --no-recommends git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
-            libao-devel gsm-devel gcc-c++ automake sox  pulseaudio-devel hamlib-utils \
+            libao-devel gsm-devel gcc-c++ automake sox  pulseaudio-devel hamlib-utils openssl-devel \
             fonts-ttf-google-noto-emoji-color" || { echo "Deps install failed"; exit 1; }
     else
             run_as_root "urpmi --auto --no-recommends git cmake wxGTK3-devel libsamplerate-devel libsndfile-devel speexdsp-devel hamlib-devel alsa-lib-devel \
-            libao-devel gsm-devel gcc-c++ automake sox pulseaudio-devel hamlib-utils \
+            libao-devel gsm-devel gcc-c++ automake sox pulseaudio-devel hamlib-utils openssl-devel \
             google-noto-emoji-color-fonts" || { echo \"Deps install failed\"; exit 1; }
     fi
     ;;
@@ -157,7 +157,7 @@ case $ID in
     echo "Enter the root password to install some initially needed dependencies"
     run_as_root "zypper --non-interactive in --no-recommends cmake patch automake autoconf libtool wxGTK3-devel libsamplerate-devel \
             libsndfile-devel speexdsp-devel alsa-devel libao-devel libgsm-devel gcc-c++ sox \
-            pulseaudio-devel hamlib hamlib-devel google-noto-coloremoji-fonts" \
+            pulseaudio-devel hamlib hamlib-devel libopenssl-devel google-noto-coloremoji-fonts" \
             || { echo "Deps install failed"; exit 1; }
     ;;
 #=================================
@@ -166,7 +166,7 @@ case $ID in
     echo "Enter the root password to install some initially needed dependencies"
     run_as_root "zypper --non-interactive in --no-recommends cmake patch automake autoconf libtool wxGTK3-devel libsamplerate-devel \
             libsndfile-devel speexdsp-devel alsa-devel libao-devel libgsm-devel gcc-c++ sox \
-            libpulse-devel hamlib hamlib-devel google-noto-coloremoji-fonts" \
+            libpulse-devel hamlib hamlib-devel libopenssl-devel google-noto-coloremoji-fonts" \
             || { echo "Deps install failed"; exit 1; }
     ;;
 #=================================
@@ -177,19 +177,19 @@ case $ID in
     if [[ $ID_LIKE == *"debian"* ]]; then
         # LMDE - use Debian packages
         echo "Detected Linux Mint Debian Edition"
-        run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libhamlib-dev \
+        run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libssl-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev \
             autoconf libtool libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
     else
         MINT_ID=$(echo "$VERSION_ID"|cut -d. -f1)
         if (( MINT_ID >= 22 )); then
-            run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libhamlib-dev \
+            run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libssl-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev \
             autoconf libtool libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
         elif (( MINT_ID == 21 )); then
-            run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libgtk-3-dev libhamlib-dev \
+            run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libgtk-3-dev libssl-dev libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev \
             autoconf libtool libhamlib-utils automake fonts-noto-color-emoji" \
             || { echo "Deps install failed"; exit 1; }
@@ -204,13 +204,13 @@ case $ID in
         FC_ID=$(echo "$VERSION_ID"|cut -d. -f1)
         if (( FC_ID >= 42 )); then
             run_as_root "dnf5 install --setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel libsndfile-devel speexdsp-devel \
-            hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox pulseaudio-libs-devel libtool \
+            hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox pulseaudio-libs-devel libtool openssl-devel \
             google-noto-emoji-color-fonts" \
             || { echo "Deps install failed"; exit 1; }
         elif (( FC_ID == 41 )); then
             run_as_root "dnf install --setopt=install_weak_deps=False @development-tools git cmake wxGTK-devel libsamplerate-devel \
             libsndfile-devel speexdsp-devel hamlib-devel hamlib alsa-lib-devel libao-devel gsm-devel gcc-c++ sox \
-            pulseaudio-libs-devel libtool google-noto-emoji-color-fonts" \
+            pulseaudio-libs-devel libtool openssl-devel google-noto-emoji-color-fonts" \
             || { echo "Deps install failed"; exit 1; }
         else
             { echo "This Fedora version is not yet supported, please create an isuue in github"; exit 1; }
@@ -225,7 +225,7 @@ case $ID in
             || { echo "apt-get update FAILED"; exit 1; }
         if (( UBUNTU_ID >= 24 )); then
             echo "=== Starting dependency install ==="
-            run_as_root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libwxgtk3.2-dev libgtk-3-dev libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
+            run_as_root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libwxgtk3.2-dev libgtk-3-dev libssl-dev libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libao-dev libasound2-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
             libhamlib-utils fonts-noto-color-emoji automake" \
             || {
@@ -234,7 +234,7 @@ case $ID in
 }
         elif (( UBUNTU_ID >= 22 )); then
             echo "=== Starting dependency install ==="
-            run_as_root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libwxgtk3.0-gtk3-dev libgtk-3-dev libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
+            run_as_root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libwxgtk3.0-gtk3-dev libgtk-3-dev libssl-dev libspeexdsp-dev libsamplerate0-dev sox git libhamlib-dev \
             libasound2-dev libao-dev libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
             libhamlib-utils fonts-noto-color-emoji automake" \
             || {
@@ -250,17 +250,17 @@ case $ID in
     groups_to_add+=(dialout plugdev)
     DEBIAN_ID=$(echo "$VERSION_ID"|cut -d. -f1)
         if (( DEBIAN_ID > 12 )); then
-            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libasound2-dev libao-dev \
+            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libssl-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
                 fonts-noto-color-emoji automake" \
                 || { echo "Deps install failed"; exit 1; }
         elif (( DEBIAN_ID == 12 )); then
-            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libhamlib-dev libasound2-dev libao-dev \
+            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libssl-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
                 libhamlib-utils fonts-noto-color-emoji automake" \
                 || { echo "Deps install failed"; exit 1; }
         elif (( DEBIAN_ID == 11 )); then
-            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libgtk-3-dev libhamlib-dev libasound2-dev libao-dev \
+            run_as_root "apt-get install libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.0-gtk3-dev libgtk-3-dev libssl-dev libhamlib-dev libasound2-dev libao-dev \
                 libgsm1-dev libsndfile1-dev cmake module-assistant build-essential libpulse-dev autoconf libtool \
                 libhamlib-utils fonts-noto-color-emoji automake" \
                 || { echo "Deps install failed"; exit 1; }
@@ -273,7 +273,7 @@ case $ID in
     groups_to_add+=(uucp lock)
     run_as_root "pacman -Syu cmake gcc base-devel autoconf libtool automake git \
         speexdsp libsamplerate sox hamlib alsa-lib libao \
-        libsndfile gsm noto-fonts-emoji libpulse" \
+        libsndfile gsm noto-fonts-emoji libpulse openssl" \
         || { echo 'Deps install failed'; exit 1; }
 
         # Only install PulseAudio if not on PipeWire
@@ -307,7 +307,7 @@ case $ID in
     manjaro)
     groups_to_add+=(uucp lock)
     run_as_root "pacman -S --needed cmake gcc base-devel autoconf automake libtool git speexdsp libsamplerate sox \
-    wxwidgets-gtk3 hamlib alsa-lib libao libsndfile libpulse gsm noto-fonts-emoji" \
+    wxwidgets-gtk3 hamlib alsa-lib libao libsndfile libpulse gsm noto-fonts-emoji openssl" \
     || { echo "Deps install failed"; exit 1; }
     ;;
 #=================================
@@ -327,7 +327,7 @@ case $ID in
     WXPKG=$(detect_wx_pkg)
     echo "Using wxWidgets package: $WXPKG"
     run_as_root "apt-get install -y --fix-missing $WXPKG automake autoconf libtool git cmake libsamplerate-devel libsndfile-devel \
-    speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox pulseaudio-devel readline-devel" \
+    speexdsp-devel alsa-lib-devel libao-devel gsm-devel gcc-c++ sox pulseaudio-devel readline-devel openssl-devel" \
     || { echo "Deps install failed - try again later"; exit 1; }
     ;;
 #=================================
@@ -336,7 +336,8 @@ case $ID in
     run_as_root "emerge --verbose --noreplace \
     dev-vcs/git dev-build/cmake dev-build/automake dev-build/autoconf dev-build/libtool x11-libs/wxGTK \
     media-libs/libsamplerate media-libs/libsndfile media-libs/speexdsp media-libs/hamlib media-libs/alsa-lib \
-    media-libs/libao media-sound/gsm sys-devel/gcc media-sound/sox media-libs/libpulse media-fonts/noto-emoji" \
+    media-libs/libao media-sound/gsm sys-devel/gcc media-sound/sox media-libs/libpulse media-fonts/noto-emoji \
+    dev-libs/openssl" \
     || { echo "Deps install failed"; exit 1; }
     ;;
 #=================================
