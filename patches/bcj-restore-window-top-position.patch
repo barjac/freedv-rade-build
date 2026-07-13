@@ -82,10 +82,10 @@ index 51784700..fc76be8f 100644
  
 diff --git a/src/gui/util/WindowPositionRestore.cpp b/src/gui/util/WindowPositionRestore.cpp
 new file mode 100644
-index 00000000..13ca182a
+index 00000000..3d2dc952
 --- /dev/null
 +++ b/src/gui/util/WindowPositionRestore.cpp
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,103 @@
 +#include "WindowPositionRestore.h"
 +
 +#include <wx/frame.h>
@@ -105,7 +105,22 @@ index 00000000..13ca182a
 +    int targetY;
 +    int attemptsLeft;
 +    const char* label;
++    // map-event and configure-event each hold a reference; whichever fires
++    // last frees the context. Needed because the two handlers' lifetimes
++    // aren't ordered -- e.g. if the frame's position already matches the
++    // target when RestoreWindowPosition() is called, configure-event can
++    // converge and would otherwise free the context before the frame's
++    // real (asynchronous) map-event ever fires.
++    int refCount;
 +};
++
++void ReleaseContext_(SettlePositionContext_* ctx)
++{
++    if (--ctx->refCount == 0)
++    {
++        delete ctx;
++    }
++}
 +
 +gboolean OnFrameConfigureEvent_(GtkWidget* widget, GdkEventConfigure* event, gpointer userData)
 +{
@@ -119,7 +134,7 @@ index 00000000..13ca182a
 +    {
 +        log_info("DIAG[%s]: giving up/converged, disconnecting", ctx->label);
 +        g_signal_handlers_disconnect_by_func(widget, (gpointer)OnFrameConfigureEvent_, userData);
-+        delete ctx;
++        ReleaseContext_(ctx);
 +        return FALSE;
 +    }
 +
@@ -143,6 +158,7 @@ index 00000000..13ca182a
 +    // later maps, e.g. un-minimizing, should leave the window where the user
 +    // last put it.
 +    g_signal_handlers_disconnect_by_func(widget, (gpointer)OnFrameMapEvent_, userData);
++    ReleaseContext_(ctx);
 +    return FALSE;
 +}
 +
@@ -152,7 +168,7 @@ index 00000000..13ca182a
 +{
 +    log_info("DIAG[%s]: RestoreWindowPosition called, target(%d,%d), GetPosition now (x=%d,y=%d), has parent=%d",
 +        diagLabel, x, y, frame->GetPosition().x, frame->GetPosition().y, frame->GetParent() != nullptr);
-+    auto* settleContext = new SettlePositionContext_{frame, x, y, 10, diagLabel};
++    auto* settleContext = new SettlePositionContext_{frame, x, y, 10, diagLabel, 2};
 +    g_signal_connect(
 +        GTK_WIDGET(frame->GetHandle()), "map-event",
 +        G_CALLBACK(OnFrameMapEvent_), settleContext);
