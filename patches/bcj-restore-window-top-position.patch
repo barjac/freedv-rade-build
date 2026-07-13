@@ -82,10 +82,10 @@ index 51784700..fc76be8f 100644
  
 diff --git a/src/gui/util/WindowPositionRestore.cpp b/src/gui/util/WindowPositionRestore.cpp
 new file mode 100644
-index 00000000..3d2dc952
+index 00000000..374c7f5c
 --- /dev/null
 +++ b/src/gui/util/WindowPositionRestore.cpp
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,104 @@
 +#include "WindowPositionRestore.h"
 +
 +#include <wx/frame.h>
@@ -98,51 +98,56 @@ index 00000000..3d2dc952
 +namespace
 +{
 +
++// How long after mapping to keep re-asserting the target position. Some
++// compositors (observed: labwc on Wayland) apply their own placement
++// decision asynchronously, at no fixed, observable event -- sometimes
++// even after the position already happened to match the target once --
++// so this polls for a while rather than stopping at the first match.
++constexpr gint64 kSettleWatchDurationUs = 2000000; // 2 seconds
++
 +struct SettlePositionContext_
 +{
 +    wxFrame* frame;
 +    int targetX;
 +    int targetY;
-+    int attemptsLeft;
 +    const char* label;
-+    // map-event and configure-event each hold a reference; whichever fires
-+    // last frees the context. Needed because the two handlers' lifetimes
-+    // aren't ordered -- e.g. if the frame's position already matches the
-+    // target when RestoreWindowPosition() is called, configure-event can
-+    // converge and would otherwise free the context before the frame's
-+    // real (asynchronous) map-event ever fires.
-+    int refCount;
++    gint64 deadlineUs;
++    guint timeoutId;
 +};
 +
-+void ReleaseContext_(SettlePositionContext_* ctx)
++void OnFrameDestroyed_(GtkWidget*, gpointer userData)
 +{
-+    if (--ctx->refCount == 0)
++    auto* ctx = static_cast<SettlePositionContext_*>(userData);
++    if (ctx->timeoutId != 0)
 +    {
-+        delete ctx;
++        g_source_remove(ctx->timeoutId);
 +    }
++    delete ctx;
 +}
 +
-+gboolean OnFrameConfigureEvent_(GtkWidget* widget, GdkEventConfigure* event, gpointer userData)
++gboolean OnSettleTick_(gpointer userData)
 +{
 +    auto* ctx = static_cast<SettlePositionContext_*>(userData);
 +    wxPoint pos = ctx->frame->GetPosition();
 +
-+    log_info("DIAG[%s]: configure-event at t=%lld, event(x=%d,y=%d) GetPosition(x=%d,y=%d) target(%d,%d) attemptsLeft=%d",
-+        ctx->label, (long long)g_get_monotonic_time(), event->x, event->y, pos.x, pos.y, ctx->targetX, ctx->targetY, ctx->attemptsLeft);
-+
-+    if ((pos.x == ctx->targetX && pos.y == ctx->targetY) || ctx->attemptsLeft <= 0)
++    if (pos.x != ctx->targetX || pos.y != ctx->targetY)
 +    {
-+        log_info("DIAG[%s]: giving up/converged, disconnecting", ctx->label);
-+        g_signal_handlers_disconnect_by_func(widget, (gpointer)OnFrameConfigureEvent_, userData);
-+        ReleaseContext_(ctx);
-+        return FALSE;
++        log_info("DIAG[%s]: tick at t=%lld, GetPosition(x=%d,y=%d) != target(%d,%d), re-issuing Move()",
++            ctx->label, (long long)g_get_monotonic_time(), pos.x, pos.y, ctx->targetX, ctx->targetY);
++        ctx->frame->Move(ctx->targetX, ctx->targetY);
 +    }
 +
-+    ctx->attemptsLeft--;
-+    ctx->frame->Move(ctx->targetX, ctx->targetY);
-+    log_info("DIAG[%s]: re-issued Move(%d,%d), GetPosition now (x=%d,y=%d)",
-+        ctx->label, ctx->targetX, ctx->targetY, ctx->frame->GetPosition().x, ctx->frame->GetPosition().y);
-+    return FALSE;
++    if (g_get_monotonic_time() >= ctx->deadlineUs)
++    {
++        log_info("DIAG[%s]: settle window elapsed, giving up watching", ctx->label);
++        ctx->timeoutId = 0;
++        g_signal_handlers_disconnect_by_func(
++            GTK_WIDGET(ctx->frame->GetHandle()), (gpointer)OnFrameDestroyed_, ctx);
++        delete ctx;
++        return G_SOURCE_REMOVE;
++    }
++
++    return G_SOURCE_CONTINUE;
 +}
 +
 +gboolean OnFrameMapEvent_(GtkWidget* widget, GdkEventAny*, gpointer userData)
@@ -151,14 +156,13 @@ index 00000000..3d2dc952
 +    log_info("DIAG[%s]: map-event at t=%lld, GetPosition before Move (x=%d,y=%d), target(%d,%d)",
 +        ctx->label, (long long)g_get_monotonic_time(), ctx->frame->GetPosition().x, ctx->frame->GetPosition().y, ctx->targetX, ctx->targetY);
 +    ctx->frame->Move(ctx->targetX, ctx->targetY);
-+    log_info("DIAG[%s]: map-event Move() issued, GetPosition after (x=%d,y=%d)",
-+        ctx->label, ctx->frame->GetPosition().x, ctx->frame->GetPosition().y);
++    ctx->deadlineUs = g_get_monotonic_time() + kSettleWatchDurationUs;
 +
 +    // Only the first map (initial startup) should apply the saved position --
 +    // later maps, e.g. un-minimizing, should leave the window where the user
 +    // last put it.
 +    g_signal_handlers_disconnect_by_func(widget, (gpointer)OnFrameMapEvent_, userData);
-+    ReleaseContext_(ctx);
++    ctx->timeoutId = g_timeout_add(100, OnSettleTick_, ctx);
 +    return FALSE;
 +}
 +
@@ -168,13 +172,10 @@ index 00000000..3d2dc952
 +{
 +    log_info("DIAG[%s]: RestoreWindowPosition called, target(%d,%d), GetPosition now (x=%d,y=%d), has parent=%d",
 +        diagLabel, x, y, frame->GetPosition().x, frame->GetPosition().y, frame->GetParent() != nullptr);
-+    auto* settleContext = new SettlePositionContext_{frame, x, y, 10, diagLabel, 2};
-+    g_signal_connect(
-+        GTK_WIDGET(frame->GetHandle()), "map-event",
-+        G_CALLBACK(OnFrameMapEvent_), settleContext);
-+    g_signal_connect(
-+        GTK_WIDGET(frame->GetHandle()), "configure-event",
-+        G_CALLBACK(OnFrameConfigureEvent_), settleContext);
++    auto* ctx = new SettlePositionContext_{frame, x, y, diagLabel, 0, 0};
++    GtkWidget* widget = GTK_WIDGET(frame->GetHandle());
++    g_signal_connect(widget, "map-event", G_CALLBACK(OnFrameMapEvent_), ctx);
++    g_signal_connect(widget, "destroy", G_CALLBACK(OnFrameDestroyed_), ctx);
 +}
 +
 +#else
