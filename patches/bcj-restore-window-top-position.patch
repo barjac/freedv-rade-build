@@ -11,7 +11,7 @@ index 76339c78..21e80daf 100644
  
  set(FREEDV_LINK_LIBS_OSX
 diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
-index 786067da..93c7ce04 100644
+index 786067da..1f754cae 100644
 --- a/src/gui/dialogs/freedv_reporter.cpp
 +++ b/src/gui/dialogs/freedv_reporter.cpp
 @@ -30,6 +30,7 @@
@@ -36,7 +36,7 @@ index 786067da..93c7ce04 100644
      wxGetApp().appConfiguration.reporterWindowLeft = actualPos.x;
      wxGetApp().appConfiguration.reporterWindowTop = actualPos.y;
 -    SetPosition(actualPos);
-+    RestoreWindowPosition(this, actualPos.x, actualPos.y);
++    RestoreWindowPosition(this, actualPos.x, actualPos.y, "reporter");
  
      // Set up timers. Highlight clear timer has a slightly longer interval
      // to reduce CPU usage.
@@ -82,13 +82,15 @@ index 51784700..fc76be8f 100644
  
 diff --git a/src/gui/util/WindowPositionRestore.cpp b/src/gui/util/WindowPositionRestore.cpp
 new file mode 100644
-index 00000000..59c5bd69
+index 00000000..13ca182a
 --- /dev/null
 +++ b/src/gui/util/WindowPositionRestore.cpp
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,87 @@
 +#include "WindowPositionRestore.h"
 +
 +#include <wx/frame.h>
++
++#include "util/logging/ulog.h"
 +
 +#if defined(__WXGTK__) && defined(HAS_GTK3)
 +#include <gtk/gtk.h>
@@ -102,15 +104,20 @@ index 00000000..59c5bd69
 +    int targetX;
 +    int targetY;
 +    int attemptsLeft;
++    const char* label;
 +};
 +
-+gboolean OnFrameConfigureEvent_(GtkWidget* widget, GdkEventConfigure*, gpointer userData)
++gboolean OnFrameConfigureEvent_(GtkWidget* widget, GdkEventConfigure* event, gpointer userData)
 +{
 +    auto* ctx = static_cast<SettlePositionContext_*>(userData);
 +    wxPoint pos = ctx->frame->GetPosition();
 +
++    log_info("DIAG[%s]: configure-event at t=%lld, event(x=%d,y=%d) GetPosition(x=%d,y=%d) target(%d,%d) attemptsLeft=%d",
++        ctx->label, (long long)g_get_monotonic_time(), event->x, event->y, pos.x, pos.y, ctx->targetX, ctx->targetY, ctx->attemptsLeft);
++
 +    if ((pos.x == ctx->targetX && pos.y == ctx->targetY) || ctx->attemptsLeft <= 0)
 +    {
++        log_info("DIAG[%s]: giving up/converged, disconnecting", ctx->label);
 +        g_signal_handlers_disconnect_by_func(widget, (gpointer)OnFrameConfigureEvent_, userData);
 +        delete ctx;
 +        return FALSE;
@@ -118,13 +125,19 @@ index 00000000..59c5bd69
 +
 +    ctx->attemptsLeft--;
 +    ctx->frame->Move(ctx->targetX, ctx->targetY);
++    log_info("DIAG[%s]: re-issued Move(%d,%d), GetPosition now (x=%d,y=%d)",
++        ctx->label, ctx->targetX, ctx->targetY, ctx->frame->GetPosition().x, ctx->frame->GetPosition().y);
 +    return FALSE;
 +}
 +
 +gboolean OnFrameMapEvent_(GtkWidget* widget, GdkEventAny*, gpointer userData)
 +{
 +    auto* ctx = static_cast<SettlePositionContext_*>(userData);
++    log_info("DIAG[%s]: map-event at t=%lld, GetPosition before Move (x=%d,y=%d), target(%d,%d)",
++        ctx->label, (long long)g_get_monotonic_time(), ctx->frame->GetPosition().x, ctx->frame->GetPosition().y, ctx->targetX, ctx->targetY);
 +    ctx->frame->Move(ctx->targetX, ctx->targetY);
++    log_info("DIAG[%s]: map-event Move() issued, GetPosition after (x=%d,y=%d)",
++        ctx->label, ctx->frame->GetPosition().x, ctx->frame->GetPosition().y);
 +
 +    // Only the first map (initial startup) should apply the saved position --
 +    // later maps, e.g. un-minimizing, should leave the window where the user
@@ -135,9 +148,11 @@ index 00000000..59c5bd69
 +
 +} // namespace
 +
-+void RestoreWindowPosition(wxFrame* frame, int x, int y)
++void RestoreWindowPosition(wxFrame* frame, int x, int y, const char* diagLabel)
 +{
-+    auto* settleContext = new SettlePositionContext_{frame, x, y, 10};
++    log_info("DIAG[%s]: RestoreWindowPosition called, target(%d,%d), GetPosition now (x=%d,y=%d), has parent=%d",
++        diagLabel, x, y, frame->GetPosition().x, frame->GetPosition().y, frame->GetParent() != nullptr);
++    auto* settleContext = new SettlePositionContext_{frame, x, y, 10, diagLabel};
 +    g_signal_connect(
 +        GTK_WIDGET(frame->GetHandle()), "map-event",
 +        G_CALLBACK(OnFrameMapEvent_), settleContext);
@@ -148,8 +163,9 @@ index 00000000..59c5bd69
 +
 +#else
 +
-+void RestoreWindowPosition(wxFrame* frame, int x, int y)
++void RestoreWindowPosition(wxFrame* frame, int x, int y, const char* diagLabel)
 +{
++    log_info("DIAG[%s]: RestoreWindowPosition (non-GTK3 path) target(%d,%d)", diagLabel, x, y);
 +    frame->CallAfter([frame, x, y]()
 +    {
 +        frame->Move(x, y);
@@ -159,7 +175,7 @@ index 00000000..59c5bd69
 +#endif // defined(__WXGTK__) && defined(HAS_GTK3)
 diff --git a/src/gui/util/WindowPositionRestore.h b/src/gui/util/WindowPositionRestore.h
 new file mode 100644
-index 00000000..ffe51c50
+index 00000000..f10910dc
 --- /dev/null
 +++ b/src/gui/util/WindowPositionRestore.h
 @@ -0,0 +1,16 @@
@@ -178,9 +194,9 @@ index 00000000..ffe51c50
 +// after a handful of attempts (or once the position matches) so it won't
 +// fight the user's own later repositioning. On other platforms this is
 +// just a straightforward deferred move.
-+void RestoreWindowPosition(wxFrame* frame, int x, int y);
++void RestoreWindowPosition(wxFrame* frame, int x, int y, const char* diagLabel = "window");
 diff --git a/src/main.cpp b/src/main.cpp
-index 935f5449..e9af1fc4 100644
+index 935f5449..1d7c35fa 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -56,6 +56,7 @@
@@ -210,7 +226,7 @@ index 935f5449..e9af1fc4 100644
      if (h < size.GetHeight()) h = size.GetHeight();
 -    
 +
-+    RestoreWindowPosition(this, x, y);
++    RestoreWindowPosition(this, x, y, "main");
 +
      // XXX - with really short windows, wxWidgets sometimes doesn't size
      // the components properly until the user resizes the window (even if only
