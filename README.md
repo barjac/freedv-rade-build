@@ -17,6 +17,7 @@ It is currently tested in **Mageia, MX Linux, LinuxMint, LMDE, Fedora, Ubuntu, X
   |MX Linux          |OK    |Thanks to David KD4E for testing!|
   |Fedora 40/41/42/43 |OK    |             |
   |Ubuntu 22/24/25.04 LTS also on RPi5|OK    |Thanks to LU3JIJ for testing! and 2D0DRM for RPi5 testing|
+  |Pop!_OS 22.04/24.04|??    |Supported - not tested. Ubuntu-based, uses the same Ubuntu apt package set|
   |Manjaro           |OK    |Thanks to M0SSN for testing!|
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
   |Kubuntu Oracular (Dev)|OK |Thanks to sblandford for testing!|

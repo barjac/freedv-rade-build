@@ -217,7 +217,7 @@ case $ID in
         fi
     ;;
 #=================================
-    ubuntu)
+    ubuntu|pop)
     groups_to_add+=(dialout plugdev)
         UBUNTU_ID=$(echo "$VERSION_ID"|cut -d. -f1)
             echo "=== Starting apt-get update ==="
