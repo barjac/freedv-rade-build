@@ -324,6 +324,13 @@ if (( make_exit != 0 )); then
         fi
         make_exit=$?
     fi
+    if (( make_exit != 0 )) && grep -qE "FAILED -- saving rejects to file|\.rej$" "$LOGFILE"; then
+        echo ""
+        echo "ERROR: A source patch failed to apply while building a dependency (most likely the Opus/RADE"
+        echo "build, which tracks an unpinned upstream branch and can drift out of sync with a stale cached"
+        echo "build tree)."
+        echo "Please run freedv-rade-update again and choose the 'F' (Full rebuild) option to fix this."
+    fi
 fi
 cd || exit 1
 if (( make_exit == 0 )); then
