@@ -8,25 +8,25 @@ index 93c7ce04..1f754cae 100644
      wxGetApp().appConfiguration.reporterWindowTop = actualPos.y;
 -    RestoreWindowPosition(this, actualPos.x, actualPos.y);
 +    RestoreWindowPosition(this, actualPos.x, actualPos.y, "reporter");
- 
+
      // Set up timers. Highlight clear timer has a slightly longer interval
      // to reduce CPU usage.
 diff --git a/src/gui/util/WindowPositionRestore.cpp b/src/gui/util/WindowPositionRestore.cpp
-index 4d764cf2..374c7f5c 100644
+index 014ee86d..7f53d576 100644
 --- a/src/gui/util/WindowPositionRestore.cpp
 +++ b/src/gui/util/WindowPositionRestore.cpp
-@@ -2,6 +2,8 @@
- 
+@@ -23,6 +23,8 @@
+
  #include <wx/frame.h>
- 
+
 +#include "util/logging/ulog.h"
 +
  #if defined(__WXGTK__) && defined(HAS_GTK3)
  #include <gtk/gtk.h>
- 
-@@ -9,11 +11,10 @@ namespace
+
+@@ -30,11 +32,10 @@ namespace
  {
- 
+
  // How long after mapping to keep re-asserting the target position. Some
 -// compositors (observed: KWin on Plasma 6, labwc on Wayland) apply their
 -// own placement decision asynchronously, at no fixed, observable event --
@@ -38,9 +38,9 @@ index 4d764cf2..374c7f5c 100644
 +// even after the position already happened to match the target once --
 +// so this polls for a while rather than stopping at the first match.
  constexpr gint64 kSettleWatchDurationUs = 2000000; // 2 seconds
- 
+
  struct SettlePositionContext_
-@@ -21,6 +22,7 @@ struct SettlePositionContext_
+@@ -42,6 +43,7 @@ struct SettlePositionContext_
      wxFrame* frame;
      int targetX;
      int targetY;
@@ -48,22 +48,22 @@ index 4d764cf2..374c7f5c 100644
      gint64 deadlineUs;
      guint timeoutId;
  };
-@@ -42,11 +44,14 @@ gboolean OnSettleTick_(gpointer userData)
- 
+@@ -63,11 +65,14 @@ gboolean OnSettleTick_(gpointer userData)
+
      if (pos.x != ctx->targetX || pos.y != ctx->targetY)
      {
 +        log_info("DIAG[%s]: tick at t=%lld, GetPosition(x=%d,y=%d) != target(%d,%d), re-issuing Move()",
 +            ctx->label, (long long)g_get_monotonic_time(), pos.x, pos.y, ctx->targetX, ctx->targetY);
          ctx->frame->Move(ctx->targetX, ctx->targetY);
      }
- 
+
      if (g_get_monotonic_time() >= ctx->deadlineUs)
      {
 +        log_info("DIAG[%s]: settle window elapsed, giving up watching", ctx->label);
          ctx->timeoutId = 0;
          g_signal_handlers_disconnect_by_func(
              GTK_WIDGET(ctx->frame->GetHandle()), (gpointer)OnFrameDestroyed_, ctx);
-@@ -60,6 +65,8 @@ gboolean OnSettleTick_(gpointer userData)
+@@ -81,6 +86,8 @@ gboolean OnSettleTick_(gpointer userData)
  gboolean OnFrameMapEvent_(GtkWidget* widget, GdkEventAny*, gpointer userData)
  {
      auto* ctx = static_cast<SettlePositionContext_*>(userData);
@@ -71,11 +71,11 @@ index 4d764cf2..374c7f5c 100644
 +        ctx->label, (long long)g_get_monotonic_time(), ctx->frame->GetPosition().x, ctx->frame->GetPosition().y, ctx->targetX, ctx->targetY);
      ctx->frame->Move(ctx->targetX, ctx->targetY);
      ctx->deadlineUs = g_get_monotonic_time() + kSettleWatchDurationUs;
- 
-@@ -73,9 +80,11 @@ gboolean OnFrameMapEvent_(GtkWidget* widget, GdkEventAny*, gpointer userData)
- 
+
+@@ -94,9 +101,11 @@ gboolean OnFrameMapEvent_(GtkWidget* widget, GdkEventAny*, gpointer userData)
+
  } // namespace
- 
+
 -void RestoreWindowPosition(wxFrame* frame, int x, int y)
 +void RestoreWindowPosition(wxFrame* frame, int x, int y, const char* diagLabel)
  {
@@ -86,10 +86,10 @@ index 4d764cf2..374c7f5c 100644
      GtkWidget* widget = GTK_WIDGET(frame->GetHandle());
      g_signal_connect(widget, "map-event", G_CALLBACK(OnFrameMapEvent_), ctx);
      g_signal_connect(widget, "destroy", G_CALLBACK(OnFrameDestroyed_), ctx);
-@@ -83,8 +92,9 @@ void RestoreWindowPosition(wxFrame* frame, int x, int y)
- 
+@@ -104,8 +113,9 @@ void RestoreWindowPosition(wxFrame* frame, int x, int y)
+
  #else
- 
+
 -void RestoreWindowPosition(wxFrame* frame, int x, int y)
 +void RestoreWindowPosition(wxFrame* frame, int x, int y, const char* diagLabel)
  {
@@ -98,15 +98,17 @@ index 4d764cf2..374c7f5c 100644
      {
          frame->Move(x, y);
 diff --git a/src/gui/util/WindowPositionRestore.h b/src/gui/util/WindowPositionRestore.h
-index ffe51c50..f10910dc 100644
+index e7450311..b5c61c13 100644
 --- a/src/gui/util/WindowPositionRestore.h
 +++ b/src/gui/util/WindowPositionRestore.h
-@@ -13,4 +13,4 @@ class wxFrame;
- // after a handful of attempts (or once the position matches) so it won't
- // fight the user's own later repositioning. On other platforms this is
- // just a straightforward deferred move.
+@@ -36,6 +36,6 @@ class wxFrame;
+ // seconds after mapping so it can catch and correct a delayed override,
+ // then stops so it won't fight the user's own later repositioning. On
+ // other platforms this is just a straightforward deferred move.
 -void RestoreWindowPosition(wxFrame* frame, int x, int y);
 +void RestoreWindowPosition(wxFrame* frame, int x, int y, const char* diagLabel = "window");
+
+ #endif // WINDOW_POSITION_RESTORE_H
 diff --git a/src/main.cpp b/src/main.cpp
 index e9af1fc4..1d7c35fa 100644
 --- a/src/main.cpp
@@ -114,9 +116,9 @@ index e9af1fc4..1d7c35fa 100644
 @@ -924,7 +924,7 @@ void MainFrame::loadConfiguration_()
      if (w < size.GetWidth()) w = size.GetWidth();
      if (h < size.GetHeight()) h = size.GetHeight();
- 
+
 -    RestoreWindowPosition(this, x, y);
 +    RestoreWindowPosition(this, x, y, "main");
- 
+
      // XXX - with really short windows, wxWidgets sometimes doesn't size
      // the components properly until the user resizes the window (even if only
