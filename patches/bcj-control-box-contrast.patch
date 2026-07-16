@@ -1,11 +1,11 @@
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index a2ea3e8e..a241c30c 100644
+index a2ea3e8e..b70b5380 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -333,6 +333,17 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
      return true;
  }
-
+ 
 +// Returns a background colour offset from the system window colour so that
 +// grouped control boxes read as a distinct "card" instead of blending into
 +// the surrounding panel. Works out from the live system colour rather than
@@ -20,11 +20,68 @@ index a2ea3e8e..a241c30c 100644
  //=========================================================================
  // Code that lays out the main application window
  //=========================================================================
-@@ -801,6 +812,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
-     //=====================================================
-     wxStaticBoxSizer* sbSizer5;
+@@ -803,41 +814,54 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      wxStaticBox* controlBox = new wxStaticBox(m_panel, wxID_ANY, _("Control"), wxDefaultPosition, wxSize(100,-1));
-+    controlBox->SetBackgroundColour(GroupBoxBackgroundColour());
      sbSizer5 = new wxStaticBoxSizer(controlBox, wxVERTICAL);
-
+ 
++    // The tint lives on a plain wxPanel nested inside the native static box
++    // rather than on the box itself: wxStaticBox is a themed native control
++    // on Windows/macOS and largely ignores SetBackgroundColour there (or
++    // paints inconsistently), whereas a plain wxPanel reliably honours it
++    // on all three backends. This keeps the box's native border/label
++    // untouched while still giving the group a distinct background.
++    wxPanel* controlPanel = new wxPanel(controlBox);
++    controlPanel->SetBackgroundColour(GroupBoxBackgroundColour());
++    wxBoxSizer* controlPanelSizer = new wxBoxSizer(wxVERTICAL);
++
      //-------------------------------
+     // Stop/Stop signal processing (rx and tx)
+     //-------------------------------
+-    m_togBtnOnOff = new wxToggleButton(controlBox, wxID_ANY, _("&Start Modem"), wxDefaultPosition, wxDefaultSize, 0);
++    m_togBtnOnOff = new wxToggleButton(controlPanel, wxID_ANY, _("&Start Modem"), wxDefaultPosition, wxDefaultSize, 0);
+     m_togBtnOnOff->SetToolTip(_("Begin/End receiving data."));
+-    sbSizer5->Add(m_togBtnOnOff, 0, wxALL | wxEXPAND, 5);
++    controlPanelSizer->Add(m_togBtnOnOff, 0, wxALL | wxEXPAND, 5);
+ 
+     //------------------------------
+     // Analog Passthrough Toggle
+     //------------------------------
+-    m_togBtnAnalog = new wxToggleButton(controlBox, wxID_ANY, _("Switch to A&nalog"), wxDefaultPosition, wxDefaultSize, 0);
++    m_togBtnAnalog = new wxToggleButton(controlPanel, wxID_ANY, _("Switch to A&nalog"), wxDefaultPosition, wxDefaultSize, 0);
+     m_togBtnAnalog->SetToolTip(_("Toggle analog/digital operation."));
+-    sbSizer5->Add(m_togBtnAnalog, 0, wxALL | wxEXPAND, 5);
++    controlPanelSizer->Add(m_togBtnAnalog, 0, wxALL | wxEXPAND, 5);
+ 
+     //------------------------------
+     // Tune Toggle
+     //------------------------------
+-    m_btnTogTune = new wxToggleButton(controlBox, wxID_ANY, _("&Tune"), wxDefaultPosition, wxDefaultSize, 0);
++    m_btnTogTune = new wxToggleButton(controlPanel, wxID_ANY, _("&Tune"), wxDefaultPosition, wxDefaultSize, 0);
+     m_btnTogTune->SetToolTip(_("Emits 1500 Hz carrier to enable rig/antenna tuning.\nRight click for more options"));
+-    sbSizer5->Add(m_btnTogTune, 0, wxALL | wxEXPAND, 5);
++    controlPanelSizer->Add(m_btnTogTune, 0, wxALL | wxEXPAND, 5);
+     m_btnTogTune->Enable(false);
+ 
+     //------------------------------
+     // Voice Keyer Toggle
+     //------------------------------
+-    m_togBtnVoiceKeyer = new wxToggleButton(controlBox, wxID_ANY, _("Start Voice &Keyer"), wxDefaultPosition, wxDefaultSize, 0);
++    m_togBtnVoiceKeyer = new wxToggleButton(controlPanel, wxID_ANY, _("Start Voice &Keyer"), wxDefaultPosition, wxDefaultSize, 0);
+     m_togBtnVoiceKeyer->SetToolTip(_("Toggle Voice Keyer. Right-click for additional options."));
+-    sbSizer5->Add(m_togBtnVoiceKeyer, 0, wxALL | wxEXPAND, 5);
++    controlPanelSizer->Add(m_togBtnVoiceKeyer, 0, wxALL | wxEXPAND, 5);
+ 
+     //------------------------------
+     // PTT button: Toggle Transmit/Receive mode
+     //------------------------------
+-    m_btnTogPTT = new wxToggleButton(controlBox, wxID_ANY, _("&XMIT"), wxDefaultPosition, wxDefaultSize, 0);
++    m_btnTogPTT = new wxToggleButton(controlPanel, wxID_ANY, _("&XMIT"), wxDefaultPosition, wxDefaultSize, 0);
+     m_btnTogPTT->SetToolTip(_("Switch between Receive and Transmit. Right-click for additional options."));
+-    sbSizer5->Add(m_btnTogPTT, 0, wxALL | wxEXPAND, 5);
++    controlPanelSizer->Add(m_btnTogPTT, 0, wxALL | wxEXPAND, 5);
++
++    controlPanel->SetSizer(controlPanelSizer);
++    sbSizer5->Add(controlPanel, 1, wxEXPAND, 0);
+ 
+     rightSizer->Add(sbSizer5, 0, wxALL|wxEXPAND, 2);
+ 
