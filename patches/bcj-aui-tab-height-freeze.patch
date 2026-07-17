@@ -1,29 +1,37 @@
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index a2ea3e8e..104e2c17 100644
+index bba957c4..af921793 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
-@@ -275,7 +275,16 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
- 
-        // create a pane info structure with the information
-        // about where the pane should be added
--       wxAuiPaneInfo pane_info = wxAuiPaneInfo().Name(pane_name).Bottom().CaptionVisible(false);
-+       //
-+       // Must be a CenterPane, not a directional dock (e.g. Bottom()): wxAuiManager
-+       // only recalculates a dock's size on every layout pass for the CENTER
-+       // direction (proportion=1 in its internal sizer, matching wxEXPAND
-+       // semantics elsewhere in this app). Any other direction gets its dock
-+       // size computed once on first layout, capped at 30% of the client
-+       // height (wxAuiManager::m_dockConstraintY), and then permanently
-+       // cached -- causing the pane to freeze at that height and never grow
-+       // again on subsequent frame resizes.
-+       wxAuiPaneInfo pane_info = wxAuiPaneInfo().Name(pane_name).CenterPane().CaptionVisible(false);
-        m_mgr.AddPane(new_tabs, pane_info);
- 
-        // Get list of tab id's and move them to pane
-@@ -314,6 +323,33 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
-     const wxString frames = layout.AfterFirst(wxT('@'));
-     m_mgr.LoadPerspective(frames);
- 
+@@ -259,7 +259,7 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
+
+     size_t sel_page = 0;
+
+-    // Creates a new (empty) tab group pane, docked at the bottom, named paneName.
++    // Creates a new (empty) tab group pane, named paneName.
+     auto createTabGroup = [&](const wxString& paneName) -> wxAuiTabCtrl* {
+         wxTabFrameOurs* new_tabs = new wxTabFrameOurs();
+         new_tabs->m_tabs = new wxAuiTabCtrl(this, m_tabIdCounter++);
+@@ -267,7 +267,15 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
+         new_tabs->m_tabCtrlHeight = m_tabCtrlHeight;
+         new_tabs->m_tabs->SetFlags(m_flags);
+
+-        wxAuiPaneInfo pane_info = wxAuiPaneInfo().Name(paneName).Bottom().CaptionVisible(false);
++        // Must be a CenterPane, not a directional dock (e.g. Bottom()): wxAuiManager
++        // only recalculates a dock's size on every layout pass for the CENTER
++        // direction (proportion=1 in its internal sizer, matching wxEXPAND
++        // semantics elsewhere in this app). Any other direction gets its dock
++        // size computed once on first layout, capped at 30% of the client
++        // height (wxAuiManager::m_dockConstraintY), and then permanently
++        // cached -- causing the pane to freeze at that height and never grow
++        // again on subsequent frame resizes.
++        wxAuiPaneInfo pane_info = wxAuiPaneInfo().Name(paneName).CenterPane().CaptionVisible(false);
+         m_mgr.AddPane(new_tabs, pane_info);
+
+         return new_tabs->m_tabs;
+@@ -360,6 +368,33 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
+         ok = false;
+     }
+
 +    // wxAuiManager::LoadPerspective() above restores every persisted field
 +    // (including dock_direction) from the saved string -- clobbering the
 +    // CenterPane() we set on each tab-frame pane a moment ago with whatever
@@ -52,5 +60,5 @@ index a2ea3e8e..104e2c17 100644
 +    }
 +
      // Reinsert tabs that weren't persisted before
-     assert(dest_tabs != nullptr); // We should have found/created at least one tab group already.
      for (size_t i = 0; i < tab_count; ++i) {
+         wxAuiNotebookPage& page = m_tabs.GetPage(i);
