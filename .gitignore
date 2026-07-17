@@ -6,3 +6,4 @@ freedv-rade-update.log
 .gitignore
 change-user
 .last-patches
+patch_archive/
