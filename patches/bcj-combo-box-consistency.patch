@@ -1,25 +1,62 @@
+diff --git a/src/topFrame.cpp b/src/topFrame.cpp
+index bba957c4..c5c6756e 100644
+--- a/src/topFrame.cpp
++++ b/src/topFrame.cpp
+@@ -969,9 +969,17 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     m_togBtnOnOff->Connect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnOnOff), NULL, this);
+     m_togBtnAnalog->Connect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnAnalogClick), NULL, this);
+     m_togBtnVoiceKeyer->Connect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnVoiceKeyerClick), NULL, this);
+-    m_togBtnVoiceKeyer->Connect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnVoiceKeyerRightClick), NULL, this);
+     m_btnTogPTT->Connect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnPTT), NULL, this);
++
++#if wxCHECK_VERSION(3, 3, 0)
++    // wxGTK 3.3+ fires wxEVT_CONTEXT_MENU on button-press for these widget types,
++    // causing GTK to dismiss PopupMenu on button release; use RIGHT_UP instead.
++    m_togBtnVoiceKeyer->Bind(wxEVT_RIGHT_UP, [this](wxMouseEvent&) { wxContextMenuEvent ctx; OnTogBtnVoiceKeyerRightClick(ctx); });
++    m_btnTogPTT->Bind(wxEVT_RIGHT_UP, [this](wxMouseEvent&) { wxContextMenuEvent ctx; OnTogBtnPTTRightClick(ctx); });
++#else
++    m_togBtnVoiceKeyer->Connect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnVoiceKeyerRightClick), NULL, this);
+     m_btnTogPTT->Connect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
++#endif
+ 
+     m_BtnCallSignReset->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnCallSignReset), NULL, this);
+     m_BtnBerReset->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnBerReset), NULL, this);
+@@ -1089,9 +1097,11 @@ TopFrame::~TopFrame()
+     m_togBtnOnOff->Disconnect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnOnOff), NULL, this);
+     m_togBtnAnalog->Disconnect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnAnalogClick), NULL, this);
+     m_togBtnVoiceKeyer->Disconnect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnVoiceKeyerClick), NULL, this);
+-    m_togBtnVoiceKeyer->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnVoiceKeyerRightClick), NULL, this);
+     m_btnTogPTT->Disconnect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnPTT), NULL, this);
++#if !wxCHECK_VERSION(3, 3, 0)
++    m_togBtnVoiceKeyer->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnVoiceKeyerRightClick), NULL, this);
+     m_btnTogPTT->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
++#endif
+     
+     m_btnCenterRx->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnCenterRx), NULL, this);
+ 
+diff --git a/src/topFrame.h b/src/topFrame.h
+index 6c6c14a8..21c3c538 100644
+--- a/src/topFrame.h
++++ b/src/topFrame.h
+@@ -199,7 +199,7 @@ class TopFrame : public wxFrame
+         virtual void OnTogBtnAnalogClick( wxCommandEvent& event ) { event.Skip(); }
+         virtual void OnTogBtnVoiceKeyerClick( wxCommandEvent& event ) { event.Skip(); }
+         virtual void OnTogBtnVoiceKeyerRightClick( wxContextMenuEvent& event ) { event.Skip(); }
+-        
++
+         virtual void OnTogBtnPTT( wxCommandEvent& event ) { event.Skip(); }
+         virtual void OnTogBtnPTTRightClick( wxContextMenuEvent& event ) { event.Skip(); }
+ 
 diff --git a/src/voicekeyer.cpp b/src/voicekeyer.cpp
-index da63c1ce..52fb8c5d 100644
+index da63c1ce..3b88f5ec 100644
 --- a/src/voicekeyer.cpp
 +++ b/src/voicekeyer.cpp
-@@ -208,11 +208,17 @@ void MainFrame::OnTogBtnVoiceKeyerRightClick( wxContextMenuEvent& )
+@@ -208,7 +208,7 @@ void MainFrame::OnTogBtnVoiceKeyerRightClick( wxContextMenuEvent& )
      bool enabled = vk_state == VK_IDLE && !m_btnTogPTT->GetValue();
      chooseVKFileMenuItem_->Enable(vk_state == VK_IDLE);
      recordNewVoiceKeyerFileMenuItem_->Enable(enabled);
 -    
 +
      // Trigger right-click menu popup in a location that will prevent it from
--    // ending up off the screen.
-+    // ending up off the screen. Deferred via CallAfter so it opens after the
-+    // originating right-click's press/release (and its implicit pointer
-+    // grab) has fully completed -- otherwise on GTK the matching button-up
-+    // is delivered straight to the freshly-opened menu, selecting whatever
-+    // is under the cursor before the menu can be read.
+     // ending up off the screen.
      auto sz = m_togBtnVoiceKeyer->GetSize();
--    m_togBtnVoiceKeyer->PopupMenu(voiceKeyerPopupMenu_, wxPoint(-sz.GetWidth() - 25, 0));
-+    CallAfter([this, sz]() {
-+        m_togBtnVoiceKeyer->PopupMenu(voiceKeyerPopupMenu_, wxPoint(-sz.GetWidth() - 25, 0));
-+    });
- }
- 
- void MainFrame::OnSetMonitorVKAudio( wxCommandEvent& event )
