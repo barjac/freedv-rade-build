@@ -560,12 +560,25 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
     _patch_dir="${_bdir}/patches"
 
     # Build the list of patches/ subdirectory entries up front (used by both
-    # the fresh-pick and edit-list flows below).
+    # the fresh-pick and edit-list flows below). Sorted by each file's last
+    # git commit time, not filesystem mtime -- a `git pull` here (the normal
+    # way this machine picks up new patches) resets every touched file's
+    # mtime to the checkout time, so several patches pulled in one go end up
+    # with identical/indistinguishable mtimes and sort arbitrarily among
+    # themselves. Falls back to mtime for any untracked patch file.
     _available=()
     if [[ -d "$_patch_dir" ]]; then
         while IFS= read -r _f; do
-            _available+=("$(basename "$_f")")
-        done < <(find "$_patch_dir" -maxdepth 1 -name '*.patch' -printf '%T@ %p\n' | sort -rn | awk '{print $2}')
+            _available+=("$_f")
+        done < <(
+            for _p in "$_patch_dir"/*.patch; do
+                [[ -e "$_p" ]] || continue
+                _base="$(basename "$_p")"
+                _t=$(git -C "$_bdir" log -1 --format=%at -- "patches/$_base" 2>/dev/null)
+                [[ -n "$_t" ]] || _t=$(stat -c %Y "$_p")
+                printf '%s %s\n' "$_t" "$_base"
+            done | sort -rn | awk '{print $2}'
+        )
     fi
 
     # Offer to reuse recent patches
