@@ -272,6 +272,25 @@ if (( ${#cname} > 0 )); then
     _bi_prs=()
 fi
 
+# Apply patches oldest-first regardless of the order they were picked/kept
+# in above, so a newer/more specific patch always lands on top of a more
+# evolved tree state instead of an older one landing on top of a newer
+# one's assumptions -- matches the safer convention of applying manually
+# and reduces the odds of a conflict.
+if (( ${#patches[@]} > 1 )); then
+    _sorted_patches=()
+    while IFS= read -r _p; do
+        _sorted_patches+=("$_p")
+    done < <(
+        for _p in "${patches[@]}"; do
+            _t=$(git -C "/home/${user}/freedv-rade-build" log -1 --format=%at -- "$_p" 2>/dev/null)
+            [[ -n "$_t" ]] || _t=$(stat -c %Y "/home/${user}/freedv-rade-build/$_p" 2>/dev/null)
+            printf '%s %s\n' "${_t:-0}" "$_p"
+        done | sort -n | awk '{print $2}'
+    )
+    patches=("${_sorted_patches[@]}")
+fi
+
 # Apply patches if there are any
 if (( ${#patches[@]} > 0 )); then
     for patch in "${patches[@]}"; do
