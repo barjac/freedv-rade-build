@@ -1,0 +1,81 @@
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index 15669042..0d4d7596 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1186,8 +1186,7 @@ void MainFrame::OnSetMonitorTxAudioVol( wxCommandEvent& )
+ //-------------------------------------------------------------------------
+ void MainFrame::OnTogBtnPTTRightClick( wxContextMenuEvent& )
+ {
+-    auto sz = m_btnTogPTT->GetSize();
+-    m_btnTogPTT->PopupMenu(pttPopupMenu_, wxPoint(-sz.GetWidth() - 25, 0));
++    m_btnTogPTT->PopupMenu(pttPopupMenu_, LeftOffsetContextMenuPosition(m_btnTogPTT));
+ }
+ 
+ //-------------------------------------------------------------------------
+diff --git a/src/topFrame.cpp b/src/topFrame.cpp
+index 9636ac33..82b1d1d8 100644
+--- a/src/topFrame.cpp
++++ b/src/topFrame.cpp
+@@ -33,7 +33,29 @@
+ #include "gui/util/LabelOverrideAccessible.h"
+ #include "util/logging/ulog.h"
+ 
++#if defined(__WXGTK__) && defined(HAS_GTK3)
++#include <gtk/gtk.h>
++#ifdef GDK_WINDOWING_WAYLAND
++#include <gdk/gdkwayland.h>
++#endif // GDK_WINDOWING_WAYLAND
++#endif // defined(__WXGTK__) && defined(HAS_GTK3)
++
+ extern int g_playFileToMicInEventId;
++
++wxPoint LeftOffsetContextMenuPosition(wxWindow* btn)
++{
++#if defined(__WXGTK__) && defined(HAS_GTK3) && defined(GDK_WINDOWING_WAYLAND)
++    GdkDisplay* display = gdk_display_get_default();
++    if (display != nullptr && GDK_IS_WAYLAND_DISPLAY(display))
++    {
++        return wxDefaultPosition;
++    }
++#endif // defined(__WXGTK__) && defined(HAS_GTK3) && defined(GDK_WINDOWING_WAYLAND)
++
++    auto sz = btn->GetSize();
++    return wxPoint(-sz.GetWidth() - 25, 0);
++}
++
+ extern int g_recFileFromRadioEventId;
+ extern int g_recFileFromDecoderEventId;
+ extern int g_playFileFromRadioEventId;
+diff --git a/src/topFrame.h b/src/topFrame.h
+index 21c3c538..55a5cd85 100644
+--- a/src/topFrame.h
++++ b/src/topFrame.h
+@@ -78,6 +78,14 @@
+ 
+ class wxListViewComboPopup;
+ 
++// Popup position for a right-click menu anchored to the left of btn (to
++// avoid running off the right screen edge on X11). On GTK/Wayland, GDK's
++// own popup placement already avoids screen edges correctly, and this
++// manual offset doesn't translate to Wayland's surface-relative anchor
++// model (it ends up placed at the toplevel's origin instead), so this
++// returns wxDefaultPosition there and lets GTK position it automatically.
++wxPoint LeftOffsetContextMenuPosition(wxWindow* btn);
++
+ ///////////////////////////////////////////////////////////////////////////////
+ /// Class TopFrame
+ ///////////////////////////////////////////////////////////////////////////////
+diff --git a/src/voicekeyer.cpp b/src/voicekeyer.cpp
+index 3b88f5ec..41d3826a 100644
+--- a/src/voicekeyer.cpp
++++ b/src/voicekeyer.cpp
+@@ -211,8 +211,7 @@ void MainFrame::OnTogBtnVoiceKeyerRightClick( wxContextMenuEvent& )
+ 
+     // Trigger right-click menu popup in a location that will prevent it from
+     // ending up off the screen.
+-    auto sz = m_togBtnVoiceKeyer->GetSize();
+-    m_togBtnVoiceKeyer->PopupMenu(voiceKeyerPopupMenu_, wxPoint(-sz.GetWidth() - 25, 0));
++    m_togBtnVoiceKeyer->PopupMenu(voiceKeyerPopupMenu_, LeftOffsetContextMenuPosition(m_togBtnVoiceKeyer));
+ }
+ 
+ void MainFrame::OnSetMonitorVKAudio( wxCommandEvent& event )
