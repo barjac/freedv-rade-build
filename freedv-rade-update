@@ -217,8 +217,16 @@ if (( ${#prbranches[@]} == 0 )); then
                 prnumber="${entry#pr:}"
                 pr_base=$(gh pr view "$prnumber" --json baseRefName -q .baseRefName 2>/dev/null)
                 if [[ -z "$pr_base" ]]; then
-                    echo "WARNING: Could not look up base branch for PR #$prnumber via 'gh' — proceeding without the base-branch check."
-                elif [[ "$pr_base" != "$base_branch" ]]; then
+                    # gh not installed, not authenticated, or lookup otherwise
+                    # failed -- rather than skip the check entirely, assume
+                    # the overwhelmingly common case (PR based on master) so
+                    # the mismatch check below still fires when building a
+                    # non-master base_branch (e.g. v3.0-dev) with a PR whose
+                    # real base we couldn't confirm.
+                    echo "NOTE: Could not look up base branch for PR #$prnumber via 'gh' (not installed, or lookup failed) — defaulting to 'master' for the base-branch check below."
+                    pr_base="master"
+                fi
+                if [[ "$pr_base" != "$base_branch" ]]; then
                     _stacked_on=""
                     for _other_pn in "${!_pr_head_refs[@]}"; do
                         [[ "$_other_pn" == "$prnumber" ]] && continue
