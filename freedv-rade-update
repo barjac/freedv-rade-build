@@ -159,15 +159,18 @@ if (( ${#prbranches[@]} == 0 )); then
         # and any number of PR-number entries to merge onto that base.
         base_entry=""
         pr_entries=()
+        branch_entries=()
         for entry in "${prbranches[@]}"; do
             if [[ "$entry" == pr:* ]]; then
                 pr_entries+=("$entry")
+            elif [[ "$entry" == branch:* ]]; then
+                branch_entries+=("$entry")
             elif [[ "$entry" == *:* ]]; then
                 echo "ERROR: Fork branch '$entry' not in upstream. Use a PR number instead."
                 exit 1
             else
                 if [[ -n "$base_entry" ]]; then
-                    echo "ERROR: Only one branch/tag name may be used as the base ('$base_entry' and '$entry' were both given). Use PR numbers for anything else to combine."
+                    echo "ERROR: Only one branch/tag name may be used as the base ('$base_entry' and '$entry' were both given). Use 'branch:name' to merge in additional branches, or PR numbers for PRs."
                     exit 1
                 fi
                 base_entry="$entry"
@@ -196,11 +199,11 @@ if (( ${#prbranches[@]} == 0 )); then
             _bi_base="${base_entry} @ $(git rev-parse --short HEAD)"
         fi
 
-        if (( ${#pr_entries[@]} == 0 )); then
+        if (( ${#pr_entries[@]} == 0 && ${#branch_entries[@]} == 0 )); then
             # Branch/tag only, nothing to merge onto it.
             echo "Using branch $base_branch"
         else
-            # One or more PRs to merge onto the base branch (default, or the named one).
+            # One or more PRs and/or plain branches to merge onto the base branch (default, or the named one).
             git checkout -B build/combined "$base_branch" \
                 || { echo "ERROR: Could not create build/combined branch"; exit 1; }
             # Pre-fetch each PR's head branch name so a PR stacked on another
@@ -261,7 +264,26 @@ if (( ${#prbranches[@]} == 0 )); then
                 echo "PR #$prnumber merged OK"
                 _bi_prs+=("pr:${prnumber} @ ${prhead}")
             done
-            echo "Using base $base_branch combined with PRs: ${pr_entries[*]}"
+
+            for entry in "${branch_entries[@]}"; do
+                brname="${entry#branch:}"
+                if ! git rev-parse --verify -q "origin/$brname" >/dev/null; then
+                    echo "ERROR: Branch '$brname' not found on origin."
+                    exit 1
+                fi
+                echo -e "\nNOTE: '$brname' is a plain branch, not a PR, so there's no recorded base to check it against '$base_branch' — make sure it's intended to build on top of that."
+                brhead=$(git rev-parse --short "origin/$brname")
+                echo "Merging branch $brname (@ $brhead)..."
+                if ! git merge --no-edit "origin/$brname"; then
+                    git merge --abort 2>/dev/null
+                    echo "ERROR: Branch $brname conflicts with existing changes — aborting."
+                    exit 1
+                fi
+                echo "Branch $brname merged OK"
+                _bi_prs+=("branch:${brname} @ ${brhead}")
+            done
+
+            echo "Using base $base_branch combined with: ${pr_entries[*]} ${branch_entries[*]}"
         fi
     fi
 
@@ -566,7 +588,7 @@ if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch, tag or PR(s)?" "[N
         done < "$_last_prs_file"
     fi
 
-    echo -e "\nNOTE: Enter PR numbers and/or a branch name, space-separated."
+    echo -e "\nNOTE: Enter PR numbers, a base branch/tag name, and/or 'branch:name' to merge in another branch, space-separated."
     [[ -n "$_default_input" ]] && echo "(Edit or clear the previous selection below)"
     if [[ -n "$_default_input" ]]; then
         read -r -e -i "$_default_input" -p "PR(s)/branch: " _input
@@ -784,17 +806,23 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
         else
             _preview_base="$default"
             _preview_prs=()
+            _preview_branches=()
             for _entry in "${prbranches[@]}"; do
                 if [[ "$_entry" == pr:* ]]; then
                     _preview_prs+=("${_entry#pr:}")
+                elif [[ "$_entry" == branch:* ]]; then
+                    _preview_branches+=("${_entry#branch:}")
                 else
                     _preview_base="$_entry"
                 fi
             done
-            if (( ${#_preview_prs[@]} == 0 )); then
+            _preview_merge=()
+            (( ${#_preview_prs[@]} > 0 )) && _preview_merge+=("PR(s) ${_preview_prs[*]}")
+            (( ${#_preview_branches[@]} > 0 )) && _preview_merge+=("branch(es) ${_preview_branches[*]}")
+            if (( ${#_preview_merge[@]} == 0 )); then
                 updt_str="built at $_preview_base"
             else
-                updt_str="built at $_preview_base with PR(s) ${_preview_prs[*]} merged"
+                updt_str="built at $_preview_base with ${_preview_merge[*]} merged"
             fi
         fi
 
