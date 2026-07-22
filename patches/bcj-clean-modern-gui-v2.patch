@@ -156,7 +156,7 @@ index 7ee955e6..6fe5614f 100644
  {
      // The centre-frequency convention only makes sense in digital mode (see
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 052b752a..a3e91b8f 100644
+index 052b752a..5efc9886 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -400,6 +400,75 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
@@ -424,7 +424,7 @@ index 052b752a..a3e91b8f 100644
      wxBoxSizer* txBtnSizer = new wxBoxSizer(wxHORIZONTAL);
      m_btnTxLevelMM = new wxButton(m_txLevelBox, wxID_ANY, _("<<"), wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
      m_btnTxLevelM  = new wxButton(m_txLevelBox, wxID_ANY, _("<"),  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-@@ -755,84 +804,79 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -755,84 +804,81 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_txtTxLevelNum = new wxStaticText(m_txLevelBox, wxID_ANY, fmtString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER | wxST_NO_AUTORESIZE);
      m_txtTxLevelNum->SetToolTip(_("Use mouse scroll wheel to adjust up or down\nRight click for more options"));
      m_txtTxLevelNum->SetMinSize(wxSize(100,-1));
@@ -515,7 +515,8 @@ index 052b752a..a3e91b8f 100644
      m_togBtnOnOff = new wxToggleButton(controlBox, wxID_ANY, _("&Start Modem"), wxDefaultPosition, wxDefaultSize, 0);
      m_togBtnOnOff->SetToolTip(_("Begin/End receiving data."));
 -    sbSizer5->Add(m_togBtnOnOff, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
-+    controlBox->GetContentSizer()->Add(m_togBtnOnOff, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
++    controlBox->GetContentSizer()->Add(m_togBtnOnOff, 0, static_cast<int>(wxLEFT) | static_cast<int>(wxRIGHT) | static_cast<int>(wxTOP) | static_cast<int>(wxEXPAND), 5);
++    controlBox->GetContentSizer()->AddSpacer(4);
  
      //------------------------------
      // Analog Passthrough Toggle
@@ -523,7 +524,8 @@ index 052b752a..a3e91b8f 100644
      m_togBtnAnalog = new wxToggleButton(controlBox, wxID_ANY, _("Switch to A&nalog"), wxDefaultPosition, wxDefaultSize, 0);
      m_togBtnAnalog->SetToolTip(_("Toggle analog/digital operation."));
 -    sbSizer5->Add(m_togBtnAnalog, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
-+    controlBox->GetContentSizer()->Add(m_togBtnAnalog, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
++    controlBox->GetContentSizer()->Add(m_togBtnAnalog, 0, static_cast<int>(wxLEFT) | static_cast<int>(wxRIGHT) | static_cast<int>(wxEXPAND), 5);
++    controlBox->GetContentSizer()->AddSpacer(4);
  
      //------------------------------
      // Tune Toggle
@@ -531,11 +533,11 @@ index 052b752a..a3e91b8f 100644
      m_btnTogTune = new wxToggleButton(controlBox, wxID_ANY, _("&Tune"), wxDefaultPosition, wxDefaultSize, 0);
      m_btnTogTune->SetToolTip(_("Emits 1500 Hz carrier to enable rig/antenna tuning.\nRight click for more options"));
 -    sbSizer5->Add(m_btnTogTune, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
-+    controlBox->GetContentSizer()->Add(m_btnTogTune, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
++    controlBox->GetContentSizer()->Add(m_btnTogTune, 0, static_cast<int>(wxLEFT) | static_cast<int>(wxRIGHT) | static_cast<int>(wxBOTTOM) | static_cast<int>(wxEXPAND), 5);
      m_btnTogTune->Enable(false);
  
      //------------------------------
-@@ -840,16 +884,16 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -840,16 +886,16 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //------------------------------
      m_togBtnVoiceKeyer = new wxToggleButton(controlBox, wxID_ANY, _("Start Voice &Keyer"), wxDefaultPosition, wxDefaultSize, 0);
      m_togBtnVoiceKeyer->SetToolTip(_("Toggle Voice Keyer. Right-click for additional options."));
@@ -555,7 +557,7 @@ index 052b752a..a3e91b8f 100644
  
      bSizer1->Add(rightSizer, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 3);
      
-@@ -935,7 +979,6 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -935,7 +981,6 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
  
      m_BtnCallSignReset->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnCallSignReset), NULL, this);
      m_BtnBerReset->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnBerReset), NULL, this);
@@ -563,7 +565,7 @@ index 052b752a..a3e91b8f 100644
  
          
      m_btnTxLevelMM->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTxLevelDecrBig), NULL, this);
-@@ -1037,8 +1080,6 @@ TopFrame::~TopFrame()
+@@ -1037,8 +1082,6 @@ TopFrame::~TopFrame()
      m_togBtnVoiceKeyer->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnVoiceKeyerRightClick), NULL, this);
      m_btnTogPTT->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
  #endif

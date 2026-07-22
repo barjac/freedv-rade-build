@@ -31,8 +31,153 @@ index 286f59c7..ef1aa309 100644
  //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=
  // Class PlotPanel
  //
+diff --git a/src/main.cpp b/src/main.cpp
+index 7636e4ef..ca5e8b09 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1078,8 +1078,6 @@ setDefaultMode:
+     m_sliderSQ->Enable(isEnabled);
+     m_ckboxSQ->Enable(isEnabled);
+     m_textSQ->Enable(isEnabled);
+-    m_btnCenterRx->Enable(isEnabled);
+-    m_btnCenterRx->Show(wxGetApp().appConfiguration.enableLegacyModes);
+     m_BtnReSync->Enable(isEnabled);
+     m_BtnReSync->Show(wxGetApp().appConfiguration.enableLegacyModes);
+ 
+@@ -1223,11 +1221,8 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+     // fully optimized for real-time use yet (i.e. it dynamically allocates
+     // memory while processing audio).
+     SNR_FORMAT_STR("%ddB"),
+-    MODE_FORMAT_STR("Mode: %s"),
+-    MODE_RADE_FORMAT_STR("Mode: RADEV1"),
+     NO_SNR_LABEL("--"),
+     EMPTY_STR(""),
+-    MODEM_LABEL("Modem"),
+     BITS_UNK_LABEL("Bits: unk"),
+     ERRS_UNK_LABEL("Errs: unk"),
+     BER_UNK_LABEL("BER: unk"),
+@@ -2028,7 +2023,6 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+             if (oldColor != newColor)
+             {
+                 m_textSync->SetForegroundColour(newColor);
+-                m_textSync->SetLabel(MODEM_LABEL);
+                 m_textSync->Refresh();
+             }
+         }
+@@ -2265,13 +2259,11 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+         g_channel_noise.store(wxGetApp().m_channel_noise, std::memory_order_release);
+ 
+         // update stats on main page
+-        wxString modeString; 
+-        if (g_mode == FREEDV_MODE_RADE) modeString = MODE_RADE_FORMAT_STR; // optimization to reduce allocs
+-        else modeString = wxString::Format(MODE_FORMAT_STR, freedvInterface.getCurrentModeStr());
+-        bool relayout = 
+-            m_textCurrentDecodeMode->GetLabel() != modeString &&
++        wxString modeString = freedvInterface.getCurrentModeStr();
++        bool relayout =
++            m_textSync->GetLabel() != modeString &&
+             !realigned_;
+-        m_textCurrentDecodeMode->SetLabel(modeString);
++        m_textSync->SetLabel(modeString);
+         if (relayout)
+         {
+             // XXX - force resize events to make mode string re-center itself.
+@@ -2529,7 +2521,6 @@ void MainFrame::OnChangeTxMode( wxCommandEvent& event )
+         m_sliderSQ->Enable(isEnabled);
+         m_ckboxSQ->Enable(isEnabled);
+         m_textSQ->Enable(isEnabled);
+-        m_btnCenterRx->Enable(isEnabled);
+         m_BtnReSync->Enable(isEnabled);
+     }
+ }
+@@ -2581,8 +2572,7 @@ void MainFrame::performFreeDVOn_()
+     executeOnUiThreadAndWait_([&]() 
+     {
+         m_textSync->Enable();
+-        m_textCurrentDecodeMode->Enable();
+-        
++
+         // determine what mode we are using
+         wxCommandEvent tmpEvent;
+         OnChangeTxMode(tmpEvent);
+@@ -2974,7 +2964,6 @@ void MainFrame::performFreeDVOff_()
+     executeOnUiThreadAndWait_([&]() 
+     {
+         m_textSync->Disable();
+-        m_textCurrentDecodeMode->Disable();
+ 
+         m_togBtnAnalog->Disable();
+         m_btnTogPTT->Disable();
+diff --git a/src/main.h b/src/main.h
+index 76e30870..c7bc2f73 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -431,8 +431,6 @@ class MainFrame : public TopFrame
+         void OnToolsLoadDefaultConfig( wxCommandEvent& event ) override;
+         void OnToolsLoadDefaultConfigUI( wxUpdateUIEvent& event ) override;
+ 
+-        void OnCenterRx(wxCommandEvent& event) override;
+-
+         void OnHelpCheckUpdates( wxCommandEvent& event ) override;
+         void OnHelpCheckUpdatesUI( wxUpdateUIEvent& event ) override;
+         void OnHelpAbout( wxCommandEvent& event ) override;
+@@ -532,11 +530,8 @@ class MainFrame : public TopFrame
+         
+     private:
+         const wxString SNR_FORMAT_STR;
+-        const wxString MODE_FORMAT_STR;
+-        const wxString MODE_RADE_FORMAT_STR;
+         const wxString NO_SNR_LABEL;
+         const wxString EMPTY_STR;
+-        const wxString MODEM_LABEL;
+         const wxString BITS_UNK_LABEL;
+         const wxString ERRS_UNK_LABEL;
+         const wxString BER_UNK_LABEL;
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index f5a61181..f6391b7e 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -247,8 +247,6 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
+         m_sliderSQ->Enable(isEnabled);
+         m_ckboxSQ->Enable(isEnabled);
+         m_textSQ->Enable(isEnabled);
+-        m_btnCenterRx->Enable(isEnabled);
+-        m_btnCenterRx->Show(wxGetApp().appConfiguration.enableLegacyModes);
+         m_BtnReSync->Enable(isEnabled);
+         m_BtnReSync->Show(wxGetApp().appConfiguration.enableLegacyModes);
+ 
+@@ -1587,8 +1585,7 @@ void MainFrame::togglePTT(void) {
+         // enable sync text
+ 
+         m_textSync->Enable();
+-        m_textCurrentDecodeMode->Enable();
+-        
++
+         // Re-enable buttons.
+         m_togBtnOnOff->Enable(true);
+         m_togBtnAnalog->Enable(true);
+@@ -1633,7 +1630,6 @@ void MainFrame::togglePTT(void) {
+         // disable sync text
+ 
+         m_textSync->Disable();
+-        m_textCurrentDecodeMode->Disable();
+ 
+         // Disable On/Off button.
+         m_togBtnOnOff->Enable(false);
+@@ -2160,11 +2156,6 @@ void MainFrame::OnSystemColorChanged(wxSysColourChangedEvent& event)
+     TopFrame::OnSystemColorChanged(event);
+ }
+ 
+-void MainFrame::OnCenterRx(wxCommandEvent&)
+-{
+-    clickTune(FDMDV_FCENTRE);
+-}
+-
+ void MainFrame::updateReportingFreqList_()
+ {
+     uint64_t prevFreqInt = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency;
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index d736ffa5..85c04112 100644
+index d736ffa5..ebbce45a 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -400,6 +400,75 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
@@ -111,7 +256,7 @@ index d736ffa5..85c04112 100644
  //=========================================================================
  // Code that lays out the main application window
  //=========================================================================
-@@ -528,140 +597,129 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -528,140 +597,122 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      wxSizer* leftOuterSizer = new wxBoxSizer(wxVERTICAL);
      wxSizer* leftSizer = new wxWrapSizer(wxVERTICAL, wxREMOVE_LEADING_SPACES);
  
@@ -178,27 +323,24 @@ index d736ffa5..85c04112 100644
 -    sbSizer3_33 = new wxStaticBoxSizer(syncBox, wxVERTICAL);
 +    TintedGroupBox* syncBox = new TintedGroupBox(m_panel, _("Sync"), wxVERTICAL);
  
-     m_textSync = new wxStaticText(syncBox, wxID_ANY, wxT("Modem"), wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE);
+-    m_textSync = new wxStaticText(syncBox, wxID_ANY, wxT("Modem"), wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE);
 -    sbSizer3_33->Add(m_textSync, 0, wxALIGN_CENTER_HORIZONTAL, 1);
++    m_textSync = new wxStaticText(syncBox, wxID_ANY, wxT("unk"), wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE);
 +    syncBox->GetContentSizer()->Add(m_textSync, 0, wxALIGN_CENTER_HORIZONTAL, 1);
      m_textSync->Disable();
  
-     m_textCurrentDecodeMode = new wxStaticText(syncBox, wxID_ANY, wxT("Mode: unk"), wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE);
+-    m_textCurrentDecodeMode = new wxStaticText(syncBox, wxID_ANY, wxT("Mode: unk"), wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE);
 -    sbSizer3_33->Add(m_textCurrentDecodeMode, 0, wxALIGN_CENTER_HORIZONTAL, 1);
-+    syncBox->GetContentSizer()->Add(m_textCurrentDecodeMode, 0, wxALIGN_CENTER_HORIZONTAL, 1);
-     m_textCurrentDecodeMode->Disable();
+-    m_textCurrentDecodeMode->Disable();
 -    
-+
      m_BtnReSync = new wxButton(syncBox, wxID_ANY, _("ReS&ync"), wxDefaultPosition, wxDefaultSize, 0);
 -    sbSizer3_33->Add(m_BtnReSync, 0, static_cast<int>(wxALL) | wxALIGN_CENTRE, 5);
 -    
-+    syncBox->GetContentSizer()->Add(m_BtnReSync, 0, static_cast<int>(wxALL) | wxALIGN_CENTRE, 5);
-+
-     m_btnCenterRx = new wxButton(syncBox, wxID_ANY, _("C&enter RX"), wxDefaultPosition, wxDefaultSize, 0);
+-    m_btnCenterRx = new wxButton(syncBox, wxID_ANY, _("C&enter RX"), wxDefaultPosition, wxDefaultSize, 0);
 -    sbSizer3_33->Add(m_btnCenterRx, 0, static_cast<int>(wxALL) | wxALIGN_CENTRE, 5);
 -    
 -    leftSizer->Add(sbSizer3_33,0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND)|wxFIXED_MINSIZE, 2);
-+    syncBox->GetContentSizer()->Add(m_btnCenterRx, 0, static_cast<int>(wxALL) | wxALIGN_CENTRE, 5);
++    syncBox->GetContentSizer()->Add(m_BtnReSync, 0, static_cast<int>(wxALL) | wxALIGN_CENTRE, 5);
 +
 +    leftSizer->Add(syncBox,0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
  
@@ -297,7 +439,7 @@ index d736ffa5..85c04112 100644
  
      leftSizer->SetMinSize(wxSize(-1, 375));
      
-@@ -741,9 +799,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -741,9 +792,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //=====================================================
      // Squelch Slider Control
      //=====================================================
@@ -308,7 +450,7 @@ index d736ffa5..85c04112 100644
  
      m_sliderSQ = new wxSlider(squelchBox, wxID_ANY, 0, 0, 40, wxDefaultPosition, wxDefaultSize, wxSL_AUTOTICKS);
      m_sliderSQ->SetMinSize(wxSize(135,-1));
-@@ -756,27 +812,26 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -756,27 +805,26 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_sliderSQ->SetAccessible(squelchSliderAccessibility);
  #endif // wxUSE_ACCESSIBILITY
  
@@ -342,7 +484,7 @@ index d736ffa5..85c04112 100644
      wxBoxSizer* txBtnSizer = new wxBoxSizer(wxHORIZONTAL);
      m_btnTxLevelMM = new wxButton(m_txLevelBox, wxID_ANY, _("<<"), wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
      m_btnTxLevelM  = new wxButton(m_txLevelBox, wxID_ANY, _("<"),  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-@@ -795,101 +850,95 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -795,101 +843,97 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_txtTxLevelNum = new wxStaticText(m_txLevelBox, wxID_ANY, fmtString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER | wxST_NO_AUTORESIZE);
      m_txtTxLevelNum->SetToolTip(_("Use mouse scroll wheel to adjust up or down\nRight click for more options"));
      m_txtTxLevelNum->SetMinSize(wxSize(100,-1));
@@ -456,7 +598,8 @@ index d736ffa5..85c04112 100644
      m_togBtnOnOff = new wxToggleButton(controlBox, wxID_ANY, _("&Start Modem"), wxDefaultPosition, wxDefaultSize, 0);
      m_togBtnOnOff->SetToolTip(_("Begin/End receiving data."));
 -    sbSizer5->Add(m_togBtnOnOff, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
-+    controlBox->GetContentSizer()->Add(m_togBtnOnOff, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
++    controlBox->GetContentSizer()->Add(m_togBtnOnOff, 0, static_cast<int>(wxLEFT) | static_cast<int>(wxRIGHT) | static_cast<int>(wxTOP) | static_cast<int>(wxEXPAND), 5);
++    controlBox->GetContentSizer()->AddSpacer(4);
  
      //------------------------------
      // Analog Passthrough Toggle
@@ -464,7 +607,8 @@ index d736ffa5..85c04112 100644
      m_togBtnAnalog = new wxToggleButton(controlBox, wxID_ANY, _("Switch to A&nalog"), wxDefaultPosition, wxDefaultSize, 0);
      m_togBtnAnalog->SetToolTip(_("Toggle analog/digital operation."));
 -    sbSizer5->Add(m_togBtnAnalog, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
-+    controlBox->GetContentSizer()->Add(m_togBtnAnalog, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
++    controlBox->GetContentSizer()->Add(m_togBtnAnalog, 0, static_cast<int>(wxLEFT) | static_cast<int>(wxRIGHT) | static_cast<int>(wxEXPAND), 5);
++    controlBox->GetContentSizer()->AddSpacer(4);
  
      //------------------------------
      // Tune Toggle
@@ -472,11 +616,11 @@ index d736ffa5..85c04112 100644
      m_btnTogTune = new wxToggleButton(controlBox, wxID_ANY, _("&Tune"), wxDefaultPosition, wxDefaultSize, 0);
      m_btnTogTune->SetToolTip(_("Emits 1500 Hz carrier to enable rig/antenna tuning.\nRight click for more options"));
 -    sbSizer5->Add(m_btnTogTune, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
-+    controlBox->GetContentSizer()->Add(m_btnTogTune, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
++    controlBox->GetContentSizer()->Add(m_btnTogTune, 0, static_cast<int>(wxLEFT) | static_cast<int>(wxRIGHT) | static_cast<int>(wxBOTTOM) | static_cast<int>(wxEXPAND), 5);
      m_btnTogTune->Enable(false);
  
      //------------------------------
-@@ -897,16 +946,16 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -897,16 +941,16 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //------------------------------
      m_togBtnVoiceKeyer = new wxToggleButton(controlBox, wxID_ANY, _("Start Voice &Keyer"), wxDefaultPosition, wxDefaultSize, 0);
      m_togBtnVoiceKeyer->SetToolTip(_("Toggle Voice Keyer. Right-click for additional options."));
@@ -496,8 +640,27 @@ index d736ffa5..85c04112 100644
  
      bSizer1->Add(rightSizer, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 3);
      
+@@ -1010,8 +1054,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     m_BtnCallSignReset->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnCallSignReset), NULL, this);
+     m_BtnBerReset->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnBerReset), NULL, this);
+     m_BtnReSync->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnReSync), NULL, this);
+-    m_btnCenterRx->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnCenterRx), NULL, this);
+-   
++
+     m_rbRADE->Connect(wxEVT_RADIOBUTTON, wxCommandEventHandler(TopFrame::OnChangeTxMode), NULL, this); 
+     m_rb1600->Connect(wxEVT_RADIOBUTTON, wxCommandEventHandler(TopFrame::OnChangeTxMode), NULL, this);
+     m_rb700d->Connect(wxEVT_RADIOBUTTON, wxCommandEventHandler(TopFrame::OnChangeTxMode), NULL, this);
+@@ -1131,8 +1174,6 @@ TopFrame::~TopFrame()
+     m_togBtnVoiceKeyer->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnVoiceKeyerRightClick), NULL, this);
+     m_btnTogPTT->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
+ #endif
+-    
+-    m_btnCenterRx->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnCenterRx), NULL, this);
+ 
+     m_audioRecord->Disconnect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnRecord), NULL, this);
+     
 diff --git a/src/topFrame.h b/src/topFrame.h
-index 55a5cd85..d1f9a4e4 100644
+index 55a5cd85..090c9930 100644
 --- a/src/topFrame.h
 +++ b/src/topFrame.h
 @@ -78,6 +78,32 @@
@@ -533,16 +696,28 @@ index 55a5cd85..d1f9a4e4 100644
  // Popup position for a right-click menu anchored to the left of btn (to
  // avoid running off the right screen edge on X11). On GTK/Wayland, GDK's
  // own popup placement already avoids screen edges correctly, and this
-@@ -125,7 +151,7 @@ class TopFrame : public wxFrame
+@@ -125,9 +151,8 @@ class TopFrame : public wxFrame
          wxStaticText* m_textSQ;
          wxStatusBar* m_statusBar1;
  
 -        wxStaticBox* statsBox;
 +        TintedGroupBox* statsBox;
          wxButton*     m_BtnBerReset;
-         wxStaticText  *m_textCurrentDecodeMode;
+-        wxStaticText  *m_textCurrentDecodeMode;
          wxStaticText  *m_textBits;
-@@ -152,9 +178,8 @@ class TopFrame : public wxFrame
+         wxStaticText  *m_textErrors;
+         wxStaticText  *m_textBER;
+@@ -139,8 +164,7 @@ class TopFrame : public wxFrame
+ 
+         wxStaticText  *m_textSync;
+         wxButton      *m_BtnReSync;
+-        wxButton      *m_btnCenterRx;
+-        
++
+         wxToggleButton      *m_audioRecord;
+         
+         wxButton*     m_logQSO;
+@@ -152,9 +176,8 @@ class TopFrame : public wxFrame
  
          wxSizer* rightSizer;
  
@@ -554,7 +729,15 @@ index 55a5cd85..d1f9a4e4 100644
          wxMenuItem* m_menuItemPlayFileFromRadio;
          wxMenuItem* m_menuItemExportConfig;
          wxMenuItem* m_menuItemImportConfig;
-@@ -268,10 +293,10 @@ class TopFrame : public wxFrame
+@@ -179,7 +202,6 @@ class TopFrame : public wxFrame
+         virtual void OnToolsFilter( wxCommandEvent& event ) { event.Skip(); }
+         virtual void OnToolsFilterUI( wxUpdateUIEvent& event ) { event.Skip(); }
+         virtual void OnToolsOptions( wxCommandEvent& event ) { event.Skip(); }
+-        virtual void OnCenterRx( wxCommandEvent& event ) { event.Skip(); }
+ 
+         virtual void OnToolsUDP( wxCommandEvent& event ) { event.Skip(); }
+         virtual void OnToolsOptionsUI( wxUpdateUIEvent& event ) { event.Skip(); }
+@@ -268,10 +290,10 @@ class TopFrame : public wxFrame
          wxToggleButton* m_btnTogTune;
          wxAuiNotebook* m_auiNbookCtrl;
          wxComboBox*   m_cboReportFrequency;
