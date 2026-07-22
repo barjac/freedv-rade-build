@@ -242,13 +242,21 @@ if (( ${#prbranches[@]} == 0 )); then
                         echo "NOTE: PR #$prnumber is based on '$pr_base', which is PR #${_stacked_on}'s branch also being merged in this build - treating as a stacked PR, not a mismatch."
                     else
                         echo -e "\nWARNING: PR #$prnumber is based on '$pr_base', not '$base_branch'. Merging it would pull in all of '$pr_base''s unique history (not just this PR's diff)."
-                        if confirm "Skip this PR and continue?" "[Y/n]" "yY" "nN"; then
-                            echo "Skipping PR #$prnumber."
-                            continue
-                        else
-                            echo "ERROR: Aborting build due to PR #$prnumber base-branch mismatch."
-                            exit 1
-                        fi
+                        echo "(This can be a false positive if 'gh' isn't installed/authenticated here -- the fallback assumes 'master' when it can't look up the real base.)"
+                        confirm "(M)erge anyway, (S)kip this PR, or (A)bort the build?" "[M/S/A]" "Mm" "Ss" "Aa"
+                        case $? in
+                            0)
+                                echo "Merging PR #$prnumber anyway."
+                                ;;
+                            1)
+                                echo "Skipping PR #$prnumber."
+                                continue
+                                ;;
+                            *)
+                                echo "ERROR: Aborting build due to PR #$prnumber base-branch mismatch."
+                                exit 1
+                                ;;
+                        esac
                     fi
                 fi
                 echo "Fetching PR #$prnumber..."
