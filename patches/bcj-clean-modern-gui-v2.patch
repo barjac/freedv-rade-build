@@ -156,7 +156,7 @@ index 7ee955e6..6fe5614f 100644
  {
      // The centre-frequency convention only makes sense in digital mode (see
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 052b752a..2af6049e 100644
+index 052b752a..a3e91b8f 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -400,6 +400,75 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
@@ -167,7 +167,7 @@ index 052b752a..2af6049e 100644
 +// grouped control boxes read as a distinct "card" instead of blending into
 +// the surrounding panel. Works out from the live system colour rather than
 +// a hardcoded value so it tracks whatever light/dark theme is active.
-+static wxColour GroupBoxBackgroundColour()
++wxColour GroupBoxBackgroundColour()
 +{
 +    wxColour base = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
 +    bool isDark = base.GetLuminance() < 0.5;
@@ -573,10 +573,10 @@ index 052b752a..2af6049e 100644
      m_audioRecord->Disconnect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnRecord), NULL, this);
      
 diff --git a/src/topFrame.h b/src/topFrame.h
-index cf4144dd..7a37e60e 100644
+index cf4144dd..ba9469cc 100644
 --- a/src/topFrame.h
 +++ b/src/topFrame.h
-@@ -84,6 +84,28 @@ class wxListViewComboPopup;
+@@ -84,6 +84,32 @@ class wxListViewComboPopup;
  // returns wxDefaultPosition there and lets GTK position it automatically.
  wxPoint LeftOffsetContextMenuPosition(wxWindow* btn);
  
@@ -602,10 +602,14 @@ index cf4144dd..7a37e60e 100644
 +        wxSizer* m_contentSizer;
 +};
 +
++// Returns the same tinted "card" background colour used by TintedGroupBox,
++// for other controls (e.g. plot graticule label margins) that want to match.
++wxColour GroupBoxBackgroundColour();
++
  ///////////////////////////////////////////////////////////////////////////////
  /// Class TopFrame
  ///////////////////////////////////////////////////////////////////////////////
-@@ -121,9 +143,8 @@ class TopFrame : public wxFrame
+@@ -121,9 +147,8 @@ class TopFrame : public wxFrame
          
          wxStatusBar* m_statusBar1;
  
@@ -616,7 +620,7 @@ index cf4144dd..7a37e60e 100644
          wxStaticText  *m_textBits;
          wxStaticText  *m_textErrors;
          wxStaticText  *m_textBER;
-@@ -134,17 +155,15 @@ class TopFrame : public wxFrame
+@@ -134,17 +159,15 @@ class TopFrame : public wxFrame
          wxStaticText  *m_textCodec2Var;
  
          wxStaticText  *m_textSync;
@@ -637,7 +641,7 @@ index cf4144dd..7a37e60e 100644
          wxMenuItem* m_menuItemPlayFileFromRadio;
          wxMenuItem* m_menuItemExportConfig;
          wxMenuItem* m_menuItemImportConfig;
-@@ -167,7 +186,6 @@ class TopFrame : public wxFrame
+@@ -167,7 +190,6 @@ class TopFrame : public wxFrame
          virtual void OnToolsSetupWizard( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnToolsSetupWizardUI( wxUpdateUIEvent& event ) { event.Skip(); }
          virtual void OnToolsOptions( wxCommandEvent& event ) { event.Skip(); }
@@ -645,7 +649,7 @@ index cf4144dd..7a37e60e 100644
  
          virtual void OnToolsUDP( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnToolsOptionsUI( wxUpdateUIEvent& event ) { event.Skip(); }
-@@ -249,9 +267,9 @@ class TopFrame : public wxFrame
+@@ -249,9 +271,9 @@ class TopFrame : public wxFrame
          wxToggleButton* m_btnTogTune;
          wxAuiNotebook* m_auiNbookCtrl;
          wxComboBox*   m_cboReportFrequency;

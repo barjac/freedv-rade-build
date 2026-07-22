@@ -1,5 +1,38 @@
+diff --git a/src/gui/controls/plot.cpp b/src/gui/controls/plot.cpp
+index 9c685479..85125176 100644
+--- a/src/gui/controls/plot.cpp
++++ b/src/gui/controls/plot.cpp
+@@ -62,6 +62,12 @@ PlotPanel::PlotPanel(wxWindow* parent, const char* plotName) : wxPanel(parent, w
+     m_penDotDash        = wxPen(wxColor(0xD0, 0xD0, 0xD0), 1, wxPENSTYLE_DOT_DASH);
+     m_penSolid          = wxPen(wxColor(0x00, 0x00, 0x00), 1, wxPENSTYLE_SOLID);
+     SetBackgroundStyle(wxBG_STYLE_PAINT);
++
++    // Tint the graticule label margin (the area outside the black plot
++    // rectangle where axis labels are drawn) to match the surrounding
++    // TintedGroupBox card colour instead of the plain window colour.
++    SetBackgroundColour(GroupBoxBackgroundColour());
++
+     m_label_size = 10.0;
+ }
+ 
+diff --git a/src/gui/controls/plot.h b/src/gui/controls/plot.h
+index 286f59c7..ef1aa309 100644
+--- a/src/gui/controls/plot.h
++++ b/src/gui/controls/plot.h
+@@ -80,6 +80,11 @@
+ 
+ class MainFrame;
+ 
++// Declared in topFrame.cpp. Returns the same tinted "card" background colour
++// used by TintedGroupBox, so the graticule label margin around each graph
++// matches the rest of the modernised GUI.
++wxColour GroupBoxBackgroundColour();
++
+ //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=
+ // Class PlotPanel
+ //
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index d736ffa5..56171767 100644
+index d736ffa5..85c04112 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -400,6 +400,75 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
@@ -10,7 +43,7 @@ index d736ffa5..56171767 100644
 +// grouped control boxes read as a distinct "card" instead of blending into
 +// the surrounding panel. Works out from the live system colour rather than
 +// a hardcoded value so it tracks whatever light/dark theme is active.
-+static wxColour GroupBoxBackgroundColour()
++wxColour GroupBoxBackgroundColour()
 +{
 +    wxColour base = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
 +    bool isDark = base.GetLuminance() < 0.5;
@@ -464,10 +497,10 @@ index d736ffa5..56171767 100644
      bSizer1->Add(rightSizer, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 3);
      
 diff --git a/src/topFrame.h b/src/topFrame.h
-index 55a5cd85..ef2cf690 100644
+index 55a5cd85..d1f9a4e4 100644
 --- a/src/topFrame.h
 +++ b/src/topFrame.h
-@@ -78,6 +78,28 @@
+@@ -78,6 +78,32 @@
  
  class wxListViewComboPopup;
  
@@ -493,10 +526,14 @@ index 55a5cd85..ef2cf690 100644
 +        wxSizer* m_contentSizer;
 +};
 +
++// Returns the same tinted "card" background colour used by TintedGroupBox,
++// for other controls (e.g. plot graticule label margins) that want to match.
++wxColour GroupBoxBackgroundColour();
++
  // Popup position for a right-click menu anchored to the left of btn (to
  // avoid running off the right screen edge on X11). On GTK/Wayland, GDK's
  // own popup placement already avoids screen edges correctly, and this
-@@ -125,7 +147,7 @@ class TopFrame : public wxFrame
+@@ -125,7 +151,7 @@ class TopFrame : public wxFrame
          wxStaticText* m_textSQ;
          wxStatusBar* m_statusBar1;
  
@@ -505,7 +542,7 @@ index 55a5cd85..ef2cf690 100644
          wxButton*     m_BtnBerReset;
          wxStaticText  *m_textCurrentDecodeMode;
          wxStaticText  *m_textBits;
-@@ -152,9 +174,8 @@ class TopFrame : public wxFrame
+@@ -152,9 +178,8 @@ class TopFrame : public wxFrame
  
          wxSizer* rightSizer;
  
@@ -517,7 +554,7 @@ index 55a5cd85..ef2cf690 100644
          wxMenuItem* m_menuItemPlayFileFromRadio;
          wxMenuItem* m_menuItemExportConfig;
          wxMenuItem* m_menuItemImportConfig;
-@@ -268,10 +289,10 @@ class TopFrame : public wxFrame
+@@ -268,10 +293,10 @@ class TopFrame : public wxFrame
          wxToggleButton* m_btnTogTune;
          wxAuiNotebook* m_auiNbookCtrl;
          wxComboBox*   m_cboReportFrequency;
