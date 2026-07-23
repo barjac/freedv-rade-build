@@ -1,3 +1,82 @@
+diff --git a/src/config/FreeDVConfiguration.cpp b/src/config/FreeDVConfiguration.cpp
+index 1264b6d8..76b6ab32 100644
+--- a/src/config/FreeDVConfiguration.cpp
++++ b/src/config/FreeDVConfiguration.cpp
+@@ -119,6 +119,14 @@ FreeDVConfiguration::FreeDVConfiguration()
+         
+     , showDecodeStats("/Debug/showDecodeStats", false)
+     , enableLegacyModes("/Modem/enableLegacyModes", false)
++    , showSnrBox("/UI/ShowSnrBox", true)
++    , showLevelBox("/UI/ShowLevelBox", true)
++    , showSyncBox("/UI/ShowSyncBox", true)
++    , showAudioRecordingBox("/UI/ShowAudioRecordingBox", true)
++    , showLoggingBox("/UI/ShowLoggingBox", true)
++    , showReportingBox("/UI/ShowReportingBox", true)
++    , showTxAttenuationBox("/UI/ShowTxAttenuationBox", true)
++    , showSpeakerLevelBox("/UI/ShowSpeakerLevelBox", true)
+ {
+     // empty
+ }
+@@ -251,6 +259,15 @@ void FreeDVConfiguration::load(wxConfigBase* config)
+     load_(config, showDecodeStats);
+     load_(config, enableLegacyModes);
+ 
++    load_(config, showSnrBox);
++    load_(config, showLevelBox);
++    load_(config, showSyncBox);
++    load_(config, showAudioRecordingBox);
++    load_(config, showLoggingBox);
++    load_(config, showReportingBox);
++    load_(config, showTxAttenuationBox);
++    load_(config, showSpeakerLevelBox);
++
+     load_(config, txAttenByBand);
+     load_(config, tuneAttenByBand);
+ }
+@@ -345,6 +362,15 @@ void FreeDVConfiguration::save(wxConfigBase* config)
+     save_(config, showDecodeStats);
+     save_(config, enableLegacyModes);
+ 
++    save_(config, showSnrBox);
++    save_(config, showLevelBox);
++    save_(config, showSyncBox);
++    save_(config, showAudioRecordingBox);
++    save_(config, showLoggingBox);
++    save_(config, showReportingBox);
++    save_(config, showTxAttenuationBox);
++    save_(config, showSpeakerLevelBox);
++
+     save_(config, txAttenByBand);
+     save_(config, tuneAttenByBand);
+ 
+diff --git a/src/config/FreeDVConfiguration.h b/src/config/FreeDVConfiguration.h
+index 3d954c71..21ebc69a 100644
+--- a/src/config/FreeDVConfiguration.h
++++ b/src/config/FreeDVConfiguration.h
+@@ -125,9 +125,21 @@ public:
+     ConfigurationDataElement<int> reportingUserMsgColWidth;
+     
+     ConfigurationDataElement<bool> showDecodeStats;
+-    
++
+     ConfigurationDataElement<bool> enableLegacyModes;
+-    
++
++    // Independent user-toggleable visibility for the main window's optional
++    // group boxes (Show menu), separate from the feature-driven visibility
++    // of e.g. Squelch/Mode/Radio Freq/Stats.
++    ConfigurationDataElement<bool> showSnrBox;
++    ConfigurationDataElement<bool> showLevelBox;
++    ConfigurationDataElement<bool> showSyncBox;
++    ConfigurationDataElement<bool> showAudioRecordingBox;
++    ConfigurationDataElement<bool> showLoggingBox;
++    ConfigurationDataElement<bool> showReportingBox;
++    ConfigurationDataElement<bool> showTxAttenuationBox;
++    ConfigurationDataElement<bool> showSpeakerLevelBox;
++
+     virtual void load(wxConfigBase* config) override;
+     virtual void save(wxConfigBase* config) override;
+ };
 diff --git a/src/gui/controls/plot.cpp b/src/gui/controls/plot.cpp
 index 9c685479..85125176 100644
 --- a/src/gui/controls/plot.cpp
@@ -48,7 +127,7 @@ index 2b040eb6..f4af532d 100644
      }
  
 diff --git a/src/main.cpp b/src/main.cpp
-index 7636e4ef..ca5e8b09 100644
+index 7636e4ef..0a2e145a 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -1078,8 +1078,6 @@ setDefaultMode:
@@ -60,7 +139,40 @@ index 7636e4ef..ca5e8b09 100644
      m_BtnReSync->Enable(isEnabled);
      m_BtnReSync->Show(wxGetApp().appConfiguration.enableLegacyModes);
  
-@@ -1223,11 +1221,8 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+@@ -1199,6 +1197,32 @@ setDefaultMode:
+     modeBox->Show(wxGetApp().appConfiguration.enableLegacyModes);
+     m_BtnReSync->Show(wxGetApp().appConfiguration.enableLegacyModes);
+ 
++    // Apply persisted "Show" menu visibility to the optional group boxes
++    // (menu items default to checked at construction time, since TopFrame
++    // itself has no access to appConfiguration -- this is where the real
++    // saved state actually takes effect, same as statsBox/modeBox above).
++    {
++        std::vector<std::pair<TintedGroupBox*, bool> > showBoxState {
++            { snrBox, wxGetApp().appConfiguration.showSnrBox },
++            { levelBox, wxGetApp().appConfiguration.showLevelBox },
++            { syncBox, wxGetApp().appConfiguration.showSyncBox },
++            { audioBox, wxGetApp().appConfiguration.showAudioRecordingBox },
++            { logBox, wxGetApp().appConfiguration.showLoggingBox },
++            { reporterBox, wxGetApp().appConfiguration.showReportingBox },
++            { m_txLevelBox, wxGetApp().appConfiguration.showTxAttenuationBox },
++            { micSpeakerBox, wxGetApp().appConfiguration.showSpeakerLevelBox },
++        };
++        for (size_t index = 0; index < showBoxState.size(); index++)
++        {
++            showBoxState[index].first->Show(showBoxState[index].second);
++            auto menuItem = showMenu_->FindItem(ID_SHOW_GROUPBOX_BASE + index);
++            if (menuItem != nullptr)
++            {
++                menuItem->Check(showBoxState[index].second);
++            }
++        }
++    }
++
+     // Initialize FreeDV Reporter as required
+     CallAfter(&MainFrame::initializeFreeDVReporter_);
+     
+@@ -1223,11 +1247,8 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
      // fully optimized for real-time use yet (i.e. it dynamically allocates
      // memory while processing audio).
      SNR_FORMAT_STR("%ddB"),
@@ -72,7 +184,7 @@ index 7636e4ef..ca5e8b09 100644
      BITS_UNK_LABEL("Bits: unk"),
      ERRS_UNK_LABEL("Errs: unk"),
      BER_UNK_LABEL("BER: unk"),
-@@ -2028,7 +2023,6 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2028,7 +2049,6 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
              if (oldColor != newColor)
              {
                  m_textSync->SetForegroundColour(newColor);
@@ -80,7 +192,7 @@ index 7636e4ef..ca5e8b09 100644
                  m_textSync->Refresh();
              }
          }
-@@ -2265,13 +2259,11 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2265,13 +2285,11 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          g_channel_noise.store(wxGetApp().m_channel_noise, std::memory_order_release);
  
          // update stats on main page
@@ -98,7 +210,7 @@ index 7636e4ef..ca5e8b09 100644
          if (relayout)
          {
              // XXX - force resize events to make mode string re-center itself.
-@@ -2529,7 +2521,6 @@ void MainFrame::OnChangeTxMode( wxCommandEvent& event )
+@@ -2529,7 +2547,6 @@ void MainFrame::OnChangeTxMode( wxCommandEvent& event )
          m_sliderSQ->Enable(isEnabled);
          m_ckboxSQ->Enable(isEnabled);
          m_textSQ->Enable(isEnabled);
@@ -106,7 +218,7 @@ index 7636e4ef..ca5e8b09 100644
          m_BtnReSync->Enable(isEnabled);
      }
  }
-@@ -2581,8 +2572,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2581,8 +2598,7 @@ void MainFrame::performFreeDVOn_()
      executeOnUiThreadAndWait_([&]() 
      {
          m_textSync->Enable();
@@ -116,7 +228,7 @@ index 7636e4ef..ca5e8b09 100644
          // determine what mode we are using
          wxCommandEvent tmpEvent;
          OnChangeTxMode(tmpEvent);
-@@ -2974,7 +2964,6 @@ void MainFrame::performFreeDVOff_()
+@@ -2974,7 +2990,6 @@ void MainFrame::performFreeDVOff_()
      executeOnUiThreadAndWait_([&]() 
      {
          m_textSync->Disable();
@@ -125,7 +237,7 @@ index 7636e4ef..ca5e8b09 100644
          m_togBtnAnalog->Disable();
          m_btnTogPTT->Disable();
 diff --git a/src/main.h b/src/main.h
-index 76e30870..82b7c2a3 100644
+index 76e30870..d98ca670 100644
 --- a/src/main.h
 +++ b/src/main.h
 @@ -387,7 +387,12 @@ class MainFrame : public TopFrame
@@ -159,8 +271,15 @@ index 76e30870..82b7c2a3 100644
          void OnBerReset( wxCommandEvent& event ) override;
          void OnReSync( wxCommandEvent& event ) override;
  
-@@ -532,11 +534,8 @@ class MainFrame : public TopFrame
-         
+@@ -529,14 +531,14 @@ class MainFrame : public TopFrame
+ 
+         void OnToggleReporterVisibility (wxCommandEvent& event) override;
+         void OnTogBtnTune(wxCommandEvent& event) override;
+-        
++
++        void OnShowGroupBox(wxCommandEvent& event) override;
++
++
      private:
          const wxString SNR_FORMAT_STR;
 -        const wxString MODE_FORMAT_STR;
@@ -172,7 +291,7 @@ index 76e30870..82b7c2a3 100644
          const wxString ERRS_UNK_LABEL;
          const wxString BER_UNK_LABEL;
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index f5a61181..65200ef8 100644
+index f5a61181..7e094ec7 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
 @@ -247,8 +247,6 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
@@ -269,6 +388,60 @@ index f5a61181..65200ef8 100644
  void MainFrame::updateReportingFreqList_()
  {
      uint64_t prevFreqInt = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency;
+@@ -2254,6 +2233,53 @@ void MainFrame::OnToggleReporterVisibility (wxCommandEvent&)
+     wxGetApp().appConfiguration.reportingConfiguration.freedvReporterForcedOff = m_reporterHidden->GetValue();
+ }
+ 
++void MainFrame::OnShowGroupBox(wxCommandEvent& event)
++{
++    auto index = event.GetId() - ID_SHOW_GROUPBOX_BASE;
++
++    TintedGroupBox* box = nullptr;
++    ConfigurationDataElement<bool>* configValue = nullptr;
++
++    switch (index)
++    {
++        case 0: box = snrBox; configValue = &wxGetApp().appConfiguration.showSnrBox; break;
++        case 1: box = levelBox; configValue = &wxGetApp().appConfiguration.showLevelBox; break;
++        case 2: box = syncBox; configValue = &wxGetApp().appConfiguration.showSyncBox; break;
++        case 3: box = audioBox; configValue = &wxGetApp().appConfiguration.showAudioRecordingBox; break;
++        case 4: box = logBox; configValue = &wxGetApp().appConfiguration.showLoggingBox; break;
++        case 5: box = reporterBox; configValue = &wxGetApp().appConfiguration.showReportingBox; break;
++        case 6: box = m_txLevelBox; configValue = &wxGetApp().appConfiguration.showTxAttenuationBox; break;
++        case 7: box = micSpeakerBox; configValue = &wxGetApp().appConfiguration.showSpeakerLevelBox; break;
++        default: return;
++    }
++
++    bool newValue = !((bool)*configValue);
++    *configValue = newValue;
++
++    wxMenuItem* menuItem = static_cast<wxMenuItem*>(event.GetEventObject());
++    menuItem->Check(newValue);
++    box->Show(newValue);
++
++    // See the equivalent block in OnToolsOptions() -- wxWidgets sometimes
++    // doesn't reflow short windows properly after a Show()/Hide() until a
++    // resize happens, so nudge it with one.
++    wxSize size = GetSize();
++    auto w = size.GetWidth();
++    auto h = size.GetHeight();
++    CallAfter([=, this]()
++    {
++        SetSize(w, h);
++    });
++    CallAfter([=, this]()
++    {
++        SetSize(w + 1, h + 1);
++    });
++    CallAfter([=, this]()
++    {
++        SetSize(w, h);
++    });
++}
++
+ void MainFrame::OnToolsExportConfigUI(wxUpdateUIEvent& event)
+ {
+     event.Enable(!m_RxRunning);
 diff --git a/src/playrec.cpp b/src/playrec.cpp
 index 7f1b0b69..8ef04540 100644
 --- a/src/playrec.cpp
@@ -337,10 +510,18 @@ index 7f1b0b69..8ef04540 100644
              
                  if (!g_tx.load(std::memory_order_acquire))
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index d736ffa5..08acb505 100644
+index d736ffa5..90e4d864 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
-@@ -400,6 +400,84 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
+@@ -22,6 +22,7 @@
+ 
+ #include <map>
+ #include <set>
++#include <vector>
+ 
+ #include <wx/regex.h>
+ #include <wx/wrapsizer.h>
+@@ -400,6 +401,84 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
      return ok;
  }
  
@@ -425,14 +606,49 @@ index d736ffa5..08acb505 100644
  //=========================================================================
  // Code that lays out the main application window
  //=========================================================================
-@@ -528,140 +606,122 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -495,6 +574,34 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+ 
+     m_menubarMain->Append(tools, _("&Tools"));
+ 
++    // "Show" menu: lets the user hide optional group boxes to build a
++    // leaner display, independent of the feature-driven visibility already
++    // used for Squelch/Mode/Radio Freq/Stats. Order here is index order for
++    // OnShowGroupBox's event ID offset (ID_SHOW_GROUPBOX_BASE + index) --
++    // keep the two in sync if adding/removing an entry. Checked state here
++    // is just the default (visible); TopFrame has no access to
++    // wxGetApp()/appConfiguration (that's MainFrame's job), so the real
++    // persisted state is applied to both the boxes and these checkmarks in
++    // MainFrame::loadConfiguration_(), same as statsBox/modeBox/etc.
++    showMenu_ = new wxMenu();
++    std::vector<wxString> showMenuItems {
++        _("SNR"),
++        _("Level"),
++        _("Sync"),
++        _("Audio Recording"),
++        _("Logging"),
++        _("FDV Reporting"),
++        _("TX Attenuation"),
++        _("Speaker Level"),
++    };
++    for (size_t index = 0; index < showMenuItems.size(); index++)
++    {
++        auto menuItem = showMenu_->Append(ID_SHOW_GROUPBOX_BASE + index, showMenuItems[index], wxEmptyString, wxITEM_CHECK);
++        menuItem->Check(true);
++        this->Connect(ID_SHOW_GROUPBOX_BASE + index, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(TopFrame::OnShowGroupBox));
++    }
++    m_menubarMain->Append(showMenu_, _("&Show"));
++
+     help = new wxMenu();
+     wxMenuItem* m_menuItemHelpUpdates;
+     m_menuItemHelpUpdates = new wxMenuItem(help, wxID_ANY, wxString(_("&Check for Updates")) , _("Checks for updates to FreeDV"), wxITEM_NORMAL);
+@@ -528,140 +635,122 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      wxSizer* leftOuterSizer = new wxBoxSizer(wxVERTICAL);
      wxSizer* leftSizer = new wxWrapSizer(wxVERTICAL, wxREMOVE_LEADING_SPACES);
  
 -    wxStaticBoxSizer* snrSizer;
 -    wxStaticBox* snrBox = new wxStaticBox(m_panel, wxID_ANY, _("SNR"), wxDefaultPosition, wxSize(100,-1));
 -    snrSizer = new wxStaticBoxSizer(snrBox, wxVERTICAL);
-+    TintedGroupBox* snrBox = new TintedGroupBox(m_panel, _("SNR"), wxVERTICAL);
++    snrBox = new TintedGroupBox(m_panel, _("SNR"), wxVERTICAL);
  
      //------------------------------
      // S/N ratio Gauge (vert. bargraph)
@@ -467,7 +683,7 @@ index d736ffa5..08acb505 100644
 -    wxStaticBoxSizer* levelSizer;
 -    wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
 -    levelSizer = new wxStaticBoxSizer(levelBox, wxHORIZONTAL);
-+    TintedGroupBox* levelBox = new TintedGroupBox(m_panel, _("Level"), wxHORIZONTAL);
++    levelBox = new TintedGroupBox(m_panel, _("Level"), wxHORIZONTAL);
  
      m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 100, wxDefaultPosition, wxSize(100,15), wxGA_SMOOTH);
      m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode.  If Red you should reduce your levels"));
@@ -490,7 +706,7 @@ index d736ffa5..08acb505 100644
 -    wxStaticBoxSizer* sbSizer3_33;
 -    wxStaticBox* syncBox = new wxStaticBox(m_panel, wxID_ANY, _("Sync"), wxDefaultPosition, wxSize(100,-1));
 -    sbSizer3_33 = new wxStaticBoxSizer(syncBox, wxVERTICAL);
-+    TintedGroupBox* syncBox = new TintedGroupBox(m_panel, _("Sync"), wxVERTICAL);
++    syncBox = new TintedGroupBox(m_panel, _("Sync"), wxVERTICAL);
  
 -    m_textSync = new wxStaticText(syncBox, wxID_ANY, wxT("Modem"), wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE);
 -    sbSizer3_33->Add(m_textSync, 0, wxALIGN_CENTER_HORIZONTAL, 1);
@@ -519,7 +735,7 @@ index d736ffa5..08acb505 100644
 -    wxStaticBox* audioBox = new wxStaticBox(m_panel, wxID_ANY, _("Audio Recording"), wxDefaultPosition, wxSize(100,-1));
 -    wxStaticBoxSizer* sbSizerAudioRecordPlay = new wxStaticBoxSizer(audioBox, wxVERTICAL);
 -    
-+    TintedGroupBox* audioBox = new TintedGroupBox(m_panel, _("Audio Recording"), wxVERTICAL);
++    audioBox = new TintedGroupBox(m_panel, _("Audio Recording"), wxVERTICAL);
 +
      m_audioRecord = new wxToggleButton(audioBox, wxID_ANY, _("Record"), wxDefaultPosition, wxDefaultSize, 0);
      m_audioRecord->SetToolTip(_("Records incoming over the air signals as well as anything transmitted."));
@@ -536,7 +752,7 @@ index d736ffa5..08acb505 100644
 -    wxStaticBox* logBox = new wxStaticBox(m_panel, wxID_ANY, _("Logging"), wxDefaultPosition, wxSize(100,-1));
 -    wxStaticBoxSizer* sbSizerLogging = new wxStaticBoxSizer(logBox, wxVERTICAL);
 -    
-+    TintedGroupBox* logBox = new TintedGroupBox(m_panel, _("Logging"), wxVERTICAL);
++    logBox = new TintedGroupBox(m_panel, _("Logging"), wxVERTICAL);
 +
      m_logQSO = new wxButton(logBox, wxID_ANY, _("Log QSO"), wxDefaultPosition, wxDefaultSize, 0);
      m_logQSO->SetToolTip(_("Logs most recent QSO."));
@@ -553,7 +769,7 @@ index d736ffa5..08acb505 100644
      //------------------------------
 -    wxStaticBox* reporterBox = new wxStaticBox(m_panel, wxID_ANY, _("FDV Reporting"), wxDefaultPosition, wxSize(100,-1));
 -    wxStaticBoxSizer* sbSizerReporterBox = new wxStaticBoxSizer(reporterBox, wxVERTICAL);
-+    TintedGroupBox* reporterBox = new TintedGroupBox(m_panel, _("FDV Reporting"), wxVERTICAL);
++    reporterBox = new TintedGroupBox(m_panel, _("FDV Reporting"), wxVERTICAL);
  
      m_reporterHidden = new wxToggleButton(reporterBox, wxID_ANY, _("Turn Off"), wxDefaultPosition, wxDefaultSize, 0);
      m_reporterHidden->SetToolTip(_("Quick ON/OFF for FreeDV Reporting, when enabled in Tools->Options->Reporting."));
@@ -608,7 +824,7 @@ index d736ffa5..08acb505 100644
  
      leftSizer->SetMinSize(wxSize(-1, 375));
      
-@@ -693,32 +753,28 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -693,32 +782,28 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
  
      // lower middle used for user ID
  
@@ -648,7 +864,7 @@ index d736ffa5..08acb505 100644
      m_lastReportedCallsignListView->InsertColumn(0, wxT("Callsign"), wxLIST_FORMAT_LEFT, 100);
      m_lastReportedCallsignListView->InsertColumn(1, wxT("Frequency"), wxLIST_FORMAT_RIGHT, 75);
      m_lastReportedCallsignListView->InsertColumn(2, wxT("Date/Time"), wxLIST_FORMAT_LEFT, 175);
-@@ -727,9 +783,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -727,9 +812,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      bSizer15->Add(m_txtCtrlCallSign, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 5);
      bSizer15->Add(m_cboLastReportedCallsigns, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 5);
  
@@ -661,7 +877,7 @@ index d736ffa5..08acb505 100644
      centerSizer->SetMinSize(wxSize(375,375));
      bSizer1->Add(centerSizer, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 1);
      
-@@ -741,9 +797,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -741,9 +826,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //=====================================================
      // Squelch Slider Control
      //=====================================================
@@ -672,7 +888,7 @@ index d736ffa5..08acb505 100644
  
      m_sliderSQ = new wxSlider(squelchBox, wxID_ANY, 0, 0, 40, wxDefaultPosition, wxDefaultSize, wxSL_AUTOTICKS);
      m_sliderSQ->SetMinSize(wxSize(135,-1));
-@@ -756,27 +810,26 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -756,27 +839,26 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_sliderSQ->SetAccessible(squelchSliderAccessibility);
  #endif // wxUSE_ACCESSIBILITY
  
@@ -706,7 +922,7 @@ index d736ffa5..08acb505 100644
      wxBoxSizer* txBtnSizer = new wxBoxSizer(wxHORIZONTAL);
      m_btnTxLevelMM = new wxButton(m_txLevelBox, wxID_ANY, _("<<"), wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
      m_btnTxLevelM  = new wxButton(m_txLevelBox, wxID_ANY, _("<"),  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-@@ -795,101 +848,97 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -795,101 +877,97 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_txtTxLevelNum = new wxStaticText(m_txLevelBox, wxID_ANY, fmtString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER | wxST_NO_AUTORESIZE);
      m_txtTxLevelNum->SetToolTip(_("Use mouse scroll wheel to adjust up or down\nRight click for more options"));
      m_txtTxLevelNum->SetMinSize(wxSize(100,-1));
@@ -842,7 +1058,7 @@ index d736ffa5..08acb505 100644
      m_btnTogTune->Enable(false);
  
      //------------------------------
-@@ -897,23 +946,32 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -897,23 +975,32 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //------------------------------
      m_togBtnVoiceKeyer = new wxToggleButton(controlBox, wxID_ANY, _("Start Voice &Keyer"), wxDefaultPosition, wxDefaultSize, 0);
      m_togBtnVoiceKeyer->SetToolTip(_("Toggle Voice Keyer. Right-click for additional options."));
@@ -882,7 +1098,7 @@ index d736ffa5..08acb505 100644
  
      //=====================================================
      // End of layout
-@@ -922,7 +980,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -922,7 +1009,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //-------------------
      // Tab ordering for accessibility
      //-------------------
@@ -891,7 +1107,7 @@ index d736ffa5..08acb505 100644
      m_sliderSQ->MoveBeforeInTabOrder(m_ckboxSQ);
      m_rbRADE->MoveBeforeInTabOrder(m_rb700d);
      m_rb700d->MoveBeforeInTabOrder(m_rb700e);
-@@ -1007,11 +1065,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -1007,11 +1094,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_btnTogPTT->Connect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
  #endif
  
@@ -904,7 +1120,7 @@ index d736ffa5..08acb505 100644
      m_rbRADE->Connect(wxEVT_RADIOBUTTON, wxCommandEventHandler(TopFrame::OnChangeTxMode), NULL, this); 
      m_rb1600->Connect(wxEVT_RADIOBUTTON, wxCommandEventHandler(TopFrame::OnChangeTxMode), NULL, this);
      m_rb700d->Connect(wxEVT_RADIOBUTTON, wxCommandEventHandler(TopFrame::OnChangeTxMode), NULL, this);
-@@ -1131,8 +1187,6 @@ TopFrame::~TopFrame()
+@@ -1131,8 +1216,6 @@ TopFrame::~TopFrame()
      m_togBtnVoiceKeyer->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnVoiceKeyerRightClick), NULL, this);
      m_btnTogPTT->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
  #endif
@@ -914,7 +1130,7 @@ index d736ffa5..08acb505 100644
      m_audioRecord->Disconnect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnRecord), NULL, this);
      
 diff --git a/src/topFrame.h b/src/topFrame.h
-index 55a5cd85..e90131e2 100644
+index 55a5cd85..018a5a20 100644
 --- a/src/topFrame.h
 +++ b/src/topFrame.h
 @@ -43,8 +43,8 @@
@@ -927,8 +1143,14 @@ index 55a5cd85..e90131e2 100644
  #include <wx/statbmp.h>
  #include <wx/stattext.h>
  #include <wx/button.h>
-@@ -78,6 +78,32 @@
+@@ -76,8 +76,38 @@
  
+ #define ID_MODE_COLLAPSE 1100
+ 
++// Base ID for the main window's "Show" menu's group-box visibility toggle
++// items; 8 consecutive IDs from here (see OnShowGroupBox).
++#define ID_SHOW_GROUPBOX_BASE 1200
++
  class wxListViewComboPopup;
  
 +// A self-contained "card" that stands in for a wxStaticBox/wxStaticBoxSizer
@@ -960,7 +1182,16 @@ index 55a5cd85..e90131e2 100644
  // Popup position for a right-click menu anchored to the left of btn (to
  // avoid running off the right screen edge on X11). On GTK/Wayland, GDK's
  // own popup placement already avoids screen edges correctly, and this
-@@ -104,7 +130,6 @@ class TopFrame : public wxFrame
+@@ -98,13 +128,15 @@ class TopFrame : public wxFrame
+         wxMenu* edit;
+         wxMenu* tools;
+         wxMenu* help;
++        wxMenu* showMenu_;
++        TintedGroupBox* snrBox;
+         wxGauge* m_gaugeSNR;
+         wxStaticText* m_textSNR;
+         wxCheckBox* m_ckboxSNR;
++        TintedGroupBox* levelBox;
          wxGauge* m_gaugeLevel;
          wxStaticText* m_textLevel;
  
@@ -968,7 +1199,7 @@ index 55a5cd85..e90131e2 100644
          wxTextCtrl*   m_txtCtrlCallSign;
          
          wxComboCtrl*   m_cboLastReportedCallsigns;
-@@ -123,11 +148,15 @@ class TopFrame : public wxFrame
+@@ -123,11 +155,15 @@ class TopFrame : public wxFrame
          wxSlider* m_sliderSQ;        
          wxCheckBox* m_ckboxSQ;
          wxStaticText* m_textSQ;
@@ -987,17 +1218,25 @@ index 55a5cd85..e90131e2 100644
          wxStaticText  *m_textBits;
          wxStaticText  *m_textErrors;
          wxStaticText  *m_textBER;
-@@ -139,8 +168,7 @@ class TopFrame : public wxFrame
+@@ -137,12 +173,14 @@ class TopFrame : public wxFrame
+         wxStaticText  *m_textSyncMetric;
+         wxStaticText  *m_textCodec2Var;
  
++        TintedGroupBox* syncBox;
          wxStaticText  *m_textSync;
          wxButton      *m_BtnReSync;
 -        wxButton      *m_btnCenterRx;
 -        
 +
++        TintedGroupBox* audioBox;
          wxToggleButton      *m_audioRecord;
-         
+-        
++
++        TintedGroupBox* logBox;
          wxButton*     m_logQSO;
-@@ -152,9 +180,8 @@ class TopFrame : public wxFrame
+ 
+         wxRadioButton *m_rbRADE;
+@@ -152,13 +190,13 @@ class TopFrame : public wxFrame
  
          wxSizer* rightSizer;
  
@@ -1009,7 +1248,12 @@ index 55a5cd85..e90131e2 100644
          wxMenuItem* m_menuItemPlayFileFromRadio;
          wxMenuItem* m_menuItemExportConfig;
          wxMenuItem* m_menuItemImportConfig;
-@@ -179,7 +206,6 @@ class TopFrame : public wxFrame
+ 
++        TintedGroupBox* reporterBox;
+         wxToggleButton *m_reporterHidden;
+     
+         // Virtual event handlers, override them in your derived class
+@@ -179,7 +217,6 @@ class TopFrame : public wxFrame
          virtual void OnToolsFilter( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnToolsFilterUI( wxUpdateUIEvent& event ) { event.Skip(); }
          virtual void OnToolsOptions( wxCommandEvent& event ) { event.Skip(); }
@@ -1017,7 +1261,7 @@ index 55a5cd85..e90131e2 100644
  
          virtual void OnToolsUDP( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnToolsOptionsUI( wxUpdateUIEvent& event ) { event.Skip(); }
-@@ -223,7 +249,6 @@ class TopFrame : public wxFrame
+@@ -223,7 +260,6 @@ class TopFrame : public wxFrame
          virtual void OnTogBtnPTT_UI(wxUpdateUIEvent& event ) { event.Skip(); }
          virtual void OnTogBtnOnOffUI(wxUpdateUIEvent& event ) { event.Skip(); }
  
@@ -1025,7 +1269,16 @@ index 55a5cd85..e90131e2 100644
          virtual void OnBerReset( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnReSync( wxCommandEvent& event ) { event.Skip(); }
          
-@@ -268,10 +293,10 @@ class TopFrame : public wxFrame
+@@ -258,6 +294,8 @@ class TopFrame : public wxFrame
+         
+         virtual void OnTogBtnTune(wxCommandEvent& event) { event.Skip(); }
+ 
++        virtual void OnShowGroupBox(wxCommandEvent& event) { event.Skip(); }
++
+         void setVoiceKeyerButtonLabel_(wxString filename);
+         
+     public:
+@@ -268,10 +306,10 @@ class TopFrame : public wxFrame
          wxToggleButton* m_btnTogTune;
          wxAuiNotebook* m_auiNbookCtrl;
          wxComboBox*   m_cboReportFrequency;
