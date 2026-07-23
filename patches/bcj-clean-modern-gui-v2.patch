@@ -31,6 +31,22 @@ index 286f59c7..ef1aa309 100644
  //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=
  // Class PlotPanel
  //
+diff --git a/src/gui/util/wxListViewComboPopup.cpp b/src/gui/util/wxListViewComboPopup.cpp
+index 2b040eb6..f4af532d 100644
+--- a/src/gui/util/wxListViewComboPopup.cpp
++++ b/src/gui/util/wxListViewComboPopup.cpp
+@@ -60,7 +60,10 @@ void wxListViewComboPopup::OnMouseMove(wxMouseEvent& event)
+ 
+     if (m_value != -1)
+     {
+-        Select(m_value, false);
++        if (m_value < wxListView::GetItemCount())
++        {
++            Select(m_value, false);
++        }
+         m_value = -1;
+     }
+ 
 diff --git a/src/main.cpp b/src/main.cpp
 index 4347bbdf..d1d69a6e 100644
 --- a/src/main.cpp
@@ -121,10 +137,24 @@ index 4347bbdf..d1d69a6e 100644
          m_togBtnAnalog->Disable();
          m_btnTogPTT->Disable();
 diff --git a/src/main.h b/src/main.h
-index eacfd39a..727473d3 100644
+index eacfd39a..fda34b64 100644
 --- a/src/main.h
 +++ b/src/main.h
-@@ -414,8 +414,6 @@ class MainFrame : public TopFrame
+@@ -374,7 +374,12 @@ class MainFrame : public TopFrame
+         void StopPlaybackFileFromRadio();
+         void StopRecFileFromRadio();
+         void StopRecFileFromDecoder();
+-        
++
++        // Shows (or, given an empty string, dismisses) the tinted info bar used
++        // for transient playback/recording status -- replaces the old native
++        // status bar strip, which took up a permanently reserved line.
++        void ShowPlaybackStatus(const wxString& msg);
++
+         bool isReceiveOnly();
+         
+     protected:
+@@ -414,8 +419,6 @@ class MainFrame : public TopFrame
          void OnToolsLoadDefaultConfig( wxCommandEvent& event ) override;
          void OnToolsLoadDefaultConfigUI( wxUpdateUIEvent& event ) override;
  
@@ -133,7 +163,15 @@ index eacfd39a..727473d3 100644
          void OnHelpCheckUpdates( wxCommandEvent& event ) override;
          void OnHelpCheckUpdatesUI( wxUpdateUIEvent& event ) override;
          void OnHelpAbout( wxCommandEvent& event ) override;
-@@ -510,11 +508,9 @@ class MainFrame : public TopFrame
+@@ -443,7 +446,6 @@ class MainFrame : public TopFrame
+ 
+         virtual void OnLogQSO(wxCommandEvent& event) override;
+         
+-        void OnCallSignReset( wxCommandEvent& event ) override;
+         void OnBerReset( wxCommandEvent& event ) override;
+ 
+         //System Events
+@@ -510,11 +512,9 @@ class MainFrame : public TopFrame
          
      private:
          const wxString SNR_FORMAT_STR;
@@ -146,7 +184,7 @@ index eacfd39a..727473d3 100644
          const wxString BITS_UNK_LABEL;
          const wxString ERRS_UNK_LABEL;
          const wxString BER_UNK_LABEL;
-@@ -599,7 +595,6 @@ class MainFrame : public TopFrame
+@@ -599,7 +599,6 @@ class MainFrame : public TopFrame
          wxMenuItem* recordNewVoiceKeyerFileMenuItem_;
  
          bool terminating_; // used for terminating FreeDV
@@ -155,9 +193,27 @@ index eacfd39a..727473d3 100644
  
          // Caches appConfiguration.experimentalFeatures as of the last tab layout load
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index 7ee955e6..6fe5614f 100644
+index 7ee955e6..bddf3f46 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
+@@ -375,7 +375,7 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+                 m_txtModeStatus->Enable(true);
+                 break;
+             default:
+-                m_txtModeStatus->SetLabel(wxT("unk"));
++                m_txtModeStatus->SetLabel(wxEmptyString);
+                 m_txtModeStatus->Enable(false);
+                 break;
+         }
+@@ -496,7 +496,7 @@ void MainFrame::onRadioConnected_(IRigController*)
+ void MainFrame::onRadioDisconnected_(IRigController*)
+ {
+     CallAfter([&]() {
+-        m_txtModeStatus->SetLabel(wxT("unk"));
++        m_txtModeStatus->SetLabel(wxEmptyString);
+         m_txtModeStatus->Enable(false);
+     });
+ }
 @@ -1460,8 +1460,7 @@ void MainFrame::togglePTT(void) {
          // enable sync text
  
@@ -176,7 +232,44 @@ index 7ee955e6..6fe5614f 100644
  
          // Disable On/Off button.
          m_togBtnOnOff->Enable(false);
-@@ -2080,11 +2078,6 @@ void MainFrame::OnSystemColorChanged(wxSysColourChangedEvent& event)
+@@ -1795,18 +1793,6 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+     event.Skip();
+ }
+ 
+-void MainFrame::OnCallSignReset(wxCommandEvent&)
+-{
+-    m_pcallsign = m_callsign;
+-    memset(m_callsign, 0, MAX_CALLSIGN);
+-    wxString s;
+-    s.Printf("%s", m_callsign);
+-    m_txtCtrlCallSign->SetValue(s);
+-    
+-    m_lastReportedCallsignListView->DeleteAllItems();
+-    m_cboLastReportedCallsigns->SetText(_(""));
+-}
+-
+ void MainFrame::OnLogQSO(wxCommandEvent&)
+ {
+     wxString dxCall;
+@@ -1903,7 +1889,7 @@ void MainFrame::OnRightClickCallsignList(wxMouseEvent&)
+         index = m_lastReportedCallsignListView->GetFirstSelected();
+     }
+     m_cboLastReportedCallsigns->SetText("");
+-    m_BtnCallSignReset->SetFocus();
++    m_cboLastReportedCallsigns->SetFocus();
+ }
+ 
+ void MainFrame::OnOpenCallsignList( wxCommandEvent& event )
+@@ -1919,7 +1905,7 @@ void MainFrame::OnCloseCallsignList( wxCommandEvent& event )
+     {
+         // Make sure we're not selected if no callsigns selected.
+         wxGetApp().lastSelectedLoggingRow = MainApp::UNSELECTED;
+-        m_BtnCallSignReset->SetFocus();
++        m_cboLastReportedCallsigns->SetFocus();
+     }
+     event.Skip();
+ }
+@@ -2080,11 +2066,6 @@ void MainFrame::OnSystemColorChanged(wxSysColourChangedEvent& event)
      TopFrame::OnSystemColorChanged(event);
  }
  
@@ -188,11 +281,78 @@ index 7ee955e6..6fe5614f 100644
  void MainFrame::updateFreqBoxLabel_()
  {
      // The centre-frequency convention only makes sense in digital mode (see
+diff --git a/src/playrec.cpp b/src/playrec.cpp
+index 7f1b0b69..8ef04540 100644
+--- a/src/playrec.cpp
++++ b/src/playrec.cpp
+@@ -73,7 +73,7 @@ void MainFrame::StopPlayFileToMicIn(void)
+         g_playFileToMicIn.store(false, std::memory_order_release);
+         sf_close(g_sfPlayFile.load(std::memory_order_acquire));
+         g_sfPlayFile.store(nullptr, std::memory_order_release);
+-        SetStatusText(wxT(""));
++        ShowPlaybackStatus(wxT(""));
+         VoiceKeyerProcessEvent(VK_PLAY_FINISHED);
+     }
+     g_mutexProtectingCallbackData.Unlock();
+@@ -86,7 +86,7 @@ void MainFrame::StopPlaybackFileFromRadio()
+     auto tmp = g_sfPlayFileFromRadio.load(std::memory_order_acquire);
+     sf_close(tmp);
+     g_sfPlayFileFromRadio.store(nullptr, std::memory_order_release);
+-    SetStatusText(wxT(""));
++    ShowPlaybackStatus(wxT(""));
+     m_menuItemPlayFileFromRadio->SetItemLabel(wxString(_("Start Play File - From Radio...")));
+     g_mutexProtectingCallbackData.Unlock();
+ }
+@@ -170,7 +170,7 @@ void MainFrame::OnPlayFileFromRadio(wxCommandEvent& event)
+         {
+             statusText = wxString::Format(wxT("Playing file %s as radio input"), soundFile);
+         }
+-        SetStatusText(statusText, 0);
++        ShowPlaybackStatus(statusText);
+         log_debug("OnPlayFileFromRadio:: Playing File Fs = %d", (int)sfInfo.samplerate);
+         m_menuItemPlayFileFromRadio->SetItemLabel(wxString(_("Stop Play File - From Radio...")));
+         g_playFileFromRadio.store(true, std::memory_order_release);
+@@ -188,7 +188,7 @@ void MainFrame::StopRecFileFromRadio()
+         sf_close(g_sfRecFile);
+         g_sfRecFile = nullptr;
+         g_sfRecFileFromModulator = nullptr;
+-        SetStatusText(wxT(""));
++        ShowPlaybackStatus(wxT(""));
+         
+         g_mutexProtectingCallbackData.Unlock();
+         
+@@ -206,7 +206,7 @@ void MainFrame::StopRecFileFromDecoder()
+         g_recFileFromDecoder = false;
+         sf_close(g_sfRecDecoderFile);
+         g_sfRecDecoderFile = nullptr;
+-        SetStatusText(wxT(""));
++        ShowPlaybackStatus(wxT(""));
+         
+         g_mutexProtectingCallbackData.Unlock();
+         
+@@ -321,7 +321,7 @@ void MainFrame::OnTogBtnRecord(wxCommandEvent& event)
+                     return;
+                 }
+ 
+-                SetStatusText(wxT("Recording file ") + soundFile + wxT(" from decoder"), 0);
++                ShowPlaybackStatus(wxT("Recording file ") + soundFile + wxT(" from decoder"));
+                 g_recFileFromDecoder = true;
+             }
+             else
+@@ -335,7 +335,7 @@ void MainFrame::OnTogBtnRecord(wxCommandEvent& event)
+                     return;
+                 }
+             
+-                SetStatusText(wxT("Recording file ") + fileName + wxT(" from radio") , 0);
++                ShowPlaybackStatus(wxT("Recording file ") + fileName + wxT(" from radio"));
+                 g_sfRecFileFromModulator = g_sfRecFile;
+             
+                 if (!g_tx.load(std::memory_order_acquire))
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 052b752a..5efc9886 100644
+index 052b752a..2f2e1a68 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
-@@ -400,6 +400,75 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
+@@ -400,6 +400,84 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
      return ok;
  }
  
@@ -243,11 +403,20 @@ index 052b752a..5efc9886 100644
 +
 +    wxBoxSizer* outerSizer = new wxBoxSizer(wxVERTICAL);
 +
++    // An empty title omits the label entirely (and the space it would
++    // reserve), for boxes that don't need one.
 +    m_title = new wxStaticText(this, wxID_ANY, title);
-+    wxFont titleFont = m_title->GetFont();
-+    titleFont.SetWeight(wxFONTWEIGHT_BOLD);
-+    m_title->SetFont(titleFont);
-+    outerSizer->Add(m_title, 0, wxALIGN_CENTER_HORIZONTAL | wxTOP | wxLEFT | wxRIGHT, 6);
++    if (title.IsEmpty())
++    {
++        m_title->Hide();
++    }
++    else
++    {
++        wxFont titleFont = m_title->GetFont();
++        titleFont.SetWeight(wxFONTWEIGHT_BOLD);
++        m_title->SetFont(titleFont);
++        outerSizer->Add(m_title, 0, wxALIGN_CENTER_HORIZONTAL | wxTOP | wxLEFT | wxRIGHT, 6);
++    }
 +
 +    m_contentSizer = new wxBoxSizer(orientation);
 +    outerSizer->Add(m_contentSizer, 1, wxEXPAND | wxALL, 6);
@@ -268,7 +437,7 @@ index 052b752a..5efc9886 100644
  //=========================================================================
  // Code that lays out the main application window
  //=========================================================================
-@@ -526,137 +595,118 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -526,137 +604,118 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      wxSizer* leftOuterSizer = new wxBoxSizer(wxVERTICAL);
      wxSizer* leftSizer = new wxWrapSizer(wxVERTICAL, wxREMOVE_LEADING_SPACES);
  
@@ -445,7 +614,60 @@ index 052b752a..5efc9886 100644
  
      leftSizer->SetMinSize(wxSize(-1, 375));
      
-@@ -734,9 +784,8 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -688,32 +747,28 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+ 
+     // lower middle used for user ID
+ 
+-    wxBoxSizer* lowerSizer;
+-    lowerSizer = new wxBoxSizer(wxHORIZONTAL);
++    TintedGroupBox* stationBox = new TintedGroupBox(m_panel, wxEmptyString, wxHORIZONTAL);
+ 
+     wxBoxSizer* modeStatusSizer;
+     modeStatusSizer = new wxBoxSizer(wxVERTICAL);
+-    m_txtModeStatus = new wxStaticText(m_panel, wxID_ANY, wxT("unk"), wxDefaultPosition, wxDefaultSize, wxALIGN_LEFT);
++    m_txtModeStatus = new wxStaticText(stationBox, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_LEFT);
+     m_txtModeStatus->Enable(false); // enabled only if Hamlib is turned on
+     m_txtModeStatus->SetMinSize(wxSize(80,-1));
+     modeStatusSizer->Add(m_txtModeStatus, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 1);
+-    lowerSizer->Add(modeStatusSizer, 0, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 1);
+-
+-    m_BtnCallSignReset = new wxButton(m_panel, wxID_ANY, _("&Clear"), wxDefaultPosition, wxDefaultSize, 0);
+-    lowerSizer->Add(m_BtnCallSignReset, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 1);
++    stationBox->GetContentSizer()->Add(modeStatusSizer, 0, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 1);
+ 
+     wxBoxSizer* bSizer15;
+     bSizer15 = new wxBoxSizer(wxVERTICAL);
+-    m_txtCtrlCallSign = new wxTextCtrl(m_panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
++    m_txtCtrlCallSign = new wxTextCtrl(stationBox, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
+     m_txtCtrlCallSign->SetToolTip(_("Call Sign of transmitting station will appear here"));
+     m_txtCtrlCallSign->SetSizeHints(wxSize(100,-1));
+ 
+-    m_cboLastReportedCallsigns = new wxComboCtrl(m_panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxCB_READONLY);
+-    m_lastReportedCallsignListView = new wxListViewComboPopup(m_BtnCallSignReset);
++    m_cboLastReportedCallsigns = new wxComboCtrl(stationBox, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxCB_READONLY);
++    m_lastReportedCallsignListView = new wxListViewComboPopup(m_cboLastReportedCallsigns);
+     m_cboLastReportedCallsigns->SetPopupControl(m_lastReportedCallsignListView);
+     m_cboLastReportedCallsigns->SetSizeHints(wxSize(400,-1));
+     m_cboLastReportedCallsigns->SetPopupMaxHeight(150);
+-    
++
+     m_lastReportedCallsignListView->InsertColumn(0, wxT("Callsign"), wxLIST_FORMAT_LEFT, 100);
+     m_lastReportedCallsignListView->InsertColumn(1, wxT("Frequency"), wxLIST_FORMAT_RIGHT, 75);
+     m_lastReportedCallsignListView->InsertColumn(2, wxT("Date/Time"), wxLIST_FORMAT_LEFT, 175);
+@@ -722,9 +777,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     bSizer15->Add(m_txtCtrlCallSign, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 5);
+     bSizer15->Add(m_cboLastReportedCallsigns, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 5);
+ 
+-    lowerSizer->Add(bSizer15, 1, static_cast<int>(wxEXPAND), 5);
+-    lowerSizer->SetMinSize(wxSize(375,-1));
+-    centerSizer->Add(lowerSizer, 0, static_cast<int>(wxEXPAND), 2);
++    stationBox->GetContentSizer()->Add(bSizer15, 1, static_cast<int>(wxEXPAND), 5);
++    stationBox->SetMinSize(wxSize(375,-1));
++    centerSizer->Add(stationBox, 0, static_cast<int>(wxEXPAND), 2);
+     centerSizer->SetMinSize(wxSize(375,375));
+     bSizer1->Add(centerSizer, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 1);
+     
+@@ -734,9 +789,8 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      rightSizer = new wxWrapSizer(wxVERTICAL, wxREMOVE_LEADING_SPACES);
  
      // Transmit Level slider
@@ -457,7 +679,7 @@ index 052b752a..5efc9886 100644
      wxBoxSizer* txBtnSizer = new wxBoxSizer(wxHORIZONTAL);
      m_btnTxLevelMM = new wxButton(m_txLevelBox, wxID_ANY, _("<<"), wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
      m_btnTxLevelM  = new wxButton(m_txLevelBox, wxID_ANY, _("<"),  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-@@ -755,84 +804,81 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -755,84 +809,81 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_txtTxLevelNum = new wxStaticText(m_txLevelBox, wxID_ANY, fmtString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER | wxST_NO_AUTORESIZE);
      m_txtTxLevelNum->SetToolTip(_("Use mouse scroll wheel to adjust up or down\nRight click for more options"));
      m_txtTxLevelNum->SetMinSize(wxSize(100,-1));
@@ -570,7 +792,7 @@ index 052b752a..5efc9886 100644
      m_btnTogTune->Enable(false);
  
      //------------------------------
-@@ -840,16 +886,16 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -840,23 +891,32 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //------------------------------
      m_togBtnVoiceKeyer = new wxToggleButton(controlBox, wxID_ANY, _("Start Voice &Keyer"), wxDefaultPosition, wxDefaultSize, 0);
      m_togBtnVoiceKeyer->SetToolTip(_("Toggle Voice Keyer. Right-click for additional options."));
@@ -589,16 +811,47 @@ index 052b752a..5efc9886 100644
 +    rightSizer->Add(controlBox, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
  
      bSizer1->Add(rightSizer, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 3);
-     
-@@ -935,7 +981,6 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+-    
+-    m_panel->SetSizerAndFit(bSizer1);
+-    this->Layout();
  
-     m_BtnCallSignReset->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnCallSignReset), NULL, this);
+-    m_statusBar1 = this->CreateStatusBar(1, wxSTB_DEFAULT_STYLE, wxID_ANY);
++    // Playback/recording status: a tinted info bar spanning the full window
++    // width, in place of the old native status bar. It occupies zero height
++    // until ShowPlaybackStatus() gives it a message, then slides back down
++    // to zero when dismissed, rather than permanently reserving a blank line.
++    wxBoxSizer* outerSizer = new wxBoxSizer(wxVERTICAL);
++    outerSizer->Add(bSizer1, 1, static_cast<int>(wxEXPAND), 0);
++
++    m_infoBar = new wxInfoBarGeneric(m_panel);
++    m_infoBar->SetBackgroundColour(GroupBoxBackgroundColour());
++    outerSizer->Add(m_infoBar, 0, static_cast<int>(wxEXPAND), 0);
++
++    m_panel->SetSizerAndFit(outerSizer);
++    this->Layout();
+ 
+     //=====================================================
+     // End of layout
+@@ -865,7 +925,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     //-------------------
+     // Tab ordering for accessibility
+     //-------------------
+-    m_auiNbookCtrl->MoveBeforeInTabOrder(m_BtnCallSignReset);
++    m_auiNbookCtrl->MoveBeforeInTabOrder(stationBox);
+     
+     m_togBtnOnOff->MoveBeforeInTabOrder(m_togBtnAnalog);
+     m_togBtnAnalog->MoveBeforeInTabOrder(m_btnTogTune);
+@@ -933,9 +993,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     m_btnTogPTT->Connect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
+ #endif
+ 
+-    m_BtnCallSignReset->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnCallSignReset), NULL, this);
      m_BtnBerReset->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnBerReset), NULL, this);
 -    m_btnCenterRx->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnCenterRx), NULL, this);
  
          
      m_btnTxLevelMM->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTxLevelDecrBig), NULL, this);
-@@ -1037,8 +1082,6 @@ TopFrame::~TopFrame()
+@@ -1037,8 +1095,6 @@ TopFrame::~TopFrame()
      m_togBtnVoiceKeyer->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnVoiceKeyerRightClick), NULL, this);
      m_btnTogPTT->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
  #endif
@@ -608,9 +861,19 @@ index 052b752a..5efc9886 100644
      m_audioRecord->Disconnect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnRecord), NULL, this);
      
 diff --git a/src/topFrame.h b/src/topFrame.h
-index cf4144dd..ba9469cc 100644
+index cf4144dd..3520f197 100644
 --- a/src/topFrame.h
 +++ b/src/topFrame.h
+@@ -43,8 +43,8 @@
+ #include <wx/tglbtn.h>
+ #include <wx/slider.h>
+ #include <wx/checkbox.h>
+-#include <wx/statusbr.h>
+ #include <wx/frame.h>
++#include <wx/infobar.h>
+ #include <wx/statbmp.h>
+ #include <wx/stattext.h>
+ #include <wx/button.h>
 @@ -84,6 +84,32 @@ class wxListViewComboPopup;
  // returns wxDefaultPosition there and lets GTK position it automatically.
  wxPoint LeftOffsetContextMenuPosition(wxWindow* btn);
@@ -644,9 +907,24 @@ index cf4144dd..ba9469cc 100644
  ///////////////////////////////////////////////////////////////////////////////
  /// Class TopFrame
  ///////////////////////////////////////////////////////////////////////////////
-@@ -121,9 +147,8 @@ class TopFrame : public wxFrame
+@@ -103,7 +129,6 @@ class TopFrame : public wxFrame
+         wxGauge* m_gaugeLevel;
+         wxStaticText* m_textLevel;
+ 
+-        wxButton*     m_BtnCallSignReset;
+         wxTextCtrl*   m_txtCtrlCallSign;
          
-         wxStatusBar* m_statusBar1;
+         wxComboCtrl*   m_cboLastReportedCallsigns;
+@@ -119,11 +144,14 @@ class TopFrame : public wxFrame
+         wxSlider* m_sliderMicSpkrLevel;
+         wxStaticText* m_txtMicSpkrLevelNum;
+         
+-        wxStatusBar* m_statusBar1;
++        // Explicitly wxInfoBarGeneric (not the wxInfoBar macro, which resolves
++        // to a native GtkInfoBar-backed class on GTK) so that SetBackgroundColour
++        // below reliably tints it the same way as TintedGroupBox, rather than
++        // being overridden by the native widget's own GTK theme/CSS.
++        wxInfoBarGeneric* m_infoBar;
  
 -        wxStaticBox* statsBox;
 +        TintedGroupBox* statsBox;
@@ -655,7 +933,7 @@ index cf4144dd..ba9469cc 100644
          wxStaticText  *m_textBits;
          wxStaticText  *m_textErrors;
          wxStaticText  *m_textBER;
-@@ -134,17 +159,15 @@ class TopFrame : public wxFrame
+@@ -134,17 +162,15 @@ class TopFrame : public wxFrame
          wxStaticText  *m_textCodec2Var;
  
          wxStaticText  *m_textSync;
@@ -676,7 +954,7 @@ index cf4144dd..ba9469cc 100644
          wxMenuItem* m_menuItemPlayFileFromRadio;
          wxMenuItem* m_menuItemExportConfig;
          wxMenuItem* m_menuItemImportConfig;
-@@ -167,7 +190,6 @@ class TopFrame : public wxFrame
+@@ -167,7 +193,6 @@ class TopFrame : public wxFrame
          virtual void OnToolsSetupWizard( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnToolsSetupWizardUI( wxUpdateUIEvent& event ) { event.Skip(); }
          virtual void OnToolsOptions( wxCommandEvent& event ) { event.Skip(); }
@@ -684,7 +962,15 @@ index cf4144dd..ba9469cc 100644
  
          virtual void OnToolsUDP( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnToolsOptionsUI( wxUpdateUIEvent& event ) { event.Skip(); }
-@@ -249,9 +271,9 @@ class TopFrame : public wxFrame
+@@ -205,7 +230,6 @@ class TopFrame : public wxFrame
+         virtual void OnTogBtnPTT_UI(wxUpdateUIEvent& event ) { event.Skip(); }
+         virtual void OnTogBtnOnOffUI(wxUpdateUIEvent& event ) { event.Skip(); }
+ 
+-        virtual void OnCallSignReset( wxCommandEvent& event ) { event.Skip(); }
+         virtual void OnBerReset( wxCommandEvent& event ) { event.Skip(); }
+         
+         virtual void OnChangeTxMode( wxCommandEvent& event ) { event.Skip(); }
+@@ -249,9 +273,9 @@ class TopFrame : public wxFrame
          wxToggleButton* m_btnTogTune;
          wxAuiNotebook* m_auiNbookCtrl;
          wxComboBox*   m_cboReportFrequency;
@@ -696,4 +982,62 @@ index cf4144dd..ba9469cc 100644
 +        TintedGroupBox* micSpeakerBox;
  
          TopFrame( wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = _("FreeDV "), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize(561,300 ), long style = wxDEFAULT_FRAME_STYLE|wxRESIZE_BORDER );
+ 
+diff --git a/src/util.cpp b/src/util.cpp
+index 10819fb3..25deb59b 100644
+--- a/src/util.cpp
++++ b/src/util.cpp
+@@ -111,6 +111,22 @@ bool MainApp::CanAccessSerialPort(std::string const& portName)
+     return couldOpen;
+ }
+ 
++//----------------------------------------------------------------
++// ShowPlaybackStatus()
++//----------------------------------------------------------------
++
++void MainFrame::ShowPlaybackStatus(const wxString& msg)
++{
++    if (msg.IsEmpty())
++    {
++        m_infoBar->Dismiss();
++    }
++    else
++    {
++        m_infoBar->ShowMessage(msg);
++    }
++}
++
+ //----------------------------------------------------------------
+ // isReceiveOnly()
+ //----------------------------------------------------------------
+diff --git a/src/voicekeyer.cpp b/src/voicekeyer.cpp
+index 41d3826a..aac1d6c3 100644
+--- a/src/voicekeyer.cpp
++++ b/src/voicekeyer.cpp
+@@ -22,7 +22,7 @@ void MainFrame::OnTogBtnVoiceKeyerClick (wxCommandEvent& event)
+         g_recVoiceKeyerFile = false;
+         sf_close(g_sfRecMicFile);
+         g_sfRecMicFile = nullptr;
+-        SetStatusText(wxT(""));
++        ShowPlaybackStatus(wxT(""));
+         g_mutexProtectingCallbackData.Unlock();
+         
+         m_togBtnAnalog->Enable(true);
+@@ -122,7 +122,7 @@ void MainFrame::OnRecordNewVoiceKeyerFile( wxCommandEvent& )
+         return;
+     }
+ 
+-    SetStatusText(wxT("Recording file ") + soundFile + wxT(" from microphone") , 0);
++    ShowPlaybackStatus(wxT("Recording file ") + soundFile + wxT(" from microphone"));
+     g_recVoiceKeyerFile = true;
+     vkFileName_ = soundFile;
+     
+@@ -273,7 +273,7 @@ int MainFrame::VoiceKeyerStartTx(void)
+  
+         g_sfPlayFile.store(tmpPlayFile, std::memory_order_release);
+         
+-        SetStatusText(wxT("Voice Keyer: Playing file ") + wxString::FromUTF8(vkFileName_.c_str()) + wxT(" to mic input") , 0);
++        ShowPlaybackStatus(wxT("Voice Keyer: Playing file ") + wxString::FromUTF8(vkFileName_.c_str()) + wxT(" to mic input"));
+         g_loopPlayFileToMicIn = false;
+         g_playFileToMicIn.store(true, std::memory_order_release);
  
