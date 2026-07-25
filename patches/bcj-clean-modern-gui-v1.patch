@@ -1,8 +1,8 @@
 diff --git a/src/config/FreeDVConfiguration.cpp b/src/config/FreeDVConfiguration.cpp
-index 1264b6d8..76b6ab32 100644
+index 1264b6d8..8e48f1a2 100644
 --- a/src/config/FreeDVConfiguration.cpp
 +++ b/src/config/FreeDVConfiguration.cpp
-@@ -119,6 +119,14 @@ FreeDVConfiguration::FreeDVConfiguration()
+@@ -119,6 +119,16 @@ FreeDVConfiguration::FreeDVConfiguration()
          
      , showDecodeStats("/Debug/showDecodeStats", false)
      , enableLegacyModes("/Modem/enableLegacyModes", false)
@@ -14,10 +14,12 @@ index 1264b6d8..76b6ab32 100644
 +    , showReportingBox("/UI/ShowReportingBox", true)
 +    , showTxAttenuationBox("/UI/ShowTxAttenuationBox", true)
 +    , showSpeakerLevelBox("/UI/ShowSpeakerLevelBox", true)
++    , groupBoxTintColor("/UI/GroupBoxTintColor", "#0055FF")
++    , groupBoxTintPercent("/UI/GroupBoxTintPercent", 20)
  {
      // empty
  }
-@@ -251,6 +259,15 @@ void FreeDVConfiguration::load(wxConfigBase* config)
+@@ -251,6 +261,18 @@ void FreeDVConfiguration::load(wxConfigBase* config)
      load_(config, showDecodeStats);
      load_(config, enableLegacyModes);
  
@@ -30,10 +32,13 @@ index 1264b6d8..76b6ab32 100644
 +    load_(config, showTxAttenuationBox);
 +    load_(config, showSpeakerLevelBox);
 +
++    load_(config, groupBoxTintColor);
++    load_(config, groupBoxTintPercent);
++
      load_(config, txAttenByBand);
      load_(config, tuneAttenByBand);
  }
-@@ -345,6 +362,15 @@ void FreeDVConfiguration::save(wxConfigBase* config)
+@@ -345,6 +367,18 @@ void FreeDVConfiguration::save(wxConfigBase* config)
      save_(config, showDecodeStats);
      save_(config, enableLegacyModes);
  
@@ -46,14 +51,17 @@ index 1264b6d8..76b6ab32 100644
 +    save_(config, showTxAttenuationBox);
 +    save_(config, showSpeakerLevelBox);
 +
++    save_(config, groupBoxTintColor);
++    save_(config, groupBoxTintPercent);
++
      save_(config, txAttenByBand);
      save_(config, tuneAttenByBand);
  
 diff --git a/src/config/FreeDVConfiguration.h b/src/config/FreeDVConfiguration.h
-index 3d954c71..21ebc69a 100644
+index 3d954c71..c0cc3957 100644
 --- a/src/config/FreeDVConfiguration.h
 +++ b/src/config/FreeDVConfiguration.h
-@@ -125,9 +125,21 @@ public:
+@@ -125,9 +125,26 @@ public:
      ConfigurationDataElement<int> reportingUserMsgColWidth;
      
      ConfigurationDataElement<bool> showDecodeStats;
@@ -73,6 +81,11 @@ index 3d954c71..21ebc69a 100644
 +    ConfigurationDataElement<bool> showReportingBox;
 +    ConfigurationDataElement<bool> showTxAttenuationBox;
 +    ConfigurationDataElement<bool> showSpeakerLevelBox;
++
++    // Group box tint colour/strength (Display options tab), replacing the
++    // old FREEDV_GROUPBOX_TINT testing-only environment variable.
++    ConfigurationDataElement<wxString> groupBoxTintColor;
++    ConfigurationDataElement<int> groupBoxTintPercent;
 +
      virtual void load(wxConfigBase* config) override;
      virtual void save(wxConfigBase* config) override;
@@ -110,6 +123,88 @@ index 286f59c7..ef1aa309 100644
  //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=
  // Class PlotPanel
  //
+diff --git a/src/gui/dialogs/dlg_options.cpp b/src/gui/dialogs/dlg_options.cpp
+index 9dc39483..736882dc 100644
+--- a/src/gui/dialogs/dlg_options.cpp
++++ b/src/gui/dialogs/dlg_options.cpp
+@@ -468,7 +468,28 @@ OptionsDlg::OptionsDlg(wxWindow* parent, wxWindowID id, const wxString& title, c
+     sbSizer_reporterColor->Add(reporterColorSizer, 0, static_cast<int>(wxALL), 5);
+ 
+     sizerDisplay->Add(sbSizer_reporterColor, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
+-    
++
++    //----------------------------------------------------------
++    // Group box tint
++    //----------------------------------------------------------
++    wxStaticBox* sb_groupBoxTint = new wxStaticBox(m_displayTab, wxID_ANY, _("Group Box Tint"));
++    wxStaticBoxSizer* sbSizer_groupBoxTint = new wxStaticBoxSizer(sb_groupBoxTint, wxHORIZONTAL);
++
++    wxStaticText* labelGroupBoxTintColor = new wxStaticText(sb_groupBoxTint, wxID_ANY, wxT("Tint colour:"), wxDefaultPosition, wxDefaultSize, 0);
++    sbSizer_groupBoxTint->Add(labelGroupBoxTintColor, 0, static_cast<int>(wxALL) | wxALIGN_CENTER_VERTICAL, 5);
++
++    m_groupBoxTintColor = new wxColourPickerCtrl(sb_groupBoxTint, wxID_ANY);
++    sbSizer_groupBoxTint->Add(m_groupBoxTintColor, 0, static_cast<int>(wxALL) | wxALIGN_CENTER_VERTICAL, 5);
++
++    wxStaticText* labelGroupBoxTintPercent = new wxStaticText(sb_groupBoxTint, wxID_ANY, wxT("Blend into theme (%):"), wxDefaultPosition, wxDefaultSize, 0);
++    sbSizer_groupBoxTint->Add(labelGroupBoxTintPercent, 0, static_cast<int>(wxALL) | wxALIGN_CENTER_VERTICAL, 5);
++
++    m_groupBoxTintPercent = new wxSpinCtrl(sb_groupBoxTint, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 20);
++    m_groupBoxTintPercent->SetToolTip(_("How strongly the tint colour is blended into each box's theme-derived shade. 0% ignores the tint colour entirely (plain theme shade); 100% uses the tint colour as-is, with no light/dark theme adaptation."));
++    sbSizer_groupBoxTint->Add(m_groupBoxTintPercent, 0, static_cast<int>(wxALL) | wxALIGN_CENTER_VERTICAL, 5);
++
++    sizerDisplay->Add(sbSizer_groupBoxTint, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
++
+     // Plot settings
+     wxStaticBox* sb_PlotSettings = new wxStaticBox(m_displayTab, wxID_ANY, _("Plot settings"));
+     wxStaticBoxSizer* sbSizer_PlotSettings =  new wxStaticBoxSizer(sb_PlotSettings, wxVERTICAL);
+@@ -1023,6 +1044,11 @@ void OptionsDlg::ExchangeData(int inout, bool storePersistent)
+         m_freedvReporterMsgBackgroundColor->SetColour(msgBackgroundColor);
+         m_freedvReporterMsgForegroundColor->SetColour(msgForegroundColor);
+ 
++        // Populate group box tint colour/strength
++        wxColour groupBoxTintColor(wxGetApp().appConfiguration.groupBoxTintColor);
++        m_groupBoxTintColor->SetColour(groupBoxTintColor);
++        m_groupBoxTintPercent->SetValue((int)wxGetApp().appConfiguration.groupBoxTintPercent);
++
+         // Populate reporting frequency list.
+         for (auto& item : wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyList.get())
+         {
+@@ -1212,6 +1238,10 @@ void OptionsDlg::ExchangeData(int inout, bool storePersistent)
+         wxColour msgForegroundColor = m_freedvReporterMsgForegroundColor->GetColour();
+         wxGetApp().appConfiguration.reportingConfiguration.freedvReporterMsgRowForegroundColor = msgForegroundColor.GetAsString(wxC2S_HTML_SYNTAX);
+ 
++        wxColour groupBoxTintColor = m_groupBoxTintColor->GetColour();
++        wxGetApp().appConfiguration.groupBoxTintColor = groupBoxTintColor.GetAsString(wxC2S_HTML_SYNTAX);
++        wxGetApp().appConfiguration.groupBoxTintPercent = m_groupBoxTintPercent->GetValue();
++
+         // Save new reporting frequency list.
+         std::vector<wxString> tmpList;
+         tmpList.reserve(m_freqList->GetCount());
+diff --git a/src/gui/dialogs/dlg_options.h b/src/gui/dialogs/dlg_options.h
+index ed82c802..35deb606 100644
+--- a/src/gui/dialogs/dlg_options.h
++++ b/src/gui/dialogs/dlg_options.h
+@@ -23,6 +23,7 @@
+ #define __OPTIONS_DIALOG__
+ 
+ #include <wx/clrpicker.h>
++#include <wx/spinctrl.h>
+ 
+ #include "../../main.h"
+ #include "defines.h"
+@@ -123,7 +124,11 @@ class OptionsDlg : public wxDialog
+         wxColourPickerCtrl* m_freedvReporterRxForegroundColor;
+         wxColourPickerCtrl* m_freedvReporterMsgBackgroundColor;
+         wxColourPickerCtrl* m_freedvReporterMsgForegroundColor;
+-        
++
++        /* Group box tint colour/strength */
++        wxColourPickerCtrl* m_groupBoxTintColor;
++        wxSpinCtrl* m_groupBoxTintPercent;
++
+         /* Spectrum plot averaging */
+         wxComboBox*             m_cbxNumSpectrumAveraging;
+ 
 diff --git a/src/gui/util/wxListViewComboPopup.cpp b/src/gui/util/wxListViewComboPopup.cpp
 index 2b040eb6..f4af532d 100644
 --- a/src/gui/util/wxListViewComboPopup.cpp
@@ -127,7 +222,7 @@ index 2b040eb6..f4af532d 100644
      }
  
 diff --git a/src/main.cpp b/src/main.cpp
-index 7636e4ef..0a2e145a 100644
+index 7636e4ef..c6c9cd46 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -1078,8 +1078,6 @@ setDefaultMode:
@@ -139,7 +234,7 @@ index 7636e4ef..0a2e145a 100644
      m_BtnReSync->Enable(isEnabled);
      m_BtnReSync->Show(wxGetApp().appConfiguration.enableLegacyModes);
  
-@@ -1199,6 +1197,32 @@ setDefaultMode:
+@@ -1199,6 +1197,36 @@ setDefaultMode:
      modeBox->Show(wxGetApp().appConfiguration.enableLegacyModes);
      m_BtnReSync->Show(wxGetApp().appConfiguration.enableLegacyModes);
  
@@ -169,10 +264,14 @@ index 7636e4ef..0a2e145a 100644
 +        }
 +    }
 +
++    // Apply persisted group box tint colour/strength (also defaulted at
++    // TopFrame construction time, same reasoning as showBoxState above).
++    applyGroupBoxTint_();
++
      // Initialize FreeDV Reporter as required
      CallAfter(&MainFrame::initializeFreeDVReporter_);
      
-@@ -1223,11 +1247,8 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+@@ -1223,11 +1251,8 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
      // fully optimized for real-time use yet (i.e. it dynamically allocates
      // memory while processing audio).
      SNR_FORMAT_STR("%ddB"),
@@ -184,7 +283,38 @@ index 7636e4ef..0a2e145a 100644
      BITS_UNK_LABEL("Bits: unk"),
      ERRS_UNK_LABEL("Errs: unk"),
      BER_UNK_LABEL("BER: unk"),
-@@ -2028,7 +2049,6 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -1531,6 +1556,30 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+     g_dump_timing = g_dump_fifo_state = 0;
+ }
+ 
++// Applies the persisted group box tint colour/strength and re-colours every
++// currently-live tinted window (group boxes, the playback status info bar,
++// and the AUI notebook's plot pages) so a change made in Options takes
++// effect immediately instead of requiring a restart.
++void MainFrame::applyGroupBoxTint_()
++{
++    wxColour tintColour(wxGetApp().appConfiguration.groupBoxTintColor);
++    int tintPercent = wxGetApp().appConfiguration.groupBoxTintPercent;
++    SetGroupBoxTint(tintColour, tintPercent);
++    RefreshGroupBoxTints();
++
++    wxColour bg = GroupBoxBackgroundColour();
++
++    m_infoBar->SetBackgroundColour(bg);
++    m_infoBar->Refresh();
++
++    for (size_t index = 0; index < m_auiNbookCtrl->GetPageCount(); index++)
++    {
++        wxWindow* page = m_auiNbookCtrl->GetPage(index);
++        page->SetBackgroundColour(bg);
++        page->Refresh();
++    }
++}
++
+ void MainFrame::restoreCallsignListFromCsv_()
+ {
+     auto csvPath = wxGetApp().appConfiguration.reportingConfiguration.csvLogFilePath.get();
+@@ -2028,7 +2077,6 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
              if (oldColor != newColor)
              {
                  m_textSync->SetForegroundColour(newColor);
@@ -192,7 +322,7 @@ index 7636e4ef..0a2e145a 100644
                  m_textSync->Refresh();
              }
          }
-@@ -2265,13 +2285,11 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2265,13 +2313,11 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          g_channel_noise.store(wxGetApp().m_channel_noise, std::memory_order_release);
  
          // update stats on main page
@@ -210,7 +340,7 @@ index 7636e4ef..0a2e145a 100644
          if (relayout)
          {
              // XXX - force resize events to make mode string re-center itself.
-@@ -2529,7 +2547,6 @@ void MainFrame::OnChangeTxMode( wxCommandEvent& event )
+@@ -2529,7 +2575,6 @@ void MainFrame::OnChangeTxMode( wxCommandEvent& event )
          m_sliderSQ->Enable(isEnabled);
          m_ckboxSQ->Enable(isEnabled);
          m_textSQ->Enable(isEnabled);
@@ -218,7 +348,7 @@ index 7636e4ef..0a2e145a 100644
          m_BtnReSync->Enable(isEnabled);
      }
  }
-@@ -2581,8 +2598,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2581,8 +2626,7 @@ void MainFrame::performFreeDVOn_()
      executeOnUiThreadAndWait_([&]() 
      {
          m_textSync->Enable();
@@ -228,7 +358,7 @@ index 7636e4ef..0a2e145a 100644
          // determine what mode we are using
          wxCommandEvent tmpEvent;
          OnChangeTxMode(tmpEvent);
-@@ -2974,7 +2990,6 @@ void MainFrame::performFreeDVOff_()
+@@ -2974,7 +3018,6 @@ void MainFrame::performFreeDVOff_()
      executeOnUiThreadAndWait_([&]() 
      {
          m_textSync->Disable();
@@ -237,7 +367,7 @@ index 7636e4ef..0a2e145a 100644
          m_togBtnAnalog->Disable();
          m_btnTogPTT->Disable();
 diff --git a/src/main.h b/src/main.h
-index 76e30870..d98ca670 100644
+index 76e30870..b08d831a 100644
 --- a/src/main.h
 +++ b/src/main.h
 @@ -387,7 +387,12 @@ class MainFrame : public TopFrame
@@ -290,11 +420,29 @@ index 76e30870..d98ca670 100644
          const wxString BITS_UNK_LABEL;
          const wxString ERRS_UNK_LABEL;
          const wxString BER_UNK_LABEL;
+@@ -633,6 +635,7 @@ class MainFrame : public TopFrame
+         bool        validateSoundCardSetup();
+         
+         void loadConfiguration_();
++        void applyGroupBoxTint_();
+         void restoreCallsignListFromCsv_();
+         void resetStats_();
+         void exportConfiguration_(wxConfigBase* config);
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index f5a61181..7e094ec7 100644
+index f5a61181..3951428b 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
-@@ -247,8 +247,6 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
+@@ -236,6 +236,9 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
+         // Show/hide frequency box based on CAT control configuration.
+         m_freqBox->Show(isFrequencyControlEnabled_());
+         
++        // Re-apply group box tint colour/strength in case it was changed.
++        applyGroupBoxTint_();
++
+         // Show/hide stats box
+         statsBox->Show(wxGetApp().appConfiguration.showDecodeStats);
+         
+@@ -247,8 +250,6 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
          m_sliderSQ->Enable(isEnabled);
          m_ckboxSQ->Enable(isEnabled);
          m_textSQ->Enable(isEnabled);
@@ -303,7 +451,7 @@ index f5a61181..7e094ec7 100644
          m_BtnReSync->Enable(isEnabled);
          m_BtnReSync->Show(wxGetApp().appConfiguration.enableLegacyModes);
  
-@@ -486,7 +484,7 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+@@ -486,7 +487,7 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
                  m_txtModeStatus->Enable(true);
                  break;
              default:
@@ -312,7 +460,7 @@ index f5a61181..7e094ec7 100644
                  m_txtModeStatus->Enable(false);
                  break;
          }
-@@ -593,7 +591,7 @@ void MainFrame::onRadioConnected_(IRigController*)
+@@ -593,7 +594,7 @@ void MainFrame::onRadioConnected_(IRigController*)
  void MainFrame::onRadioDisconnected_(IRigController*)
  {
      CallAfter([&]() {
@@ -321,7 +469,7 @@ index f5a61181..7e094ec7 100644
          m_txtModeStatus->Enable(false);
      });
  }
-@@ -1587,8 +1585,7 @@ void MainFrame::togglePTT(void) {
+@@ -1587,8 +1588,7 @@ void MainFrame::togglePTT(void) {
          // enable sync text
  
          m_textSync->Enable();
@@ -331,7 +479,7 @@ index f5a61181..7e094ec7 100644
          // Re-enable buttons.
          m_togBtnOnOff->Enable(true);
          m_togBtnAnalog->Enable(true);
-@@ -1633,7 +1630,6 @@ void MainFrame::togglePTT(void) {
+@@ -1633,7 +1633,6 @@ void MainFrame::togglePTT(void) {
          // disable sync text
  
          m_textSync->Disable();
@@ -339,7 +487,7 @@ index f5a61181..7e094ec7 100644
  
          // Disable On/Off button.
          m_togBtnOnOff->Enable(false);
-@@ -1867,18 +1863,6 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+@@ -1867,18 +1866,6 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
      event.Skip();
  }
  
@@ -358,7 +506,7 @@ index f5a61181..7e094ec7 100644
  void MainFrame::OnLogQSO(wxCommandEvent&)
  {
      wxString dxCall;
-@@ -1986,7 +1970,7 @@ void MainFrame::OnRightClickCallsignList(wxMouseEvent&)
+@@ -1986,7 +1973,7 @@ void MainFrame::OnRightClickCallsignList(wxMouseEvent&)
          index = m_lastReportedCallsignListView->GetFirstSelected();
      }
      m_cboLastReportedCallsigns->SetText("");
@@ -367,7 +515,7 @@ index f5a61181..7e094ec7 100644
  }
  
  void MainFrame::OnOpenCallsignList( wxCommandEvent& event )
-@@ -2002,7 +1986,7 @@ void MainFrame::OnCloseCallsignList( wxCommandEvent& event )
+@@ -2002,7 +1989,7 @@ void MainFrame::OnCloseCallsignList( wxCommandEvent& event )
      {
          // Make sure we're not selected if no callsigns selected.
          wxGetApp().lastSelectedLoggingRow = MainApp::UNSELECTED;
@@ -376,7 +524,7 @@ index f5a61181..7e094ec7 100644
      }
      event.Skip();
  }
-@@ -2160,11 +2144,6 @@ void MainFrame::OnSystemColorChanged(wxSysColourChangedEvent& event)
+@@ -2160,11 +2147,6 @@ void MainFrame::OnSystemColorChanged(wxSysColourChangedEvent& event)
      TopFrame::OnSystemColorChanged(event);
  }
  
@@ -388,7 +536,7 @@ index f5a61181..7e094ec7 100644
  void MainFrame::updateReportingFreqList_()
  {
      uint64_t prevFreqInt = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency;
-@@ -2254,6 +2233,53 @@ void MainFrame::OnToggleReporterVisibility (wxCommandEvent&)
+@@ -2254,6 +2236,53 @@ void MainFrame::OnToggleReporterVisibility (wxCommandEvent&)
      wxGetApp().appConfiguration.reportingConfiguration.freedvReporterForcedOff = m_reporterHidden->GetValue();
  }
  
@@ -510,21 +658,38 @@ index 7f1b0b69..8ef04540 100644
              
                  if (!g_tx.load(std::memory_order_acquire))
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index d736ffa5..90e4d864 100644
+index d736ffa5..20694921 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
-@@ -22,6 +22,7 @@
+@@ -20,8 +20,10 @@
+ //
+ //==========================================================================
  
++#include <algorithm>
  #include <map>
  #include <set>
 +#include <vector>
  
  #include <wx/regex.h>
  #include <wx/wrapsizer.h>
-@@ -400,6 +401,84 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
+@@ -400,6 +402,106 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
      return ok;
  }
  
++namespace {
++    // Tint colour/strength applied by GroupBoxBackgroundColour() below, set
++    // via SetGroupBoxTint() from the persisted Display options once
++    // configuration is loaded. Defaults match the original hardcoded values
++    // so the very first run (before any config exists) looks the same as
++    // before this became configurable.
++    wxColour s_groupBoxTintColour(0, 85, 255);
++    int s_groupBoxTintPercent = 20;
++
++    // Every currently-live TintedGroupBox, so a tint change from Options can
++    // be re-applied immediately rather than only on next restart.
++    std::vector<TintedGroupBox*> s_tintedGroupBoxes;
++}
++
 +// Returns a background colour offset from the system window colour so that
 +// grouped control boxes read as a distinct "card" instead of blending into
 +// the surrounding panel. Works out from the live system colour rather than
@@ -535,34 +700,33 @@ index d736ffa5..90e4d864 100644
 +    bool isDark = base.GetLuminance() < 0.5;
 +    wxColour shaded = base.ChangeLightness(isDark ? 115 : 93);
 +
-+    // Nudge the shaded card colour towards blue. Purely a lightness shift is
-+    // invisible on themes (e.g. Breeze Light) whose window colour has no
-+    // saturation to begin with, so blend in a small amount of hue directly.
-+    wxColour tint(0, 85, 255);
-+    int tintPct = 20;
++    // Nudge the shaded card colour towards blue (by default). Purely a
++    // lightness shift is invisible on themes (e.g. Breeze Light) whose
++    // window colour has no saturation to begin with, so blend in a small
++    // amount of hue directly.
++    const wxColour& tint = s_groupBoxTintColour;
++    int tintPct = s_groupBoxTintPercent;
 +
-+    // Testing hook: FREEDV_GROUPBOX_TINT=RRGGBB[:pct] overrides the tint
-+    // colour/strength above at runtime, so different values can be tried
-+    // without a rebuild.
-+    if (wxString env; wxGetEnv(wxT("FREEDV_GROUPBOX_TINT"), &env))
-+    {
-+        wxString colourPart = env.BeforeFirst(':');
-+        wxString pctPart = env.AfterFirst(':');
-+        wxColour parsed(wxT("#") + colourPart);
-+        if (parsed.IsOk())
-+        {
-+            tint = parsed;
-+        }
-+        long pctVal;
-+        if (!pctPart.IsEmpty() && pctPart.ToLong(&pctVal))
-+        {
-+            tintPct = (int)pctVal;
-+        }
-+    }
 +    unsigned char r = (unsigned char)((shaded.Red()   * (100 - tintPct) + tint.Red()   * tintPct) / 100);
 +    unsigned char g = (unsigned char)((shaded.Green() * (100 - tintPct) + tint.Green() * tintPct) / 100);
 +    unsigned char b = (unsigned char)((shaded.Blue()  * (100 - tintPct) + tint.Blue()  * tintPct) / 100);
 +    return wxColour(r, g, b);
++}
++
++void SetGroupBoxTint(const wxColour& colour, int percent)
++{
++    s_groupBoxTintColour = colour;
++    s_groupBoxTintPercent = percent;
++}
++
++void RefreshGroupBoxTints()
++{
++    wxColour newColour = GroupBoxBackgroundColour();
++    for (auto box : s_tintedGroupBoxes)
++    {
++        box->SetBackgroundColour(newColour);
++        box->Refresh();
++    }
 +}
 +
 +TintedGroupBox::TintedGroupBox(wxWindow* parent, const wxString& title, wxOrientation orientation)
@@ -591,6 +755,15 @@ index d736ffa5..90e4d864 100644
 +    outerSizer->Add(m_contentSizer, 1, wxEXPAND | wxALL, 6);
 +
 +    SetSizer(outerSizer);
++
++    s_tintedGroupBoxes.push_back(this);
++}
++
++TintedGroupBox::~TintedGroupBox()
++{
++    s_tintedGroupBoxes.erase(
++        std::remove(s_tintedGroupBoxes.begin(), s_tintedGroupBoxes.end(), this),
++        s_tintedGroupBoxes.end());
 +}
 +
 +void TintedGroupBox::SetLabel(const wxString& label)
@@ -606,7 +779,7 @@ index d736ffa5..90e4d864 100644
  //=========================================================================
  // Code that lays out the main application window
  //=========================================================================
-@@ -495,6 +574,34 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -495,6 +597,34 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
  
      m_menubarMain->Append(tools, _("&Tools"));
  
@@ -641,7 +814,7 @@ index d736ffa5..90e4d864 100644
      help = new wxMenu();
      wxMenuItem* m_menuItemHelpUpdates;
      m_menuItemHelpUpdates = new wxMenuItem(help, wxID_ANY, wxString(_("&Check for Updates")) , _("Checks for updates to FreeDV"), wxITEM_NORMAL);
-@@ -528,140 +635,122 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -528,140 +658,122 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      wxSizer* leftOuterSizer = new wxBoxSizer(wxVERTICAL);
      wxSizer* leftSizer = new wxWrapSizer(wxVERTICAL, wxREMOVE_LEADING_SPACES);
  
@@ -824,7 +997,7 @@ index d736ffa5..90e4d864 100644
  
      leftSizer->SetMinSize(wxSize(-1, 375));
      
-@@ -693,32 +782,28 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -693,32 +805,28 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
  
      // lower middle used for user ID
  
@@ -864,7 +1037,7 @@ index d736ffa5..90e4d864 100644
      m_lastReportedCallsignListView->InsertColumn(0, wxT("Callsign"), wxLIST_FORMAT_LEFT, 100);
      m_lastReportedCallsignListView->InsertColumn(1, wxT("Frequency"), wxLIST_FORMAT_RIGHT, 75);
      m_lastReportedCallsignListView->InsertColumn(2, wxT("Date/Time"), wxLIST_FORMAT_LEFT, 175);
-@@ -727,9 +812,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -727,9 +835,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      bSizer15->Add(m_txtCtrlCallSign, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 5);
      bSizer15->Add(m_cboLastReportedCallsigns, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 5);
  
@@ -877,7 +1050,7 @@ index d736ffa5..90e4d864 100644
      centerSizer->SetMinSize(wxSize(375,375));
      bSizer1->Add(centerSizer, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 1);
      
-@@ -741,9 +826,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -741,9 +849,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //=====================================================
      // Squelch Slider Control
      //=====================================================
@@ -888,7 +1061,7 @@ index d736ffa5..90e4d864 100644
  
      m_sliderSQ = new wxSlider(squelchBox, wxID_ANY, 0, 0, 40, wxDefaultPosition, wxDefaultSize, wxSL_AUTOTICKS);
      m_sliderSQ->SetMinSize(wxSize(135,-1));
-@@ -756,27 +839,26 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -756,27 +862,26 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_sliderSQ->SetAccessible(squelchSliderAccessibility);
  #endif // wxUSE_ACCESSIBILITY
  
@@ -922,7 +1095,7 @@ index d736ffa5..90e4d864 100644
      wxBoxSizer* txBtnSizer = new wxBoxSizer(wxHORIZONTAL);
      m_btnTxLevelMM = new wxButton(m_txLevelBox, wxID_ANY, _("<<"), wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
      m_btnTxLevelM  = new wxButton(m_txLevelBox, wxID_ANY, _("<"),  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-@@ -795,101 +877,97 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -795,101 +900,97 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_txtTxLevelNum = new wxStaticText(m_txLevelBox, wxID_ANY, fmtString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER | wxST_NO_AUTORESIZE);
      m_txtTxLevelNum->SetToolTip(_("Use mouse scroll wheel to adjust up or down\nRight click for more options"));
      m_txtTxLevelNum->SetMinSize(wxSize(100,-1));
@@ -1058,7 +1231,7 @@ index d736ffa5..90e4d864 100644
      m_btnTogTune->Enable(false);
  
      //------------------------------
-@@ -897,23 +975,32 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -897,23 +998,32 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //------------------------------
      m_togBtnVoiceKeyer = new wxToggleButton(controlBox, wxID_ANY, _("Start Voice &Keyer"), wxDefaultPosition, wxDefaultSize, 0);
      m_togBtnVoiceKeyer->SetToolTip(_("Toggle Voice Keyer. Right-click for additional options."));
@@ -1098,7 +1271,7 @@ index d736ffa5..90e4d864 100644
  
      //=====================================================
      // End of layout
-@@ -922,7 +1009,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -922,7 +1032,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //-------------------
      // Tab ordering for accessibility
      //-------------------
@@ -1107,7 +1280,7 @@ index d736ffa5..90e4d864 100644
      m_sliderSQ->MoveBeforeInTabOrder(m_ckboxSQ);
      m_rbRADE->MoveBeforeInTabOrder(m_rb700d);
      m_rb700d->MoveBeforeInTabOrder(m_rb700e);
-@@ -1007,11 +1094,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -1007,11 +1117,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_btnTogPTT->Connect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
  #endif
  
@@ -1120,7 +1293,7 @@ index d736ffa5..90e4d864 100644
      m_rbRADE->Connect(wxEVT_RADIOBUTTON, wxCommandEventHandler(TopFrame::OnChangeTxMode), NULL, this); 
      m_rb1600->Connect(wxEVT_RADIOBUTTON, wxCommandEventHandler(TopFrame::OnChangeTxMode), NULL, this);
      m_rb700d->Connect(wxEVT_RADIOBUTTON, wxCommandEventHandler(TopFrame::OnChangeTxMode), NULL, this);
-@@ -1131,8 +1216,6 @@ TopFrame::~TopFrame()
+@@ -1131,8 +1239,6 @@ TopFrame::~TopFrame()
      m_togBtnVoiceKeyer->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnVoiceKeyerRightClick), NULL, this);
      m_btnTogPTT->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
  #endif
@@ -1130,7 +1303,7 @@ index d736ffa5..90e4d864 100644
      m_audioRecord->Disconnect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnRecord), NULL, this);
      
 diff --git a/src/topFrame.h b/src/topFrame.h
-index 55a5cd85..018a5a20 100644
+index 55a5cd85..db57e0cd 100644
 --- a/src/topFrame.h
 +++ b/src/topFrame.h
 @@ -43,8 +43,8 @@
@@ -1143,7 +1316,7 @@ index 55a5cd85..018a5a20 100644
  #include <wx/statbmp.h>
  #include <wx/stattext.h>
  #include <wx/button.h>
-@@ -76,8 +76,38 @@
+@@ -76,8 +76,46 @@
  
  #define ID_MODE_COLLAPSE 1100
  
@@ -1164,6 +1337,7 @@ index 55a5cd85..018a5a20 100644
 +{
 +    public:
 +        TintedGroupBox(wxWindow* parent, const wxString& title, wxOrientation orientation);
++        ~TintedGroupBox();
 +
 +        virtual void SetLabel(const wxString& label) override;
 +        virtual wxString GetLabel() const override;
@@ -1179,10 +1353,17 @@ index 55a5cd85..018a5a20 100644
 +// for other controls (e.g. plot graticule label margins) that want to match.
 +wxColour GroupBoxBackgroundColour();
 +
++// Sets the tint colour/strength used by GroupBoxBackgroundColour() (persisted
++// via the Display options tab). RefreshGroupBoxTints() then re-applies the
++// resulting colour to every currently-live TintedGroupBox so the change is
++// visible immediately, without needing a restart.
++void SetGroupBoxTint(const wxColour& colour, int percent);
++void RefreshGroupBoxTints();
++
  // Popup position for a right-click menu anchored to the left of btn (to
  // avoid running off the right screen edge on X11). On GTK/Wayland, GDK's
  // own popup placement already avoids screen edges correctly, and this
-@@ -98,13 +128,15 @@ class TopFrame : public wxFrame
+@@ -98,13 +136,15 @@ class TopFrame : public wxFrame
          wxMenu* edit;
          wxMenu* tools;
          wxMenu* help;
@@ -1199,7 +1380,7 @@ index 55a5cd85..018a5a20 100644
          wxTextCtrl*   m_txtCtrlCallSign;
          
          wxComboCtrl*   m_cboLastReportedCallsigns;
-@@ -123,11 +155,15 @@ class TopFrame : public wxFrame
+@@ -123,11 +163,15 @@ class TopFrame : public wxFrame
          wxSlider* m_sliderSQ;        
          wxCheckBox* m_ckboxSQ;
          wxStaticText* m_textSQ;
@@ -1218,7 +1399,7 @@ index 55a5cd85..018a5a20 100644
          wxStaticText  *m_textBits;
          wxStaticText  *m_textErrors;
          wxStaticText  *m_textBER;
-@@ -137,12 +173,14 @@ class TopFrame : public wxFrame
+@@ -137,12 +181,14 @@ class TopFrame : public wxFrame
          wxStaticText  *m_textSyncMetric;
          wxStaticText  *m_textCodec2Var;
  
@@ -1236,7 +1417,7 @@ index 55a5cd85..018a5a20 100644
          wxButton*     m_logQSO;
  
          wxRadioButton *m_rbRADE;
-@@ -152,13 +190,13 @@ class TopFrame : public wxFrame
+@@ -152,13 +198,13 @@ class TopFrame : public wxFrame
  
          wxSizer* rightSizer;
  
@@ -1253,7 +1434,7 @@ index 55a5cd85..018a5a20 100644
          wxToggleButton *m_reporterHidden;
      
          // Virtual event handlers, override them in your derived class
-@@ -179,7 +217,6 @@ class TopFrame : public wxFrame
+@@ -179,7 +225,6 @@ class TopFrame : public wxFrame
          virtual void OnToolsFilter( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnToolsFilterUI( wxUpdateUIEvent& event ) { event.Skip(); }
          virtual void OnToolsOptions( wxCommandEvent& event ) { event.Skip(); }
@@ -1261,7 +1442,7 @@ index 55a5cd85..018a5a20 100644
  
          virtual void OnToolsUDP( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnToolsOptionsUI( wxUpdateUIEvent& event ) { event.Skip(); }
-@@ -223,7 +260,6 @@ class TopFrame : public wxFrame
+@@ -223,7 +268,6 @@ class TopFrame : public wxFrame
          virtual void OnTogBtnPTT_UI(wxUpdateUIEvent& event ) { event.Skip(); }
          virtual void OnTogBtnOnOffUI(wxUpdateUIEvent& event ) { event.Skip(); }
  
@@ -1269,7 +1450,7 @@ index 55a5cd85..018a5a20 100644
          virtual void OnBerReset( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnReSync( wxCommandEvent& event ) { event.Skip(); }
          
-@@ -258,6 +294,8 @@ class TopFrame : public wxFrame
+@@ -258,6 +302,8 @@ class TopFrame : public wxFrame
          
          virtual void OnTogBtnTune(wxCommandEvent& event) { event.Skip(); }
  
@@ -1278,7 +1459,7 @@ index 55a5cd85..018a5a20 100644
          void setVoiceKeyerButtonLabel_(wxString filename);
          
      public:
-@@ -268,10 +306,10 @@ class TopFrame : public wxFrame
+@@ -268,10 +314,10 @@ class TopFrame : public wxFrame
          wxToggleButton* m_btnTogTune;
          wxAuiNotebook* m_auiNbookCtrl;
          wxComboBox*   m_cboReportFrequency;
