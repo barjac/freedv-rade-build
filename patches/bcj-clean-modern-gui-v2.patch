@@ -1,8 +1,8 @@
 diff --git a/src/config/FreeDVConfiguration.cpp b/src/config/FreeDVConfiguration.cpp
-index 1410ddb5..13ad104b 100644
+index 1410ddb5..71d18598 100644
 --- a/src/config/FreeDVConfiguration.cpp
 +++ b/src/config/FreeDVConfiguration.cpp
-@@ -105,6 +105,16 @@ FreeDVConfiguration::FreeDVConfiguration()
+@@ -105,6 +105,18 @@ FreeDVConfiguration::FreeDVConfiguration()
      , reportingUserMsgColWidth("/Windows/FreeDVReporter/reportingUserMsgColWidth", 130)
          
      , showDecodeStats("/Debug/showDecodeStats", false)
@@ -16,10 +16,12 @@ index 1410ddb5..13ad104b 100644
 +    , showSpeakerLevelBox("/UI/ShowSpeakerLevelBox", true)
 +    , groupBoxTintColor("/UI/GroupBoxTintColor", "#0055FF")
 +    , groupBoxTintPercent("/UI/GroupBoxTintPercent", 20)
++    , groupBoxLeftOrder("/UI/GroupBoxLeftOrder", { 0, 1, 2, 3, 4, 5 })
++    , groupBoxRightOrder("/UI/GroupBoxRightOrder", { 6, 7 })
  {
      // empty
  }
-@@ -225,6 +235,18 @@ void FreeDVConfiguration::load(wxConfigBase* config)
+@@ -225,6 +237,21 @@ void FreeDVConfiguration::load(wxConfigBase* config)
      
      load_(config, showDecodeStats);
  
@@ -35,10 +37,13 @@ index 1410ddb5..13ad104b 100644
 +    load_(config, groupBoxTintColor);
 +    load_(config, groupBoxTintPercent);
 +
++    load_(config, groupBoxLeftOrder);
++    load_(config, groupBoxRightOrder);
++
      load_(config, txAttenByBand);
      load_(config, tuneAttenByBand);
  }
-@@ -307,6 +329,18 @@ void FreeDVConfiguration::save(wxConfigBase* config)
+@@ -307,6 +334,21 @@ void FreeDVConfiguration::save(wxConfigBase* config)
      
      save_(config, showDecodeStats);
  
@@ -54,14 +59,17 @@ index 1410ddb5..13ad104b 100644
 +    save_(config, groupBoxTintColor);
 +    save_(config, groupBoxTintPercent);
 +
++    save_(config, groupBoxLeftOrder);
++    save_(config, groupBoxRightOrder);
++
      save_(config, txAttenByBand);
      save_(config, tuneAttenByBand);
  
 diff --git a/src/config/FreeDVConfiguration.h b/src/config/FreeDVConfiguration.h
-index d7f2d5f1..1c9369dc 100644
+index d7f2d5f1..625aeb51 100644
 --- a/src/config/FreeDVConfiguration.h
 +++ b/src/config/FreeDVConfiguration.h
-@@ -113,7 +113,24 @@ public:
+@@ -113,7 +113,35 @@ public:
      ConfigurationDataElement<int> reportingUserMsgColWidth;
      
      ConfigurationDataElement<bool> showDecodeStats;
@@ -83,6 +91,17 @@ index d7f2d5f1..1c9369dc 100644
 +    // old FREEDV_GROUPBOX_TINT testing-only environment variable.
 +    ConfigurationDataElement<wxString> groupBoxTintColor;
 +    ConfigurationDataElement<int> groupBoxTintPercent;
++
++    // Ordered lists of the movable "Show menu" group boxes currently on each
++    // side of the main window (right-click a box's title to move it), using
++    // the same box index enumeration as ID_SHOW_GROUPBOX_BASE/OnShowGroupBox:
++    // 0=SNR, 1=Level, 2=Sync, 3=AudioRecording, 4=Logging, 5=FDVReporting,
++    // 6=TXAttenuation, 7=SpeakerLevel. Defaults match the original hardcoded
++    // layout. A box's presence in a list is independent of its show/hide
++    // state -- hiding a box leaves it in place in whichever list already
++    // has it, so it reappears in the same position when shown again.
++    ConfigurationDataElement<std::vector<int>> groupBoxLeftOrder;
++    ConfigurationDataElement<std::vector<int>> groupBoxRightOrder;
 +
      virtual void load(wxConfigBase* config) override;
      virtual void save(wxConfigBase* config) override;
@@ -121,10 +140,10 @@ index 286f59c7..ef1aa309 100644
  // Class PlotPanel
  //
 diff --git a/src/gui/dialogs/dlg_options.cpp b/src/gui/dialogs/dlg_options.cpp
-index e3693aa7..00961de9 100644
+index ca73f767..95349083 100644
 --- a/src/gui/dialogs/dlg_options.cpp
 +++ b/src/gui/dialogs/dlg_options.cpp
-@@ -681,7 +681,28 @@ OptionsDlg::OptionsDlg(wxWindow* parent, wxWindowID id, const wxString& title, c
+@@ -685,7 +685,28 @@ OptionsDlg::OptionsDlg(wxWindow* parent, wxWindowID id, const wxString& title, c
      sbSizer_reporterColor->Add(reporterColorSizer, 0, static_cast<int>(wxALL), 5);
  
      sizerDisplay->Add(sbSizer_reporterColor, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);
@@ -154,7 +173,7 @@ index e3693aa7..00961de9 100644
      // Plot settings
      wxStaticBox* sb_PlotSettings = new wxStaticBox(m_displayTab, wxID_ANY, _("Plot settings"));
      wxStaticBoxSizer* sbSizer_PlotSettings =  new wxStaticBoxSizer(sb_PlotSettings, wxVERTICAL);
-@@ -1356,6 +1377,11 @@ void OptionsDlg::ExchangeData(int inout, bool storePersistent)
+@@ -1364,6 +1385,11 @@ void OptionsDlg::ExchangeData(int inout, bool storePersistent)
          m_freedvReporterMsgBackgroundColor->SetColour(msgBackgroundColor);
          m_freedvReporterMsgForegroundColor->SetColour(msgForegroundColor);
  
@@ -164,9 +183,9 @@ index e3693aa7..00961de9 100644
 +        m_groupBoxTintPercent->SetValue((int)wxGetApp().appConfiguration.groupBoxTintPercent);
 +
          // Populate reporting frequency list.
-         for (auto& item : wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyListCentred.get())
+         for (auto& item : wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyList.get())
          {
-@@ -1559,6 +1585,10 @@ void OptionsDlg::ExchangeData(int inout, bool storePersistent)
+@@ -1567,6 +1593,10 @@ void OptionsDlg::ExchangeData(int inout, bool storePersistent)
          wxColour msgForegroundColor = m_freedvReporterMsgForegroundColor->GetColour();
          wxGetApp().appConfiguration.reportingConfiguration.freedvReporterMsgRowForegroundColor = msgForegroundColor.GetAsString(wxC2S_HTML_SYNTAX);
  
@@ -178,7 +197,7 @@ index e3693aa7..00961de9 100644
          std::vector<wxString> tmpList;
          tmpList.reserve(m_freqList->GetCount());
 diff --git a/src/gui/dialogs/dlg_options.h b/src/gui/dialogs/dlg_options.h
-index 7234a47e..37acdad8 100644
+index 8df86695..7dcd145d 100644
 --- a/src/gui/dialogs/dlg_options.h
 +++ b/src/gui/dialogs/dlg_options.h
 @@ -26,6 +26,7 @@
@@ -219,13 +238,26 @@ index 2b040eb6..f4af532d 100644
      }
  
 diff --git a/src/main.cpp b/src/main.cpp
-index 4347bbdf..55e71c84 100644
+index 461614a5..43c3ecaa 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
-@@ -1098,6 +1098,36 @@ void MainFrame::loadConfiguration_()
+@@ -22,6 +22,7 @@
+ 
+ #include <inttypes.h>
+ #include <time.h>
++#include <algorithm>
+ #include <fstream>
+ #include <sstream>
+ #include <iomanip>
+@@ -1098,6 +1099,41 @@ void MainFrame::loadConfiguration_()
      
      statsBox->Show(wxGetApp().appConfiguration.showDecodeStats);
  
++    // Apply persisted left/right ordering to the movable group boxes (also
++    // defaulted to the original hardcoded layout at TopFrame construction
++    // time, same reasoning as showBoxState/tint below).
++    reflowGroupBoxes_();
++
 +    // Apply persisted "Show" menu visibility to the optional group boxes
 +    // (menu items default to checked at construction time, since TopFrame
 +    // itself has no access to appConfiguration -- this is where the real
@@ -259,7 +291,7 @@ index 4347bbdf..55e71c84 100644
      // Initialize FreeDV Reporter as required
      CallAfter(&MainFrame::initializeFreeDVReporter_);
      
-@@ -1122,11 +1152,9 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+@@ -1122,11 +1158,9 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
      // fully optimized for real-time use yet (i.e. it dynamically allocates
      // memory while processing audio).
      SNR_FORMAT_STR("%ddB"),
@@ -272,7 +304,7 @@ index 4347bbdf..55e71c84 100644
      BITS_UNK_LABEL("Bits: unk"),
      ERRS_UNK_LABEL("Errs: unk"),
      BER_UNK_LABEL("BER: unk"),
-@@ -1152,7 +1180,6 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+@@ -1152,7 +1186,6 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
      SetThreadName("GUI");
  
      terminating_ = false;
@@ -280,7 +312,7 @@ index 4347bbdf..55e71c84 100644
      syncState_ = false;
      tabLayoutPersistenceEnabledAtStartup_ = false;
      txChangeoverOccurring_ = false;
-@@ -1405,6 +1432,30 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+@@ -1405,6 +1438,244 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
      g_dump_timing = g_dump_fifo_state = 0;
  }
  
@@ -308,10 +340,224 @@ index 4347bbdf..55e71c84 100644
 +    }
 +}
 +
++// XXX - with really short windows, wxWidgets sometimes doesn't size the
++// components properly until the user resizes the window (even if only by a
++// pixel or two). As a really hacky workaround, we emulate this behavior
++// after any change that shows/hides or moves a group box.
++void MainFrame::nudgeResize_()
++{
++    wxSize size = GetSize();
++    auto w = size.GetWidth();
++    auto h = size.GetHeight();
++    CallAfter([=, this]()
++    {
++        SetSize(w, h);
++    });
++    CallAfter([=, this]()
++    {
++        SetSize(w + 1, h + 1);
++    });
++    CallAfter([=, this]()
++    {
++        SetSize(w, h);
++    });
++}
++
++// Maps a Show-menu/right-click-menu box index (see ID_SHOW_GROUPBOX_BASE) to
++// its TintedGroupBox pointer.
++TintedGroupBox* MainFrame::groupBoxForIndex_(int boxIndex)
++{
++    switch (boxIndex)
++    {
++        case 0: return snrBox;
++        case 1: return levelBox;
++        case 2: return syncBox;
++        case 3: return audioBox;
++        case 4: return logBox;
++        case 5: return reporterBox;
++        case 6: return m_txLevelBox;
++        case 7: return micSpeakerBox;
++        default: return nullptr;
++    }
++}
++
++// Rebuilds leftSizer/rightSizer from the persisted groupBoxLeftOrder/
++// groupBoxRightOrder lists, so a box's side and position within its side
++// (right-click its title -> Hide/Move to other side/Move up/Move down) take
++// effect immediately. The two fixed boxes (statsBox on the left; m_freqBox
++// and controlBox on the right) are never part of either list and are always
++// re-added last, in their original relative order.
++void MainFrame::reflowGroupBoxes_()
++{
++    auto& leftOrder = wxGetApp().appConfiguration.groupBoxLeftOrder;
++    auto& rightOrder = wxGetApp().appConfiguration.groupBoxRightOrder;
++
++    // Defensive repair: if the persisted lists don't between them cover
++    // exactly the 8 movable boxes once each (e.g. a hand-edited or
++    // corrupted config file), fall back to the original hardcoded layout
++    // rather than silently dropping a box from the window entirely.
++    std::vector<int> combined = leftOrder.get();
++    auto rightVec = rightOrder.get();
++    combined.insert(combined.end(), rightVec.begin(), rightVec.end());
++    std::sort(combined.begin(), combined.end());
++    bool valid = (combined.size() == 8);
++    for (int index = 0; valid && index < 8; index++)
++    {
++        valid = (combined[(size_t)index] == index);
++    }
++    if (!valid)
++    {
++        leftOrder = std::vector<int> { 0, 1, 2, 3, 4, 5 };
++        rightOrder = std::vector<int> { 6, 7 };
++    }
++
++    leftSizer->Clear(false);
++    rightSizer->Clear(false);
++
++    for (int index : leftOrder.get())
++    {
++        TintedGroupBox* box = groupBoxForIndex_(index);
++        if (box != nullptr)
++        {
++            leftSizer->Add(box, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
++        }
++    }
++    leftSizer->Add(statsBox, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
++
++    for (int index : rightOrder.get())
++    {
++        TintedGroupBox* box = groupBoxForIndex_(index);
++        if (box != nullptr)
++        {
++            rightSizer->Add(box, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
++        }
++    }
++    rightSizer->Add(m_freqBox, 0, static_cast<int>(wxALL), 2);
++    rightSizer->Add(controlBox, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
++
++    m_panel->Layout();
++    m_panel->Refresh();
++
++    // Deliberately no nudgeResize_() call here: this is also called from
++    // loadConfiguration_() during startup, before the persisted window size
++    // has actually been restored (that restore is itself queued via
++    // CallAfter, further down in loadConfiguration_()). Queuing our own
++    // resize nudge here would capture GetSize() at *this* pre-restore
++    // moment and, once it runs, clobber the real restored size with that
++    // stale one. Callers that change box order at runtime (after startup,
++    // when there's no other resize event to force a reflow) call
++    // nudgeResize_() themselves right after this returns.
++}
++
++// Hides a movable group box -- same effect as unchecking its entry in the
++// Show menu, available directly from its own right-click menu too.
++void MainFrame::hideGroupBox_(int boxIndex)
++{
++    TintedGroupBox* box = groupBoxForIndex_(boxIndex);
++    if (box == nullptr)
++    {
++        return;
++    }
++
++    ConfigurationDataElement<bool>* configValue = nullptr;
++    switch (boxIndex)
++    {
++        case 0: configValue = &wxGetApp().appConfiguration.showSnrBox; break;
++        case 1: configValue = &wxGetApp().appConfiguration.showLevelBox; break;
++        case 2: configValue = &wxGetApp().appConfiguration.showSyncBox; break;
++        case 3: configValue = &wxGetApp().appConfiguration.showAudioRecordingBox; break;
++        case 4: configValue = &wxGetApp().appConfiguration.showLoggingBox; break;
++        case 5: configValue = &wxGetApp().appConfiguration.showReportingBox; break;
++        case 6: configValue = &wxGetApp().appConfiguration.showTxAttenuationBox; break;
++        case 7: configValue = &wxGetApp().appConfiguration.showSpeakerLevelBox; break;
++        default: return;
++    }
++
++    *configValue = false;
++    box->Show(false);
++
++    auto menuItem = showMenu_->FindItem(ID_SHOW_GROUPBOX_BASE + boxIndex);
++    if (menuItem != nullptr)
++    {
++        menuItem->Check(false);
++    }
++
++    wxGetApp().appConfiguration.save(pConfig);
++    nudgeResize_();
++}
++
++// Moves a box to the end of the other side's order list, leaving its
++// existing side's relative order otherwise untouched.
++void MainFrame::moveGroupBoxToOtherSide_(int boxIndex)
++{
++    auto& leftOrder = wxGetApp().appConfiguration.groupBoxLeftOrder;
++    auto& rightOrder = wxGetApp().appConfiguration.groupBoxRightOrder;
++
++    auto leftVec = leftOrder.get();
++    auto rightVec = rightOrder.get();
++
++    auto leftIt = std::find(leftVec.begin(), leftVec.end(), boxIndex);
++    if (leftIt != leftVec.end())
++    {
++        leftVec.erase(leftIt);
++        rightVec.push_back(boxIndex);
++    }
++    else
++    {
++        auto rightIt = std::find(rightVec.begin(), rightVec.end(), boxIndex);
++        if (rightIt == rightVec.end())
++        {
++            return; // not currently in either list -- shouldn't happen
++        }
++        rightVec.erase(rightIt);
++        leftVec.push_back(boxIndex);
++    }
++
++    leftOrder = leftVec;
++    rightOrder = rightVec;
++    wxGetApp().appConfiguration.save(pConfig);
++    reflowGroupBoxes_();
++    nudgeResize_();
++}
++
++// Swaps a box with its neighbour above (direction -1) or below (direction
++// +1) within whichever side's order list currently contains it. A no-op if
++// already at that end (the calling menu item should already be disabled in
++// that case).
++void MainFrame::moveGroupBoxUpDown_(int boxIndex, int direction)
++{
++    auto& leftOrder = wxGetApp().appConfiguration.groupBoxLeftOrder;
++    auto& rightOrder = wxGetApp().appConfiguration.groupBoxRightOrder;
++
++    for (auto* order : { &leftOrder, &rightOrder })
++    {
++        auto vec = order->get();
++        auto it = std::find(vec.begin(), vec.end(), boxIndex);
++        if (it == vec.end())
++        {
++            continue;
++        }
++
++        long pos = it - vec.begin();
++        long newPos = pos + direction;
++        if (newPos < 0 || (size_t)newPos >= vec.size())
++        {
++            return;
++        }
++
++        std::swap(vec[(size_t)pos], vec[(size_t)newPos]);
++        *order = vec;
++        wxGetApp().appConfiguration.save(pConfig);
++        reflowGroupBoxes_();
++        nudgeResize_();
++        return;
++    }
++}
++
  void MainFrame::restoreCallsignListFromCsv_()
  {
      auto csvPath = wxGetApp().appConfiguration.reportingConfiguration.csvLogFilePath.get();
-@@ -1887,7 +1938,7 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -1887,7 +2158,7 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
              if (oldColor != newColor)
              {
                  m_textSync->SetForegroundColour(newColor);
@@ -320,7 +566,7 @@ index 4347bbdf..55e71c84 100644
                  m_textSync->Refresh();
              }
          }
-@@ -2070,36 +2121,6 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2070,36 +2341,6 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          }
          g_mutexProtectingCallbackData.Unlock();
  
@@ -357,7 +603,7 @@ index 4347bbdf..55e71c84 100644
          wxString freqOffset = wxString::Format(FRQ_OFF_FMT, freedvInterface.getCurrentRxModemOffset());
          m_textFreqOffset->SetLabel(freqOffset);
  
-@@ -2296,8 +2317,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2296,8 +2537,7 @@ void MainFrame::performFreeDVOn_()
      executeOnUiThreadAndWait_([&]() 
      {
          m_textSync->Enable();
@@ -367,7 +613,7 @@ index 4347bbdf..55e71c84 100644
          // Default voice keyer sample rate to 8K. The exact voice keyer
          // sample rate will be determined when the .wav file is loaded.
          g_sfTxFs = FS;
-@@ -2624,7 +2644,6 @@ void MainFrame::performFreeDVOff_()
+@@ -2620,7 +2860,6 @@ void MainFrame::performFreeDVOff_()
      executeOnUiThreadAndWait_([&]() 
      {
          m_textSync->Disable();
@@ -376,7 +622,7 @@ index 4347bbdf..55e71c84 100644
          m_togBtnAnalog->Disable();
          m_btnTogPTT->Disable();
 diff --git a/src/main.h b/src/main.h
-index eacfd39a..81b03a6e 100644
+index 342c032b..a249afb3 100644
 --- a/src/main.h
 +++ b/src/main.h
 @@ -374,7 +374,12 @@ class MainFrame : public TopFrame
@@ -410,13 +656,14 @@ index eacfd39a..81b03a6e 100644
          void OnBerReset( wxCommandEvent& event ) override;
  
          //System Events
-@@ -507,14 +509,15 @@ class MainFrame : public TopFrame
+@@ -507,14 +509,16 @@ class MainFrame : public TopFrame
  
          void OnToggleReporterVisibility (wxCommandEvent& event) override;
          void OnTogBtnTune(wxCommandEvent& event) override;
 -        
 +
 +        void OnShowGroupBox(wxCommandEvent& event) override;
++        void OnGroupBoxRightClick(int boxIndex) override;
 +
 +
      private:
@@ -430,7 +677,7 @@ index eacfd39a..81b03a6e 100644
          const wxString BITS_UNK_LABEL;
          const wxString ERRS_UNK_LABEL;
          const wxString BER_UNK_LABEL;
-@@ -599,7 +602,6 @@ class MainFrame : public TopFrame
+@@ -599,7 +603,6 @@ class MainFrame : public TopFrame
          wxMenuItem* recordNewVoiceKeyerFileMenuItem_;
  
          bool terminating_; // used for terminating FreeDV
@@ -438,19 +685,33 @@ index eacfd39a..81b03a6e 100644
          bool syncState_; // GUI copy of current sync state
  
          // Caches appConfiguration.experimentalFeatures as of the last tab layout load
-@@ -611,6 +613,7 @@ class MainFrame : public TopFrame
+@@ -611,6 +614,13 @@ class MainFrame : public TopFrame
          bool        validateSoundCardSetup();
          
          void loadConfiguration_();
 +        void applyGroupBoxTint_();
++        void nudgeResize_();
++        TintedGroupBox* groupBoxForIndex_(int boxIndex);
++        void reflowGroupBoxes_();
++        void hideGroupBox_(int boxIndex);
++        void moveGroupBoxToOtherSide_(int boxIndex);
++        void moveGroupBoxUpDown_(int boxIndex, int direction);
          void restoreCallsignListFromCsv_();
          void resetStats_();
          void exportConfiguration_(wxConfigBase* config);
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index 7ee955e6..5ea66cc0 100644
+index e2d15f48..13e79f64 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
-@@ -168,6 +168,9 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
+@@ -10,6 +10,7 @@
+ #include <cmath>
+ #include <cstring>
+ #include <vector>
++#include <algorithm>
+ 
+ #include "main.h"
+ 
+@@ -168,6 +169,9 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
          // Show/hide frequency box based on CAT control configuration.
          m_freqBox->Show(isFrequencyControlEnabled_());
          
@@ -460,7 +721,30 @@ index 7ee955e6..5ea66cc0 100644
          // Show/hide stats box
          statsBox->Show(wxGetApp().appConfiguration.showDecodeStats);
  
-@@ -375,7 +378,7 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+@@ -176,21 +180,7 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
+         // by a pixel or two). As a really hacky workaround, we emulate this behavior
+         // when restoring window sizing. These resize events also happen after configuration
+         // is restored but I'm not sure this is necessary.
+-        wxSize size = GetSize();
+-        auto w = size.GetWidth();
+-        auto h = size.GetHeight();
+-        CallAfter([=, this]()
+-        {
+-            SetSize(w, h);
+-        });
+-        CallAfter([=, this]()
+-        {
+-            SetSize(w + 1, h + 1);
+-        });
+-        CallAfter([=, this]()
+-        {
+-            SetSize(w, h);
+-        });
++        nudgeResize_();
+ 
+         // Show/hide callsign combo box based on reporting Status
+         if (wxGetApp().appConfiguration.reportingConfiguration.reportingEnabled)
+@@ -376,7 +366,7 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
                  m_txtModeStatus->Enable(true);
                  break;
              default:
@@ -469,7 +753,7 @@ index 7ee955e6..5ea66cc0 100644
                  m_txtModeStatus->Enable(false);
                  break;
          }
-@@ -496,7 +499,7 @@ void MainFrame::onRadioConnected_(IRigController*)
+@@ -484,7 +474,7 @@ void MainFrame::onRadioConnected_(IRigController*)
  void MainFrame::onRadioDisconnected_(IRigController*)
  {
      CallAfter([&]() {
@@ -478,7 +762,7 @@ index 7ee955e6..5ea66cc0 100644
          m_txtModeStatus->Enable(false);
      });
  }
-@@ -1460,8 +1463,7 @@ void MainFrame::togglePTT(void) {
+@@ -1448,8 +1438,7 @@ void MainFrame::togglePTT(void) {
          // enable sync text
  
          m_textSync->Enable();
@@ -488,7 +772,7 @@ index 7ee955e6..5ea66cc0 100644
          // Re-enable buttons.
          m_togBtnOnOff->Enable(true);
          m_togBtnAnalog->Enable(true);
-@@ -1506,7 +1508,6 @@ void MainFrame::togglePTT(void) {
+@@ -1494,7 +1483,6 @@ void MainFrame::togglePTT(void) {
          // disable sync text
  
          m_textSync->Disable();
@@ -496,7 +780,7 @@ index 7ee955e6..5ea66cc0 100644
  
          // Disable On/Off button.
          m_togBtnOnOff->Enable(false);
-@@ -1795,18 +1796,6 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+@@ -1751,18 +1739,6 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
      event.Skip();
  }
  
@@ -515,7 +799,7 @@ index 7ee955e6..5ea66cc0 100644
  void MainFrame::OnLogQSO(wxCommandEvent&)
  {
      wxString dxCall;
-@@ -1903,7 +1892,7 @@ void MainFrame::OnRightClickCallsignList(wxMouseEvent&)
+@@ -1859,7 +1835,7 @@ void MainFrame::OnRightClickCallsignList(wxMouseEvent&)
          index = m_lastReportedCallsignListView->GetFirstSelected();
      }
      m_cboLastReportedCallsigns->SetText("");
@@ -524,7 +808,7 @@ index 7ee955e6..5ea66cc0 100644
  }
  
  void MainFrame::OnOpenCallsignList( wxCommandEvent& event )
-@@ -1919,7 +1908,7 @@ void MainFrame::OnCloseCallsignList( wxCommandEvent& event )
+@@ -1875,7 +1851,7 @@ void MainFrame::OnCloseCallsignList( wxCommandEvent& event )
      {
          // Make sure we're not selected if no callsigns selected.
          wxGetApp().lastSelectedLoggingRow = MainApp::UNSELECTED;
@@ -533,7 +817,7 @@ index 7ee955e6..5ea66cc0 100644
      }
      event.Skip();
  }
-@@ -2080,11 +2069,6 @@ void MainFrame::OnSystemColorChanged(wxSysColourChangedEvent& event)
+@@ -2030,11 +2006,6 @@ void MainFrame::OnSystemColorChanged(wxSysColourChangedEvent& event)
      TopFrame::OnSystemColorChanged(event);
  }
  
@@ -542,10 +826,10 @@ index 7ee955e6..5ea66cc0 100644
 -    clickTune(FDMDV_FCENTRE);
 -}
 -
- void MainFrame::updateFreqBoxLabel_()
+ void MainFrame::updateReportingFreqList_()
  {
-     // The centre-frequency convention only makes sense in digital mode (see
-@@ -2213,6 +2197,53 @@ void MainFrame::OnToggleReporterVisibility (wxCommandEvent&)
+     uint64_t prevFreqInt = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency;
+@@ -2124,6 +2095,79 @@ void MainFrame::OnToggleReporterVisibility (wxCommandEvent&)
      wxGetApp().appConfiguration.reportingConfiguration.freedvReporterForcedOff = m_reporterHidden->GetValue();
  }
  
@@ -576,24 +860,50 @@ index 7ee955e6..5ea66cc0 100644
 +    menuItem->Check(newValue);
 +    box->Show(newValue);
 +
-+    // See the equivalent block in OnToolsOptions() -- wxWidgets sometimes
-+    // doesn't reflow short windows properly after a Show()/Hide() until a
-+    // resize happens, so nudge it with one.
-+    wxSize size = GetSize();
-+    auto w = size.GetWidth();
-+    auto h = size.GetHeight();
-+    CallAfter([=, this]()
++    nudgeResize_();
++}
++
++// Right-click on a movable group box's title/background (Stage 10): builds
++// a Hide/Move to other side/Move up/Move down popup menu for that one box.
++// boxIndex uses the same 0-7 enumeration as the Show menu/OnShowGroupBox.
++void MainFrame::OnGroupBoxRightClick(int boxIndex)
++{
++    static const wxString labels[8] = {
++        _("SNR"), _("Level"), _("Sync"), _("Audio Recording"),
++        _("Logging"), _("FDV Reporting"), _("TX Attenuation"), _("Speaker Level"),
++    };
++    if (boxIndex < 0 || boxIndex > 7)
 +    {
-+        SetSize(w, h);
-+    });
-+    CallAfter([=, this]()
-+    {
-+        SetSize(w + 1, h + 1);
-+    });
-+    CallAfter([=, this]()
-+    {
-+        SetSize(w, h);
-+    });
++        return;
++    }
++    wxString label = labels[boxIndex];
++
++    auto& leftOrder = wxGetApp().appConfiguration.groupBoxLeftOrder;
++    auto& rightOrder = wxGetApp().appConfiguration.groupBoxRightOrder;
++
++    auto leftVec = leftOrder.get();
++    auto rightVec = rightOrder.get();
++    bool onLeft = std::find(leftVec.begin(), leftVec.end(), boxIndex) != leftVec.end();
++    std::vector<int>& sameSideVec = onLeft ? leftVec : rightVec;
++    auto it = std::find(sameSideVec.begin(), sameSideVec.end(), boxIndex);
++    bool isFirst = (it == sameSideVec.begin());
++    bool isLast = (it != sameSideVec.end()) && ((it + 1) == sameSideVec.end());
++
++    wxMenu menu;
++    auto hideItem = menu.Append(wxID_ANY, wxString::Format(_("Hide %s"), label));
++    menu.AppendSeparator();
++    auto moveSideItem = menu.Append(wxID_ANY, onLeft ? _("Move to Right Side") : _("Move to Left Side"));
++    auto moveUpItem = menu.Append(wxID_ANY, _("Move Up"));
++    moveUpItem->Enable(!isFirst);
++    auto moveDownItem = menu.Append(wxID_ANY, _("Move Down"));
++    moveDownItem->Enable(!isLast);
++
++    menu.Bind(wxEVT_MENU, [this, boxIndex](wxCommandEvent&) { hideGroupBox_(boxIndex); }, hideItem->GetId());
++    menu.Bind(wxEVT_MENU, [this, boxIndex](wxCommandEvent&) { moveGroupBoxToOtherSide_(boxIndex); }, moveSideItem->GetId());
++    menu.Bind(wxEVT_MENU, [this, boxIndex](wxCommandEvent&) { moveGroupBoxUpDown_(boxIndex, -1); }, moveUpItem->GetId());
++    menu.Bind(wxEVT_MENU, [this, boxIndex](wxCommandEvent&) { moveGroupBoxUpDown_(boxIndex, +1); }, moveDownItem->GetId());
++
++    PopupMenu(&menu);
 +}
 +
  void MainFrame::OnToolsExportConfigUI(wxUpdateUIEvent& event)
@@ -667,7 +977,7 @@ index 7f1b0b69..8ef04540 100644
              
                  if (!g_tx.load(std::memory_order_acquire))
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 052b752a..654e8dd6 100644
+index c374dd7f..4655b03c 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -20,8 +20,10 @@
@@ -681,7 +991,7 @@ index 052b752a..654e8dd6 100644
  
  #include <wx/regex.h>
  #include <wx/wrapsizer.h>
-@@ -400,6 +402,106 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
+@@ -400,6 +402,135 @@ bool TabFreeAuiNotebook::LoadPerspective(const wxString& layout) {
      return ok;
  }
  
@@ -738,7 +1048,7 @@ index 052b752a..654e8dd6 100644
 +    }
 +}
 +
-+TintedGroupBox::TintedGroupBox(wxWindow* parent, const wxString& title, wxOrientation orientation)
++TintedGroupBox::TintedGroupBox(wxWindow* parent, const wxString& title, wxOrientation orientation, int contextMenuBoxIndex)
 +    : wxPanel(parent, wxID_ANY)
 +{
 +    SetBackgroundColour(GroupBoxBackgroundColour());
@@ -766,6 +1076,35 @@ index 052b752a..654e8dd6 100644
 +    SetSizer(outerSizer);
 +
 +    s_tintedGroupBoxes.push_back(this);
++
++    // Only the movable "Show menu" boxes are constructed with a real
++    // contextMenuBoxIndex -- wire those up so right-clicking the title or
++    // background pops up the Hide/Move menu (Stage 10). Forwards straight to
++    // TopFrame::OnGroupBoxRightClick() rather than through the wx event
++    // system, since there's nothing else that needs to intercept it.
++    if (contextMenuBoxIndex >= 0)
++    {
++        auto forward = [this, contextMenuBoxIndex]()
++        {
++            static_cast<TopFrame*>(wxGetTopLevelParent(this))->OnGroupBoxRightClick(contextMenuBoxIndex);
++        };
++
++#if wxCHECK_VERSION(3, 3, 0) && defined(__WXGTK__)
++        // See the equivalent comment by m_txLevelBox's own context menu
++        // wiring further down this file: wxGTK 3.3+ fires wxEVT_CONTEXT_MENU
++        // on button-press for these widget types, causing GTK to dismiss
++        // PopupMenu on button release; use RIGHT_UP instead. MSW/OSX are
++        // unaffected, so this is GTK-specific.
++        this->Bind(wxEVT_RIGHT_UP, [forward](wxMouseEvent&) { forward(); });
++        m_title->Bind(wxEVT_RIGHT_UP, [forward](wxMouseEvent&) { forward(); });
++#else
++        // wxGTK < 3.3 does not generate RIGHT_UP for windowless widget types;
++        // CONTEXT_MENU works without the dismiss issue. (Also used as-is on
++        // MSW/OSX regardless of wx version -- see above.)
++        this->Bind(wxEVT_CONTEXT_MENU, [forward](wxContextMenuEvent&) { forward(); });
++        m_title->Bind(wxEVT_CONTEXT_MENU, [forward](wxContextMenuEvent&) { forward(); });
++#endif
++    }
 +}
 +
 +TintedGroupBox::~TintedGroupBox()
@@ -788,7 +1127,7 @@ index 052b752a..654e8dd6 100644
  //=========================================================================
  // Code that lays out the main application window
  //=========================================================================
-@@ -493,6 +595,34 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -493,6 +624,34 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
  
      m_menubarMain->Append(tools, _("&Tools"));
  
@@ -823,14 +1162,17 @@ index 052b752a..654e8dd6 100644
      help = new wxMenu();
      wxMenuItem* m_menuItemHelpUpdates;
      m_menuItemHelpUpdates = new wxMenuItem(help, wxID_ANY, wxString(_("&Check for Updates")) , _("Checks for updates to FreeDV"), wxITEM_NORMAL);
-@@ -526,137 +656,118 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -524,139 +683,120 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     // Left side
+     //=====================================================
      wxSizer* leftOuterSizer = new wxBoxSizer(wxVERTICAL);
-     wxSizer* leftSizer = new wxWrapSizer(wxVERTICAL, wxREMOVE_LEADING_SPACES);
+-    wxSizer* leftSizer = new wxWrapSizer(wxVERTICAL, wxREMOVE_LEADING_SPACES);
++    leftSizer = new wxWrapSizer(wxVERTICAL, wxREMOVE_LEADING_SPACES);
  
 -    wxStaticBoxSizer* snrSizer;
 -    wxStaticBox* snrBox = new wxStaticBox(m_panel, wxID_ANY, _("SNR"), wxDefaultPosition, wxSize(100,-1));
 -    snrSizer = new wxStaticBoxSizer(snrBox, wxVERTICAL);
-+    snrBox = new TintedGroupBox(m_panel, _("SNR"), wxVERTICAL);
++    snrBox = new TintedGroupBox(m_panel, _("SNR"), wxVERTICAL, 0);
  
      //------------------------------
      // S/N ratio Gauge (vert. bargraph)
@@ -865,7 +1207,7 @@ index 052b752a..654e8dd6 100644
 -    wxStaticBoxSizer* levelSizer;
 -    wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
 -    levelSizer = new wxStaticBoxSizer(levelBox, wxHORIZONTAL);
-+    levelBox = new TintedGroupBox(m_panel, _("Level"), wxHORIZONTAL);
++    levelBox = new TintedGroupBox(m_panel, _("Level"), wxHORIZONTAL, 1);
  
      m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 100, wxDefaultPosition, wxSize(100,15), wxGA_SMOOTH);
      m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode.  If Red you should reduce your levels"));
@@ -887,7 +1229,7 @@ index 052b752a..654e8dd6 100644
 -    wxStaticBoxSizer* sbSizer3_33;
 -    wxStaticBox* syncBox = new wxStaticBox(m_panel, wxID_ANY, _("Sync"), wxDefaultPosition, wxSize(100,-1));
 -    sbSizer3_33 = new wxStaticBoxSizer(syncBox, wxVERTICAL);
-+    syncBox = new TintedGroupBox(m_panel, _("Sync"), wxVERTICAL);
++    syncBox = new TintedGroupBox(m_panel, _("Sync"), wxVERTICAL, 2);
  
 -    m_textSync = new wxStaticText(syncBox, wxID_ANY, wxT("Modem"), wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE);
 -    sbSizer3_33->Add(m_textSync, 0, wxALIGN_CENTER_HORIZONTAL, 1);
@@ -911,7 +1253,7 @@ index 052b752a..654e8dd6 100644
 -    wxStaticBox* audioBox = new wxStaticBox(m_panel, wxID_ANY, _("Audio Recording"), wxDefaultPosition, wxSize(100,-1));
 -    wxStaticBoxSizer* sbSizerAudioRecordPlay = new wxStaticBoxSizer(audioBox, wxVERTICAL);
 -    
-+    audioBox = new TintedGroupBox(m_panel, _("Audio Recording"), wxVERTICAL);
++    audioBox = new TintedGroupBox(m_panel, _("Audio Recording"), wxVERTICAL, 3);
 +
      m_audioRecord = new wxToggleButton(audioBox, wxID_ANY, _("Record"), wxDefaultPosition, wxDefaultSize, 0);
      m_audioRecord->SetToolTip(_("Records incoming over the air signals as well as anything transmitted."));
@@ -928,7 +1270,7 @@ index 052b752a..654e8dd6 100644
 -    wxStaticBox* logBox = new wxStaticBox(m_panel, wxID_ANY, _("Logging"), wxDefaultPosition, wxSize(100,-1));
 -    wxStaticBoxSizer* sbSizerLogging = new wxStaticBoxSizer(logBox, wxVERTICAL);
 -    
-+    logBox = new TintedGroupBox(m_panel, _("Logging"), wxVERTICAL);
++    logBox = new TintedGroupBox(m_panel, _("Logging"), wxVERTICAL, 4);
 +
      m_logQSO = new wxButton(logBox, wxID_ANY, _("Log QSO"), wxDefaultPosition, wxDefaultSize, 0);
      m_logQSO->SetToolTip(_("Logs most recent QSO."));
@@ -945,7 +1287,7 @@ index 052b752a..654e8dd6 100644
      //------------------------------
 -    wxStaticBox* reporterBox = new wxStaticBox(m_panel, wxID_ANY, _("FDV Reporting"), wxDefaultPosition, wxSize(100,-1));
 -    wxStaticBoxSizer* sbSizerReporterBox = new wxStaticBoxSizer(reporterBox, wxVERTICAL);
-+    reporterBox = new TintedGroupBox(m_panel, _("FDV Reporting"), wxVERTICAL);
++    reporterBox = new TintedGroupBox(m_panel, _("FDV Reporting"), wxVERTICAL, 5);
  
      m_reporterHidden = new wxToggleButton(reporterBox, wxID_ANY, _("Turn Off"), wxDefaultPosition, wxDefaultSize, 0);
      m_reporterHidden->SetToolTip(_("Quick ON/OFF for FreeDV Reporting, when enabled in Tools->Settings->Reporting."));
@@ -1000,7 +1342,7 @@ index 052b752a..654e8dd6 100644
  
      leftSizer->SetMinSize(wxSize(-1, 375));
      
-@@ -688,32 +799,28 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -688,32 +828,28 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
  
      // lower middle used for user ID
  
@@ -1040,7 +1382,7 @@ index 052b752a..654e8dd6 100644
      m_lastReportedCallsignListView->InsertColumn(0, wxT("Callsign"), wxLIST_FORMAT_LEFT, 100);
      m_lastReportedCallsignListView->InsertColumn(1, wxT("Frequency"), wxLIST_FORMAT_RIGHT, 75);
      m_lastReportedCallsignListView->InsertColumn(2, wxT("Date/Time"), wxLIST_FORMAT_LEFT, 175);
-@@ -722,9 +829,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -722,9 +858,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      bSizer15->Add(m_txtCtrlCallSign, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 5);
      bSizer15->Add(m_cboLastReportedCallsigns, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 5);
  
@@ -1053,19 +1395,19 @@ index 052b752a..654e8dd6 100644
      centerSizer->SetMinSize(wxSize(375,375));
      bSizer1->Add(centerSizer, 1, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 1);
      
-@@ -734,9 +841,8 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -734,9 +870,8 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      rightSizer = new wxWrapSizer(wxVERTICAL, wxREMOVE_LEADING_SPACES);
  
      // Transmit Level slider
 -    m_txLevelBox = new wxStaticBox(m_panel, wxID_ANY, _("TX &Attenuation"), wxDefaultPosition, wxSize(100,-1));
 -    wxBoxSizer* txLevelSizer = new wxStaticBoxSizer(m_txLevelBox, wxVERTICAL);
 -    
-+    m_txLevelBox = new TintedGroupBox(m_panel, _("TX &Attenuation"), wxVERTICAL);
++    m_txLevelBox = new TintedGroupBox(m_panel, _("TX &Attenuation"), wxVERTICAL, 6);
 +
      wxBoxSizer* txBtnSizer = new wxBoxSizer(wxHORIZONTAL);
      m_btnTxLevelMM = new wxButton(m_txLevelBox, wxID_ANY, _("<<"), wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
      m_btnTxLevelM  = new wxButton(m_txLevelBox, wxID_ANY, _("<"),  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-@@ -755,84 +861,81 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -755,84 +890,81 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_txtTxLevelNum = new wxStaticText(m_txLevelBox, wxID_ANY, fmtString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER | wxST_NO_AUTORESIZE);
      m_txtTxLevelNum->SetToolTip(_("Use mouse scroll wheel to adjust up or down\nRight click for more options"));
      m_txtTxLevelNum->SetMinSize(wxSize(100,-1));
@@ -1083,7 +1425,7 @@ index 052b752a..654e8dd6 100644
 -    micSpeakerBox = new wxStaticBox(m_panel, wxID_ANY, _("Speaker &Level"), wxDefaultPosition, wxSize(100,-1));
 -    wxBoxSizer* micSpeakerLevelSizer = new wxStaticBoxSizer(micSpeakerBox, wxVERTICAL);
 -    
-+    micSpeakerBox = new TintedGroupBox(m_panel, _("Speaker &Level"), wxVERTICAL);
++    micSpeakerBox = new TintedGroupBox(m_panel, _("Speaker &Level"), wxVERTICAL, 7);
 +
      // Sliders are integer values, so we're multiplying min/max by 10 here to allow 1 decimal precision.
      m_sliderMicSpkrLevel = new wxSlider(micSpeakerBox, wxID_ANY, 0, -200, 200, wxDefaultPosition, wxDefaultSize, wxSL_AUTOTICKS);
@@ -1116,8 +1458,8 @@ index 052b752a..654e8dd6 100644
 +    rightSizer->Add(micSpeakerBox, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
 +
      // Frequency text field (PSK Reporter)
--    m_freqBox = new wxStaticBox(m_panel, wxID_ANY, _("Center Freq. (MHz)"), wxDefaultPosition, wxSize(100,-1));
-+    m_freqBox = new TintedGroupBox(m_panel, _("Center Freq. (MHz)"), wxHORIZONTAL);
+-    m_freqBox = new wxStaticBox(m_panel, wxID_ANY, _("Radio Freq. (MHz)"), wxDefaultPosition, wxSize(100,-1));
++    m_freqBox = new TintedGroupBox(m_panel, _("Radio Freq. (MHz)"), wxHORIZONTAL);
  
 -    wxBoxSizer* reportFrequencySizer = new wxStaticBoxSizer(m_freqBox, wxHORIZONTAL);
 -    
@@ -1148,7 +1490,7 @@ index 052b752a..654e8dd6 100644
 -    wxStaticBoxSizer* sbSizer5;
 -    wxStaticBox* controlBox = new wxStaticBox(m_panel, wxID_ANY, _("Control"), wxDefaultPosition, wxSize(100,-1));
 -    sbSizer5 = new wxStaticBoxSizer(controlBox, wxVERTICAL);
-+    TintedGroupBox* controlBox = new TintedGroupBox(m_panel, _("Control"), wxVERTICAL);
++    controlBox = new TintedGroupBox(m_panel, _("Control"), wxVERTICAL);
  
      //-------------------------------
      // Stop/Stop signal processing (rx and tx)
@@ -1178,7 +1520,7 @@ index 052b752a..654e8dd6 100644
      m_btnTogTune->Enable(false);
  
      //------------------------------
-@@ -840,23 +943,32 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -840,23 +972,32 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //------------------------------
      m_togBtnVoiceKeyer = new wxToggleButton(controlBox, wxID_ANY, _("Start Voice &Keyer"), wxDefaultPosition, wxDefaultSize, 0);
      m_togBtnVoiceKeyer->SetToolTip(_("Toggle Voice Keyer. Right-click for additional options."));
@@ -1218,7 +1560,7 @@ index 052b752a..654e8dd6 100644
  
      //=====================================================
      // End of layout
-@@ -865,7 +977,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -865,7 +1006,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      //-------------------
      // Tab ordering for accessibility
      //-------------------
@@ -1227,7 +1569,7 @@ index 052b752a..654e8dd6 100644
      
      m_togBtnOnOff->MoveBeforeInTabOrder(m_togBtnAnalog);
      m_togBtnAnalog->MoveBeforeInTabOrder(m_btnTogTune);
-@@ -933,9 +1045,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -933,9 +1074,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      m_btnTogPTT->Connect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
  #endif
  
@@ -1237,7 +1579,7 @@ index 052b752a..654e8dd6 100644
  
          
      m_btnTxLevelMM->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTxLevelDecrBig), NULL, this);
-@@ -1037,8 +1147,6 @@ TopFrame::~TopFrame()
+@@ -1037,8 +1176,6 @@ TopFrame::~TopFrame()
      m_togBtnVoiceKeyer->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnVoiceKeyerRightClick), NULL, this);
      m_btnTogPTT->Disconnect(wxEVT_CONTEXT_MENU, wxContextMenuEventHandler(TopFrame::OnTogBtnPTTRightClick), NULL, this);
  #endif
@@ -1247,7 +1589,7 @@ index 052b752a..654e8dd6 100644
      m_audioRecord->Disconnect(wxEVT_COMMAND_TOGGLEBUTTON_CLICKED, wxCommandEventHandler(TopFrame::OnTogBtnRecord), NULL, this);
      
 diff --git a/src/topFrame.h b/src/topFrame.h
-index cf4144dd..86bb446f 100644
+index cf4144dd..3bbb37ce 100644
 --- a/src/topFrame.h
 +++ b/src/topFrame.h
 @@ -43,8 +43,8 @@
@@ -1271,7 +1613,7 @@ index cf4144dd..86bb446f 100644
  class wxListViewComboPopup;
  
  // Popup position for a right-click menu anchored to the left of btn (to
-@@ -84,6 +88,41 @@ class wxListViewComboPopup;
+@@ -84,6 +88,53 @@ class wxListViewComboPopup;
  // returns wxDefaultPosition there and lets GTK position it automatically.
  wxPoint LeftOffsetContextMenuPosition(wxWindow* btn);
  
@@ -1282,10 +1624,22 @@ index cf4144dd..86bb446f 100644
 +// SetBackgroundColour on Windows/macOS, so neither tinting the box directly
 +// nor nesting a panel inside it can cover the whole group cleanly. Add
 +// children to this panel (as their parent) and to GetContentSizer().
++//
++// Passing a non-negative contextMenuBoxIndex (the same 0-7 index used by the
++// Show menu/ID_SHOW_GROUPBOX_BASE) makes the box's title/background
++// right-clickable: it wires up its own context-menu handling and forwards to
++// TopFrame::OnGroupBoxRightClick(index) so the box can be hidden/moved
++// (Stage 10). This is deliberately a separate index, not the box's own
++// wxWindowID -- the box's actual id stays wxID_ANY regardless, so this
++// doesn't collide with the Show menu's own wxMenuItem ids, which happen to
++// live in the same numeric ID space (ID_SHOW_GROUPBOX_BASE onwards) but are
++// a completely different kind of object. Boxes not part of that set
++// (Control, Radio Freq, Stats, etc.) just leave the default -1 and get no
++// context menu.
 +class TintedGroupBox : public wxPanel
 +{
 +    public:
-+        TintedGroupBox(wxWindow* parent, const wxString& title, wxOrientation orientation);
++        TintedGroupBox(wxWindow* parent, const wxString& title, wxOrientation orientation, int contextMenuBoxIndex = -1);
 +        ~TintedGroupBox();
 +
 +        virtual void SetLabel(const wxString& label) override;
@@ -1313,7 +1667,7 @@ index cf4144dd..86bb446f 100644
  ///////////////////////////////////////////////////////////////////////////////
  /// Class TopFrame
  ///////////////////////////////////////////////////////////////////////////////
-@@ -97,13 +136,15 @@ class TopFrame : public wxFrame
+@@ -97,13 +148,15 @@ class TopFrame : public wxFrame
          wxMenu* settings;
          wxMenu* tools;
          wxMenu* help;
@@ -1330,7 +1684,7 @@ index cf4144dd..86bb446f 100644
          wxTextCtrl*   m_txtCtrlCallSign;
          
          wxComboCtrl*   m_cboLastReportedCallsigns;
-@@ -119,11 +160,14 @@ class TopFrame : public wxFrame
+@@ -119,11 +172,14 @@ class TopFrame : public wxFrame
          wxSlider* m_sliderMicSpkrLevel;
          wxStaticText* m_txtMicSpkrLevelNum;
          
@@ -1348,7 +1702,7 @@ index cf4144dd..86bb446f 100644
          wxStaticText  *m_textBits;
          wxStaticText  *m_textErrors;
          wxStaticText  *m_textBER;
-@@ -133,22 +177,24 @@ class TopFrame : public wxFrame
+@@ -133,22 +189,31 @@ class TopFrame : public wxFrame
          wxStaticText  *m_textSyncMetric;
          wxStaticText  *m_textCodec2Var;
  
@@ -1364,12 +1718,19 @@ index cf4144dd..86bb446f 100644
 +        TintedGroupBox* logBox;
          wxButton*     m_logQSO;
  
++        // Both need to be reachable at runtime (not just constructor-local)
++        // so a box can be moved between sides / reordered (Stage 10).
++        wxSizer* leftSizer;
          wxSizer* rightSizer;
  
 -        wxStaticBox* modeBox;
 -        wxStaticBoxSizer* sbSizer_mode;
 -        
 +        TintedGroupBox* modeBox;
++
++        // Fixed (non-movable) box on the right, kept last in rightSizer
++        // across any reorder -- see MainFrame::reflowGroupBoxes_().
++        TintedGroupBox* controlBox;
 +
          wxMenuItem* m_menuItemPlayFileFromRadio;
          wxMenuItem* m_menuItemExportConfig;
@@ -1379,7 +1740,7 @@ index cf4144dd..86bb446f 100644
          wxToggleButton *m_reporterHidden;
      
          // Virtual event handlers, override them in your derived class
-@@ -167,7 +213,6 @@ class TopFrame : public wxFrame
+@@ -167,7 +232,6 @@ class TopFrame : public wxFrame
          virtual void OnToolsSetupWizard( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnToolsSetupWizardUI( wxUpdateUIEvent& event ) { event.Skip(); }
          virtual void OnToolsOptions( wxCommandEvent& event ) { event.Skip(); }
@@ -1387,7 +1748,7 @@ index cf4144dd..86bb446f 100644
  
          virtual void OnToolsUDP( wxCommandEvent& event ) { event.Skip(); }
          virtual void OnToolsOptionsUI( wxUpdateUIEvent& event ) { event.Skip(); }
-@@ -205,7 +250,6 @@ class TopFrame : public wxFrame
+@@ -205,7 +269,6 @@ class TopFrame : public wxFrame
          virtual void OnTogBtnPTT_UI(wxUpdateUIEvent& event ) { event.Skip(); }
          virtual void OnTogBtnOnOffUI(wxUpdateUIEvent& event ) { event.Skip(); }
  
@@ -1395,16 +1756,30 @@ index cf4144dd..86bb446f 100644
          virtual void OnBerReset( wxCommandEvent& event ) { event.Skip(); }
          
          virtual void OnChangeTxMode( wxCommandEvent& event ) { event.Skip(); }
-@@ -239,6 +283,8 @@ class TopFrame : public wxFrame
+@@ -239,9 +302,21 @@ class TopFrame : public wxFrame
          
          virtual void OnTogBtnTune(wxCommandEvent& event) { event.Skip(); }
  
 +        virtual void OnShowGroupBox(wxCommandEvent& event) { event.Skip(); }
 +
          void setVoiceKeyerButtonLabel_(wxString filename);
-         
+-        
++
      public:
-@@ -249,9 +295,9 @@ class TopFrame : public wxFrame
++        // Called directly (not routed through the wx event system, hence
++        // public rather than protected like the other virtual handlers
++        // above -- TintedGroupBox is a sibling class, not a subclass) by a
++        // TintedGroupBox constructed with a real id when its title/background
++        // is right-clicked, with boxIndex = id - ID_SHOW_GROUPBOX_BASE. Empty
++        // here for the same reason as OnShowGroupBox: TopFrame has no access
++        // to wxGetApp()/appConfiguration, so the real menu (Hide/Move to
++        // other side/Move up/down) is only built in MainFrame's override.
++        virtual void OnGroupBoxRightClick(int) { }
++
+         wxToggleButton* m_togBtnOnOff;
+         wxToggleButton* m_togBtnAnalog;
+         wxToggleButton* m_togBtnVoiceKeyer;
+@@ -249,9 +324,9 @@ class TopFrame : public wxFrame
          wxToggleButton* m_btnTogTune;
          wxAuiNotebook* m_auiNbookCtrl;
          wxComboBox*   m_cboReportFrequency;
