@@ -1,0 +1,60 @@
+diff --git a/src/gui/util/wxListViewComboPopup.cpp b/src/gui/util/wxListViewComboPopup.cpp
+index 2b040eb6..f4af532d 100644
+--- a/src/gui/util/wxListViewComboPopup.cpp
++++ b/src/gui/util/wxListViewComboPopup.cpp
+@@ -60,7 +60,10 @@ void wxListViewComboPopup::OnMouseMove(wxMouseEvent& event)
+ 
+     if (m_value != -1)
+     {
+-        Select(m_value, false);
++        if (m_value < wxListView::GetItemCount())
++        {
++            Select(m_value, false);
++        }
+         m_value = -1;
+     }
+ 
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index f5a61181..eeb3a71f 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1985,8 +1985,15 @@ void MainFrame::OnRightClickCallsignList(wxMouseEvent&)
+         m_lastReportedCallsignListView->Select(index, false);
+         index = m_lastReportedCallsignListView->GetFirstSelected();
+     }
+-    m_cboLastReportedCallsigns->SetText("");
+-    m_BtnCallSignReset->SetFocus();
++    // Deselect only -- leave the displayed callsign text alone, consistent
++    // with how the FreeDV Reporter list's right-click-to-deselect behaves.
++    // See OnCloseCallsignList() for why this is deferred and followed by a
++    // forced repaint.
++    CallAfter([this]() {
++        m_BtnCallSignReset->SetFocus();
++        m_cboLastReportedCallsigns->Refresh();
++        m_cboLastReportedCallsigns->Update();
++    });
+ }
+ 
+ void MainFrame::OnOpenCallsignList( wxCommandEvent& event )
+@@ -2002,7 +2009,20 @@ void MainFrame::OnCloseCallsignList( wxCommandEvent& event )
+     {
+         // Make sure we're not selected if no callsigns selected.
+         wxGetApp().lastSelectedLoggingRow = MainApp::UNSELECTED;
+-        m_BtnCallSignReset->SetFocus();
++
++        // Deferred via CallAfter so it runs once the popup's own dismissal
++        // processing has fully finished.
++        CallAfter([this]() {
++            m_BtnCallSignReset->SetFocus();
++
++            // The popup window overlaps the combo's own value area while
++            // open; on dismiss GTK doesn't always damage/repaint that
++            // region, so the combo can be left showing its stale
++            // "focused/selected" look from before the popup covered it.
++            // Force a fresh, synchronous repaint.
++            m_cboLastReportedCallsigns->Refresh();
++            m_cboLastReportedCallsigns->Update();
++        });
+     }
+     event.Skip();
+ }
