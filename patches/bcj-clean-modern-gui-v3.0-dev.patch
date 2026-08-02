@@ -294,22 +294,6 @@ index 7a0e06d3..8ab349ad 100644
          /* Spectrum plot averaging */
          wxComboBox*             m_cbxNumSpectrumAveraging;
  
-diff --git a/src/gui/util/wxListViewComboPopup.cpp b/src/gui/util/wxListViewComboPopup.cpp
-index 2b040eb6..f4af532d 100644
---- a/src/gui/util/wxListViewComboPopup.cpp
-+++ b/src/gui/util/wxListViewComboPopup.cpp
-@@ -60,7 +60,10 @@ void wxListViewComboPopup::OnMouseMove(wxMouseEvent& event)
- 
-     if (m_value != -1)
-     {
--        Select(m_value, false);
-+        if (m_value < wxListView::GetItemCount())
-+        {
-+            Select(m_value, false);
-+        }
-         m_value = -1;
-     }
- 
 diff --git a/src/main.cpp b/src/main.cpp
 index cabc2955..5e2780bd 100644
 --- a/src/main.cpp
@@ -816,7 +800,7 @@ index 668cb64d..93b32c0f 100644
          void resetStats_();
          void exportConfiguration_(wxConfigBase* config);
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index e2d15f48..d4a78dde 100644
+index 715fe52e..1454c666 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
 @@ -10,6 +10,7 @@
@@ -915,25 +899,25 @@ index e2d15f48..d4a78dde 100644
  void MainFrame::OnLogQSO(wxCommandEvent&)
  {
      wxString dxCall;
-@@ -1859,7 +1835,7 @@ void MainFrame::OnRightClickCallsignList(wxMouseEvent&)
-         index = m_lastReportedCallsignListView->GetFirstSelected();
-     }
-     m_cboLastReportedCallsigns->SetText("");
--    m_BtnCallSignReset->SetFocus();
-+    m_cboLastReportedCallsigns->SetFocus();
- }
- 
- void MainFrame::OnOpenCallsignList( wxCommandEvent& event )
-@@ -1875,7 +1851,7 @@ void MainFrame::OnCloseCallsignList( wxCommandEvent& event )
-     {
-         // Make sure we're not selected if no callsigns selected.
-         wxGetApp().lastSelectedLoggingRow = MainApp::UNSELECTED;
+@@ -1863,7 +1839,7 @@ void MainFrame::OnRightClickCallsignList(wxMouseEvent&)
+     // See OnCloseCallsignList() for why this is deferred and followed by a
+     // forced repaint.
+     CallAfter([this]() {
 -        m_BtnCallSignReset->SetFocus();
-+        m_cboLastReportedCallsigns->SetFocus();
-     }
-     event.Skip();
- }
-@@ -2028,11 +2004,28 @@ void MainFrame::OnSystemColorChanged(wxSysColourChangedEvent& event)
++        m_txtCtrlCallSign->SetFocus();
+         m_cboLastReportedCallsigns->Refresh();
+         m_cboLastReportedCallsigns->Update();
+     });
+@@ -1886,7 +1862,7 @@ void MainFrame::OnCloseCallsignList( wxCommandEvent& event )
+         // Deferred via CallAfter so it runs once the popup's own dismissal
+         // processing has fully finished.
+         CallAfter([this]() {
+-            m_BtnCallSignReset->SetFocus();
++            m_txtCtrlCallSign->SetFocus();
+ 
+             // The popup window overlaps the combo's own value area while
+             // open; on dismiss GTK doesn't always damage/repaint that
+@@ -2048,11 +2024,28 @@ void MainFrame::OnSystemColorChanged(wxSysColourChangedEvent& event)
      // Works around issues on wxWidgets with certain controls not changing backgrounds
      // when the user switches between light and dark mode.
      TopFrame::OnSystemColorChanged(event);
@@ -964,7 +948,7 @@ index e2d15f48..d4a78dde 100644
  }
  
  void MainFrame::updateReportingFreqList_()
-@@ -2124,6 +2117,79 @@ void MainFrame::OnToggleReporterVisibility (wxCommandEvent&)
+@@ -2144,6 +2137,79 @@ void MainFrame::OnToggleReporterVisibility (wxCommandEvent&)
      wxGetApp().appConfiguration.reportingConfiguration.freedvReporterForcedOff = m_reporterHidden->GetValue();
  }
  
