@@ -356,6 +356,16 @@ cd build_linux || exit 1
 if ! [[ -h model19_check3 ]]; then
     ln -s "$(pwd)"/rade_src/model19_check3 model19_check3
 fi
+# WX_BUILT_FOR_GTK3 is a cached CMake probe result (src/CMakeLists.txt).
+# A build tree that ever cached it false (e.g. from the pre-#1450
+# CMAKE_REQUIRED_DEFINITIONS bug, before the -D prefix fix) keeps reusing
+# that stale false forever on incremental `make`-triggered reconfigures --
+# CMake only re-runs a cached check if the cache entry is gone. Purge it
+# every run so it's always re-probed fresh; harmless no-op if it's not
+# cached or already correct.
+if [[ -f CMakeCache.txt ]]; then
+    cmake -U WX_BUILT_FOR_GTK3 . >/dev/null 2>&1
+fi
 if [[ $DEBUG == true ]]; then
     make VERBOSE=1
 else
