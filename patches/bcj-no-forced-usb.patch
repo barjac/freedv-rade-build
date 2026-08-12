@@ -1,0 +1,37 @@
+diff --git a/src/gui/util/FrequencyOps.h b/src/gui/util/FrequencyOps.h
+index 19586606..4f606189 100644
+--- a/src/gui/util/FrequencyOps.h
++++ b/src/gui/util/FrequencyOps.h
+@@ -26,20 +26,20 @@
+ 
+ inline HamlibRigController::Mode GetModeForFrequency(uint64_t frequency, bool useAnalogModes, bool inAnalog)
+ {
+-    if (!inAnalog)
+-    {
+-        // Always DIGU or USB if Analog decode isn't active.
+-        return (useAnalogModes) ? HamlibRigController::USB : HamlibRigController::DIGU;
+-    }
+-
+     // Widest 60 meter allocation is 5.250-5.450 MHz per https://en.wikipedia.org/wiki/60-meter_band.
+-    bool is60MeterBand = 
+-        frequency >= 5250000 && 
++    bool is60MeterBand =
++        frequency >= 5250000 &&
+         frequency <= 5450000;
+-    
+-    HamlibRigController::Mode lsbMode = HamlibRigController::LSB;
+-    HamlibRigController::Mode usbMode = HamlibRigController::USB;
+-    
++
++    // PR #1397 forced digital mode to always be USB/DIGU regardless of
++    // band, dropping the band-based LSB/DIGL selection below entirely
++    // outside of Analog mode. Reinstated here: digital mode now follows
++    // the same band-based selection Analog mode always used, choosing
++    // between literal USB/LSB (if useAnalogModes) or DIGU/DIGL otherwise.
++    bool useLiteralSideband = inAnalog || useAnalogModes;
++    HamlibRigController::Mode lsbMode = useLiteralSideband ? HamlibRigController::LSB : HamlibRigController::DIGL;
++    HamlibRigController::Mode usbMode = useLiteralSideband ? HamlibRigController::USB : HamlibRigController::DIGU;
++
+     HamlibRigController::Mode newMode;
+     if (frequency < 10000000 &&
+         !is60MeterBand)
