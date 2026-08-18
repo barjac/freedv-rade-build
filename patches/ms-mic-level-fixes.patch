@@ -1,0 +1,150 @@
+diff --git a/cmake/BuildFreeDVBackend.cmake b/cmake/BuildFreeDVBackend.cmake
+index da1bc854..8747a18e 100644
+--- a/cmake/BuildFreeDVBackend.cmake
++++ b/cmake/BuildFreeDVBackend.cmake
+@@ -3,7 +3,7 @@ include(FetchContent)
+ FetchContent_Declare(
+     freedv_backend
+     GIT_REPOSITORY https://github.com/tmiw/freedv-backend
+-    GIT_TAG main
++    GIT_TAG ms-agc-no-gain-reset
+ )
+ 
+ FetchContent_MakeAvailable(freedv_backend)
+diff --git a/src/defines.h b/src/defines.h
+index 2b350553..847916da 100644
+--- a/src/defines.h
++++ b/src/defines.h
+@@ -86,7 +86,18 @@
+ // Level Gauge
+ #define FROM_RADIO_MAX       0.8
+ #define FROM_MIC_MAX         0.8
+-#define LEVEL_BETA           0.99
++
++// Decay rate for the Level meter.
++// Calculated based on desired 12dB/sec decay:
++// -40 = 20 log(x/INT16_MAX)
++// -2 = log(x/INT16_MAX)
++// 10^-2 = x/INT16_MAX
++// 0.01 * INT16_MAX = 327 = x
++//
++// 40/12 = 3.33s to fully decay = 33 timer fires @ DT sec
++// 327 = 32767 * y^33
++// 33rd root of 0.01 = 0.86
++#define LEVEL_BETA           0.86
+ 
+ // TX Attenuation (0.1 dB increments)
+ #define TX_ATTENUATION_MIN (-300) /* -30 dB */
+diff --git a/src/main.cpp b/src/main.cpp
+index 5925f03d..c21d3e59 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -2433,8 +2433,8 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+         if (updated)
+         {
+             // Peak Reading meter: updates peaks immediately, then slowly decays
+-            int maxScaled = (int)(100.0 * ((float)m_maxLevel/32767.0));
+-            m_gaugeLevel->SetValue(maxScaled);
++            int maxScaled = m_maxLevel == 0 ? -40 : 20 * std::log10((float)m_maxLevel/32767.0); // log(0) is undefined
++            m_gaugeLevel->SetValue(std::max(-40, maxScaled) + 40); // 1/32767 -> -90dB
+             m_maxLevel *= LEVEL_BETA;
+         }
+     }
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index 40974d4c..243d5a80 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1753,6 +1753,9 @@ void MainFrame::togglePTT(void) {
+         wxString fmtString = wxString::Format(MIC_SPKR_LEVEL_FORMAT_STR, wxNumberFormatter::ToString((double)wxGetApp().appConfiguration.filterConfiguration.spkOutChannel.volInDB, 1), DECIBEL_STR);
+         m_txtMicSpkrLevelNum->SetLabel(fmtString);
+     }
++    
++    // Reset maximum level for the Level meter.
++    m_maxLevel = 0;
+ 
+     CallAfter([&]() {
+         txChangeoverOccurring_ = false;
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index 949e04b4..818eadec 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -217,19 +217,6 @@ void TxRxThread::initializePipeline_()
+             eitherOrBypassRNNoise);
+         pipeline_->appendPipelineStep(eitherOrRNNoiseStep);
+ 
+-        // AGC step (optional)
+-        auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+-        auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+-
+-        auto agcStep = new AgcStep(inputSampleRate_);
+-        eitherOrProcessAgc->appendPipelineStep(agcStep);
+-
+-        auto eitherOrAgcStep = new EitherOrStep(
+-            +[]() FREEDV_NONBLOCKING { return g_agcEnabled.load(std::memory_order_acquire); },
+-            eitherOrProcessAgc,
+-            eitherOrBypassAgc);
+-        pipeline_->appendPipelineStep(eitherOrAgcStep); 
+-
+         // Equalizer step (optional based on filter state)
+         auto equalizerStep = new EqualizerStep(
+             inputSampleRate_, 
+@@ -241,16 +228,6 @@ void TxRxThread::initializePipeline_()
+             g_rxUserdata->micEqLock);
+         pipeline_->appendPipelineStep(equalizerStep);
+         
+-        // Take TX audio post-equalizer and send it to RX for possible monitoring use.
+-        if (equalizedMicAudioLink_ != nullptr)
+-        {
+-            auto micAudioPipeline = new AudioPipeline(inputSampleRate_, equalizedMicAudioLink_->getSampleRate());
+-            micAudioPipeline->appendPipelineStep(equalizedMicAudioLink_->getInputPipelineStep());
+-        
+-            auto micAudioTap = new TapStep(inputSampleRate_, micAudioPipeline);
+-            pipeline_->appendPipelineStep(micAudioTap);
+-        }
+-                
+         // Resample for plot step
+         auto resampleForPlotStep = new ResampleForPlotStep(&g_plotSpeechInFifo);
+         auto resampleForPlotPipeline = new AudioPipeline(inputSampleRate_, resampleForPlotStep->getOutputSampleRate());
+@@ -262,6 +239,29 @@ void TxRxThread::initializePipeline_()
+ 
+         auto resampleForPlotTap = new TapStep(inputSampleRate_, resampleForPlotPipeline);
+         pipeline_->appendPipelineStep(resampleForPlotTap);
++
++        // AGC step (optional)
++        auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
++        auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
++
++        auto agcStep = new AgcStep(inputSampleRate_);
++        eitherOrProcessAgc->appendPipelineStep(agcStep);
++
++        auto eitherOrAgcStep = new EitherOrStep(
++            +[]() FREEDV_NONBLOCKING { return g_agcEnabled.load(std::memory_order_acquire); },
++            eitherOrProcessAgc,
++            eitherOrBypassAgc);
++        pipeline_->appendPipelineStep(eitherOrAgcStep); 
++
++        // Take TX audio post-equalizer and send it to RX for possible monitoring use.
++        if (equalizedMicAudioLink_ != nullptr)
++        {
++            auto micAudioPipeline = new AudioPipeline(inputSampleRate_, equalizedMicAudioLink_->getSampleRate());
++            micAudioPipeline->appendPipelineStep(equalizedMicAudioLink_->getInputPipelineStep());
++        
++            auto micAudioTap = new TapStep(inputSampleRate_, micAudioPipeline);
++            pipeline_->appendPipelineStep(micAudioTap);
++        }
+       
+         // FreeDV TX step (analog leg)
+         auto doubleLevelStep = new LevelAdjustStep(inputSampleRate_, +[]() FREEDV_NONBLOCKING { return (float)2.0; });
+diff --git a/src/topFrame.cpp b/src/topFrame.cpp
+index 705f14e5..2dfd5313 100644
+--- a/src/topFrame.cpp
++++ b/src/topFrame.cpp
+@@ -572,7 +572,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
+     levelSizer = new wxStaticBoxSizer(levelBox, wxHORIZONTAL);
+ 
+-    m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 100, wxDefaultPosition, wxSize(135,15), wxGA_SMOOTH);
++    m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 40, wxDefaultPosition, wxSize(100,15), wxGA_SMOOTH); // log scale, -40 dB to 0 dB
+     m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode."));
+     levelSizer->Add(m_gaugeLevel, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
+     
