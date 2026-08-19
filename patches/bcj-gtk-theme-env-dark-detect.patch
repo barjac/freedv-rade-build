@@ -1,0 +1,56 @@
+From a0eaba0cd38232617ae48a2120e4d5e211258aa3 Mon Sep 17 00:00:00 2001
+From: merge-test <test@test.local>
+Date: Wed, 19 Aug 2026 21:27:28 +0100
+Subject: [PATCH] Prefer GTK_THEME env var for dark/light detection when set
+
+GetGroupBoxBaseColour()'s settings.ini/gtk_settings_get_default()
+detection can be wrong on setups (e.g. a launcher pinning
+GTK_THEME=Adwaita:dark because the desktop's own theme renders badly
+with this GTK3/wxWidgets build) that have no settings.ini at all and
+hit the gtk_settings_get_default() fallback, which is unreliable on
+wx 3.2 -- it can start wrong at launch and never self-correct. Check
+GTK_THEME first when present; it's authoritative for whichever theme
+variant GTK is actually using.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+---
+ src/topFrame.cpp | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/src/topFrame.cpp b/src/topFrame.cpp
+index 0872bd10..f15a2440 100644
+--- a/src/topFrame.cpp
++++ b/src/topFrame.cpp
+@@ -462,6 +462,29 @@ wxColour GetGroupBoxBaseColour()
+     // that's proven unreliable to read live.
+     bool preferDark = false;
+     bool foundInSettingsFile = false;
++
++    // GTK_THEME (e.g. "Adwaita:dark") forces GTK to use that theme/variant
++    // outright, overriding whatever settings.ini/xsettings would otherwise
++    // select -- some launch setups (e.g. a launcher script pinning GTK to
++    // Adwaita because the desktop's own custom theme renders badly with
++    // this GTK3/wxWidgets build) rely on this rather than the desktop's
++    // usual settings.ini. When present, it's a more authoritative signal
++    // than either check below, and it sidesteps a real problem on wx 3.2:
++    // a machine using this launch style may have no settings.ini at all
++    // (falling through to the gtk_settings_get_default() read below), and
++    // that read is confirmed unreliable specifically on wx 3.2 -- it can
++    // start wrong at launch and never self-correct for the rest of the
++    // session. So check GTK_THEME first and skip both fallbacks if set.
++    wxString gtkThemeEnv;
++    if (wxGetEnv(wxT("GTK_THEME"), &gtkThemeEnv) && gtkThemeEnv.Lower().Contains(wxT(":dark")))
++    {
++        return wxColour(20, 22, 24);
++    }
++    else if (!gtkThemeEnv.IsEmpty() && gtkThemeEnv.Lower().Contains(wxT(":light")))
++    {
++        return wxColour(255, 255, 255);
++    }
++
+     // Deliberately not wxStandardPaths::GetUserConfigDir() -- on Unix that
+     // returns plain $HOME (a wx compatibility quirk), not ~/.config.
+     wxString settingsPath = wxGetHomeDir() + wxT("/.config/gtk-3.0/settings.ini");
+-- 
+2.52.0
+
