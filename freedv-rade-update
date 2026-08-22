@@ -417,7 +417,7 @@ bye() {
 echo -e "\nClosing - Goodbye! :)"
 sleep 2
 flock -u 8 || { echo "Failed to release lock"; exit 1; }
-exit 0
+exec true
 }
 
 clearvars () {
