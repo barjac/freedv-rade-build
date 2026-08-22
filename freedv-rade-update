@@ -415,12 +415,9 @@ return $make_exit
 
 bye() {
 echo -e "\nClosing - Goodbye! :)"
+sleep 2
 flock -u 8 || { echo "Failed to release lock"; exit 1; }
-if [ -n "$SHELL" ]; then
-    exec "$SHELL" -i
-else
-    exec bash -i
-fi
+exit 0
 }
 
 clearvars () {
