@@ -1,21 +1,8 @@
-diff --git a/cmake/BuildFreeDVBackend.cmake b/cmake/BuildFreeDVBackend.cmake
-index da1bc854..8747a18e 100644
---- a/cmake/BuildFreeDVBackend.cmake
-+++ b/cmake/BuildFreeDVBackend.cmake
-@@ -3,7 +3,7 @@ include(FetchContent)
- FetchContent_Declare(
-     freedv_backend
-     GIT_REPOSITORY https://github.com/tmiw/freedv-backend
--    GIT_TAG main
-+    GIT_TAG ms-agc-no-gain-reset
- )
- 
- FetchContent_MakeAvailable(freedv_backend)
 diff --git a/src/defines.h b/src/defines.h
-index 2b350553..847916da 100644
+index e64c60e3..6de51291 100644
 --- a/src/defines.h
 +++ b/src/defines.h
-@@ -86,7 +86,18 @@
+@@ -89,7 +89,18 @@
  // Level Gauge
  #define FROM_RADIO_MAX       0.8
  #define FROM_MIC_MAX         0.8
@@ -36,10 +23,88 @@ index 2b350553..847916da 100644
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
 diff --git a/src/main.cpp b/src/main.cpp
-index 5925f03d..c21d3e59 100644
+index f0cf48ea..2e6b4793 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
-@@ -2433,8 +2433,8 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -135,7 +135,9 @@ time_t              g_sync_time;
+ constexpr int PLOT_BUF_MULTIPLIER=8;
+ GenericFIFO<short>  g_plotDemodInFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
+ GenericFIFO<short>  g_plotSpeechOutFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
+-GenericFIFO<short>  g_plotSpeechInFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
++GenericFIFO<short>  g_plotSpeechInFifoBeforeEQ(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
++GenericFIFO<short>  g_plotSpeechInFifoBeforeAGC(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
++GenericFIFO<short>  g_plotSpeechInFifoAfterAGC(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
+ 
+ // Soundcard config
+ int                 g_nSoundCards;
+@@ -1227,6 +1229,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+     m_panelSpectrum = nullptr;
+     m_panelWaterfall = nullptr;
+     m_panelSpeechIn = nullptr;
++    m_panelCoderIn = nullptr;
+     m_panelSpeechOut = nullptr;
+     m_panelDemodIn = nullptr;
+     m_panelSNR = nullptr;
+@@ -1262,6 +1265,10 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+     m_panelSpeechIn = new PlotScalar(m_auiNbookCtrl, WAVEFORM_PLOT_TIME, 1.0/WAVEFORM_PLOT_FS, -1, 1, 1, 0.2, "%2.1f", 0);
+     m_auiNbookCtrl->AddPage(m_panelSpeechIn, _("Frm Mic"), false, wxNullBitmap);
+ 
++    // Add Coder Input window
++    m_panelCoderIn = new PlotScalar(m_auiNbookCtrl, WAVEFORM_PLOT_TIME, 1.0/WAVEFORM_PLOT_FS, -1, 1, 1, 0.2, "%2.1f", 0);
++    m_auiNbookCtrl->AddPage(m_panelCoderIn, _("To Mod"), false, wxNullBitmap);
++
+     // Add Speech Output window
+     m_panelSpeechOut = new PlotScalar(m_auiNbookCtrl, WAVEFORM_PLOT_TIME, 1.0/WAVEFORM_PLOT_FS, -1, 1, 1, 0.2, "%2.1f", 0);
+     m_auiNbookCtrl->AddPage(m_panelSpeechOut, _("Frm Decoder"), false, wxNullBitmap);
+@@ -1991,7 +1998,9 @@ int MainFrame::getIdealStationsHeardColumnLength_(int col)
+ //----------------------------------------------------------------
+ void MainFrame::OnTimer(wxTimerEvent &evt)
+ {
+-    short speechInPlotSamples[WAVEFORM_PLOT_BUF];
++    short speechInPlotSamplesBeforeEQ[WAVEFORM_PLOT_BUF];
++    short speechInPlotSamplesBeforeAGC[WAVEFORM_PLOT_BUF];
++    short speechInPlotSamplesAfterAGC[WAVEFORM_PLOT_BUF];
+     short speechOutPlotSamples[WAVEFORM_PLOT_BUF];
+     short demodInPlotSamples[WAVEFORM_PLOT_BUF];
+     bool txState = false;
+@@ -2056,11 +2065,22 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+       }
+       else if (timerId == ID_TIMER_SPEECH_IN)
+       {
+-          if (g_plotSpeechInFifo.read(speechInPlotSamples, WAVEFORM_PLOT_BUF)) {
+-              memset(speechInPlotSamples, 0, WAVEFORM_PLOT_BUF*sizeof(short));
++          if (g_plotSpeechInFifoBeforeAGC.read(speechInPlotSamplesBeforeAGC, WAVEFORM_PLOT_BUF)) {
++              memset(speechInPlotSamplesBeforeAGC, 0, WAVEFORM_PLOT_BUF*sizeof(short));
+           }
+-          m_panelSpeechIn->add_new_short_samples(speechInPlotSamples, WAVEFORM_PLOT_BUF, 32767);
++          m_panelSpeechIn->add_new_short_samples(speechInPlotSamplesBeforeAGC, WAVEFORM_PLOT_BUF, 32767);
+           m_panelSpeechIn->refreshData();
++          
++          if (g_plotSpeechInFifoAfterAGC.read(speechInPlotSamplesAfterAGC, WAVEFORM_PLOT_BUF)) {
++              memset(speechInPlotSamplesAfterAGC, 0, WAVEFORM_PLOT_BUF*sizeof(short));
++          }
++          m_panelCoderIn->add_new_short_samples(speechInPlotSamplesAfterAGC, WAVEFORM_PLOT_BUF, 32767);
++          m_panelCoderIn->refreshData();
++          
++          if (g_plotSpeechInFifoBeforeEQ.read(speechInPlotSamplesBeforeEQ, WAVEFORM_PLOT_BUF))
++          {
++              memset(speechInPlotSamplesBeforeEQ, 0, WAVEFORM_PLOT_BUF*sizeof(short));
++          }
+       }
+       else if (timerId == ID_TIMER_SPEECH_OUT)
+       {
+@@ -2469,8 +2489,8 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+             // peak from this DT sampling period
+             int maxSpeechIn = 0;
+             for(int i=0; i<WAVEFORM_PLOT_BUF; i++)
+-                if (maxSpeechIn < abs(speechInPlotSamples[i]))
+-                    maxSpeechIn = abs(speechInPlotSamples[i]);
++                if (maxSpeechIn < abs(speechInPlotSamplesBeforeEQ[i]))
++                    maxSpeechIn = abs(speechInPlotSamplesBeforeEQ[i]);
+ 
+             // peak from last second
+             if (maxSpeechIn > m_maxLevel)
+@@ -2482,8 +2502,8 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          if (updated)
          {
              // Peak Reading meter: updates peaks immediately, then slowly decays
@@ -50,101 +115,147 @@ index 5925f03d..c21d3e59 100644
              m_maxLevel *= LEVEL_BETA;
          }
      }
-diff --git a/src/ongui.cpp b/src/ongui.cpp
-index 40974d4c..243d5a80 100644
---- a/src/ongui.cpp
-+++ b/src/ongui.cpp
-@@ -1753,6 +1753,9 @@ void MainFrame::togglePTT(void) {
-         wxString fmtString = wxString::Format(MIC_SPKR_LEVEL_FORMAT_STR, wxNumberFormatter::ToString((double)wxGetApp().appConfiguration.filterConfiguration.spkOutChannel.volInDB, 1), DECIBEL_STR);
-         m_txtMicSpkrLevelNum->SetLabel(fmtString);
-     }
-+    
-+    // Reset maximum level for the Level meter.
-+    m_maxLevel = 0;
+@@ -2599,7 +2619,9 @@ void MainFrame::performFreeDVOn_()
+         // Reset plot FIFOs
+         g_plotDemodInFifo.reset();
+         g_plotSpeechOutFifo.reset();
+-        g_plotSpeechInFifo.reset();
++        g_plotSpeechInFifoBeforeEQ.reset();
++        g_plotSpeechInFifoBeforeAGC.reset();
++        g_plotSpeechInFifoAfterAGC.reset();
  
-     CallAfter([&]() {
-         txChangeoverOccurring_ = false;
+         m_txtCtrlCallSign->SetValue(wxT(""));
+         m_lastReportedCallsignListView->DeleteAllItems();
+diff --git a/src/main.h b/src/main.h
+index a5adf933..ed76e2f4 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -294,6 +294,7 @@ class MainFrame : public TopFrame
+         PlotSpectrum*           m_panelSpectrum;
+         PlotWaterfall*          m_panelWaterfall;
+         PlotScalar*             m_panelSpeechIn;
++        PlotScalar*             m_panelCoderIn;
+         PlotScalar*             m_panelSpeechOut;
+         PlotScalar*             m_panelDemodIn;
+         PlotScalar*             m_panelSNR;
 diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
-index 949e04b4..818eadec 100644
+index dc03077f..a3616a4a 100644
 --- a/src/pipeline/TxRxThread.cpp
 +++ b/src/pipeline/TxRxThread.cpp
-@@ -217,19 +217,6 @@ void TxRxThread::initializePipeline_()
+@@ -90,7 +90,9 @@ extern std::atomic<bool> g_playFileToMicIn;
+ extern int g_sfTxFs;
+ extern bool g_loopPlayFileToMicIn;
+ extern std::atomic<float> g_TxFreqOffsetHz;
+-extern GenericFIFO<short> g_plotSpeechInFifo;
++extern GenericFIFO<short> g_plotSpeechInFifoBeforeEQ;
++extern GenericFIFO<short> g_plotSpeechInFifoBeforeAGC;
++extern GenericFIFO<short> g_plotSpeechInFifoAfterAGC;
+ extern GenericFIFO<short> g_plotDemodInFifo;
+ extern GenericFIFO<short> g_plotSpeechOutFifo;
+ extern int g_txLevel;
+@@ -210,6 +212,41 @@ void TxRxThread::initializePipeline_()
              eitherOrBypassRNNoise);
          pipeline_->appendPipelineStep(eitherOrRNNoiseStep);
  
--        // AGC step (optional)
--        auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
--        auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
--
--        auto agcStep = new AgcStep(inputSampleRate_);
--        eitherOrProcessAgc->appendPipelineStep(agcStep);
--
--        auto eitherOrAgcStep = new EitherOrStep(
--            +[]() FREEDV_NONBLOCKING { return g_agcEnabled.load(std::memory_order_acquire); },
--            eitherOrProcessAgc,
--            eitherOrBypassAgc);
--        pipeline_->appendPipelineStep(eitherOrAgcStep); 
--
-         // Equalizer step (optional based on filter state)
-         auto equalizerStep = new EqualizerStep(
-             inputSampleRate_, 
-@@ -241,16 +228,6 @@ void TxRxThread::initializePipeline_()
-             g_rxUserdata->micEqLock);
-         pipeline_->appendPipelineStep(equalizerStep);
-         
--        // Take TX audio post-equalizer and send it to RX for possible monitoring use.
--        if (equalizedMicAudioLink_ != nullptr)
--        {
--            auto micAudioPipeline = new AudioPipeline(inputSampleRate_, equalizedMicAudioLink_->getSampleRate());
--            micAudioPipeline->appendPipelineStep(equalizedMicAudioLink_->getInputPipelineStep());
--        
--            auto micAudioTap = new TapStep(inputSampleRate_, micAudioPipeline);
--            pipeline_->appendPipelineStep(micAudioTap);
--        }
--                
-         // Resample for plot step
-         auto resampleForPlotStep = new ResampleForPlotStep(&g_plotSpeechInFifo);
-         auto resampleForPlotPipeline = new AudioPipeline(inputSampleRate_, resampleForPlotStep->getOutputSampleRate());
-@@ -262,6 +239,29 @@ void TxRxThread::initializePipeline_()
++        // Resample for plot step (before equalization)
++        auto resampleForPlotStepBeforeEQ = new ResampleForPlotStep(&g_plotSpeechInFifoBeforeEQ);
++        auto resampleForPlotPipelineBeforeEQ = new AudioPipeline(inputSampleRate_, resampleForPlotStepBeforeEQ->getOutputSampleRate());
++#if defined(ENABLE_FASTER_PLOTS)
++        auto resampleForPlotResamplerBeforeEQ = new ResampleStep(inputSampleRate_, resampleForPlotStepBeforeEQ->getInputSampleRate(), true); // need to create manually to get access to "plot only" optimizations
++        resampleForPlotPipelineBeforeEQ->appendPipelineStep(resampleForPlotResamplerBeforeEQ);
++#endif // defined(ENABLE_FASTER_PLOTS)
++        resampleForPlotPipelineBeforeEQ->appendPipelineStep(resampleForPlotStepBeforeEQ);
++
++        auto resampleForPlotTapBeforeEQ = new TapStep(inputSampleRate_, resampleForPlotPipelineBeforeEQ);
++        pipeline_->appendPipelineStep(resampleForPlotTapBeforeEQ);
++
++        // Equalizer step (optional based on filter state)
++        auto equalizerStep = new EqualizerStep(
++            inputSampleRate_, 
++            &g_rxUserdata->micInEQEnable,
++            &g_rxUserdata->sbqMicInBass,
++            &g_rxUserdata->sbqMicInMid,
++            &g_rxUserdata->sbqMicInTreble,
++            &g_rxUserdata->sbqMicInVol,
++            g_rxUserdata->micEqLock);
++        pipeline_->appendPipelineStep(equalizerStep);
++
++        // Resample for plot step (after equalizer, before AGC)
++        auto resampleForPlotStepBeforeAGC = new ResampleForPlotStep(&g_plotSpeechInFifoBeforeAGC);
++        auto resampleForPlotPipelineBeforeAGC = new AudioPipeline(inputSampleRate_, resampleForPlotStepBeforeAGC->getOutputSampleRate());
++#if defined(ENABLE_FASTER_PLOTS)
++        auto resampleForPlotResamplerBeforeAGC = new ResampleStep(inputSampleRate_, resampleForPlotStepBeforeAGC->getInputSampleRate(), true); // need to create manually to get access to "plot only" optimizations
++        resampleForPlotPipelineBeforeAGC->appendPipelineStep(resampleForPlotResamplerBeforeAGC);
++#endif // defined(ENABLE_FASTER_PLOTS)
++        resampleForPlotPipelineBeforeAGC->appendPipelineStep(resampleForPlotStepBeforeAGC);
++
++        auto resampleForPlotTapBeforeAGC = new TapStep(inputSampleRate_, resampleForPlotPipelineBeforeAGC);
++        pipeline_->appendPipelineStep(resampleForPlotTapBeforeAGC);
++
+         // AGC step (optional)
+         auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+         auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+@@ -223,17 +260,18 @@ void TxRxThread::initializePipeline_()
+             eitherOrBypassAgc);
+         pipeline_->appendPipelineStep(eitherOrAgcStep); 
  
-         auto resampleForPlotTap = new TapStep(inputSampleRate_, resampleForPlotPipeline);
-         pipeline_->appendPipelineStep(resampleForPlotTap);
+-        // Equalizer step (optional based on filter state)
+-        auto equalizerStep = new EqualizerStep(
+-            inputSampleRate_, 
+-            &g_rxUserdata->micInEQEnable,
+-            &g_rxUserdata->sbqMicInBass,
+-            &g_rxUserdata->sbqMicInMid,
+-            &g_rxUserdata->sbqMicInTreble,
+-            &g_rxUserdata->sbqMicInVol,
+-            g_rxUserdata->micEqLock);
+-        pipeline_->appendPipelineStep(equalizerStep);
+-        
++        // Resample for plot step (after AGC)
++        auto resampleForPlotStepAfterAGC = new ResampleForPlotStep(&g_plotSpeechInFifoAfterAGC);
++        auto resampleForPlotPipelineAfterAGC = new AudioPipeline(inputSampleRate_, resampleForPlotStepAfterAGC->getOutputSampleRate());
++#if defined(ENABLE_FASTER_PLOTS)
++        auto resampleForPlotResamplerAfterAGC = new ResampleStep(inputSampleRate_, resampleForPlotStepAfterAGC->getInputSampleRate(), true); // need to create manually to get access to "plot only" optimizations
++        resampleForPlotPipelineAfterAGC->appendPipelineStep(resampleForPlotResamplerAfterAGC);
++#endif // defined(ENABLE_FASTER_PLOTS)
++        resampleForPlotPipelineAfterAGC->appendPipelineStep(resampleForPlotStepAfterAGC);
 +
-+        // AGC step (optional)
-+        auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
-+        auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
++        auto resampleForPlotTapAfterAGC = new TapStep(inputSampleRate_, resampleForPlotPipelineAfterAGC);
++        pipeline_->appendPipelineStep(resampleForPlotTapAfterAGC);
 +
-+        auto agcStep = new AgcStep(inputSampleRate_);
-+        eitherOrProcessAgc->appendPipelineStep(agcStep);
-+
-+        auto eitherOrAgcStep = new EitherOrStep(
-+            +[]() FREEDV_NONBLOCKING { return g_agcEnabled.load(std::memory_order_acquire); },
-+            eitherOrProcessAgc,
-+            eitherOrBypassAgc);
-+        pipeline_->appendPipelineStep(eitherOrAgcStep); 
-+
-+        // Take TX audio post-equalizer and send it to RX for possible monitoring use.
-+        if (equalizedMicAudioLink_ != nullptr)
-+        {
-+            auto micAudioPipeline = new AudioPipeline(inputSampleRate_, equalizedMicAudioLink_->getSampleRate());
-+            micAudioPipeline->appendPipelineStep(equalizedMicAudioLink_->getInputPipelineStep());
-+        
-+            auto micAudioTap = new TapStep(inputSampleRate_, micAudioPipeline);
-+            pipeline_->appendPipelineStep(micAudioTap);
-+        }
+         // Take TX audio post-equalizer and send it to RX for possible monitoring use.
+         if (equalizedMicAudioLink_ != nullptr)
+         {
+@@ -243,18 +281,6 @@ void TxRxThread::initializePipeline_()
+             auto micAudioTap = new TapStep(inputSampleRate_, micAudioPipeline);
+             pipeline_->appendPipelineStep(micAudioTap);
+         }
+-                
+-        // Resample for plot step
+-        auto resampleForPlotStep = new ResampleForPlotStep(&g_plotSpeechInFifo);
+-        auto resampleForPlotPipeline = new AudioPipeline(inputSampleRate_, resampleForPlotStep->getOutputSampleRate());
+-#if defined(ENABLE_FASTER_PLOTS)
+-        auto resampleForPlotResampler = new ResampleStep(inputSampleRate_, resampleForPlotStep->getInputSampleRate(), true); // need to create manually to get access to "plot only" optimizations
+-        resampleForPlotPipeline->appendPipelineStep(resampleForPlotResampler);
+-#endif // defined(ENABLE_FASTER_PLOTS)
+-        resampleForPlotPipeline->appendPipelineStep(resampleForPlotStep);
+-
+-        auto resampleForPlotTap = new TapStep(inputSampleRate_, resampleForPlotPipeline);
+-        pipeline_->appendPipelineStep(resampleForPlotTap);
        
          // FreeDV TX step (analog leg)
          auto doubleLevelStep = new LevelAdjustStep(inputSampleRate_, +[]() FREEDV_NONBLOCKING { return (float)2.0; });
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 705f14e5..2dfd5313 100644
+index 1373b95b..594bff93 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
-@@ -572,7 +572,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
-     wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
-     levelSizer = new wxStaticBoxSizer(levelBox, wxHORIZONTAL);
+@@ -879,8 +879,8 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     //------------------------------
+     levelBox = new TintedGroupBox(m_panel, _("Level"), wxHORIZONTAL, 1);
  
 -    m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 100, wxDefaultPosition, wxSize(135,15), wxGA_SMOOTH);
+-    m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode."));
 +    m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 40, wxDefaultPosition, wxSize(100,15), wxGA_SMOOTH); // log scale, -40 dB to 0 dB
-     m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode."));
-     levelSizer->Add(m_gaugeLevel, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
-     
++    m_gaugeLevel->SetToolTip(_("RX: Peak level of radio's audio output, TX: Peak level of microphone audio as recorded by FreeDV (before AGC/level settings)."));
+ #if defined(__WXGTK__) && defined(HAS_GTK3)
+     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(m_gaugeLevel->GetHandle())), "freedv-meter");
+ #endif // defined(__WXGTK__) && defined(HAS_GTK3)
