@@ -415,16 +415,12 @@ return $make_exit
 
 bye() {
 echo -e "\nClosing - Goodbye! :)"
-echo "bye: start" >> /tmp/bye-debug.log
 sleep 2
-echo "bye: past sleep" >> /tmp/bye-debug.log
 flock -u 8 || { echo "Failed to release lock"; exit 1; }
-echo "bye: past flock -u" >> /tmp/bye-debug.log
-# Close the fds feeding the logging tee (exec > >(tee ...)) so it sees
-# EOF and exits on its own - otherwise bash's exit deadlocks waiting
-# for tee, which is itself waiting for us to close these first.
+# Close the fds feeding the logging tee (exec > >(tee ...)) so it gets
+# EOF and exits promptly instead of lingering as an orphan holding the
+# terminal's pty open.
 exec >&- 2>&-
-echo "bye: past fd close" >> /tmp/bye-debug.log
 exit 0
 }
 
