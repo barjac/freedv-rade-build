@@ -417,7 +417,11 @@ bye() {
 echo -e "\nClosing - Goodbye! :)"
 sleep 2
 flock -u 8 || { echo "Failed to release lock"; exit 1; }
-exec true
+# Close the fds feeding the logging tee (exec > >(tee ...)) so it sees
+# EOF and exits on its own - otherwise bash's exit deadlocks waiting
+# for tee, which is itself waiting for us to close these first.
+exec >&- 2>&-
+exit 0
 }
 
 clearvars () {
