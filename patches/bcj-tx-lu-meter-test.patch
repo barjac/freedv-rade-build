@@ -1,0 +1,350 @@
+# DEPENDS ON: ms-mic-level-fixes.patch (must be applied first -- this patch
+# adds a tap at the post-EQ/pre-AGC point that patch introduces).
+# Test-only prototype for the LU-meter discussion on upstream PR #1464.
+diff --git a/src/defines.h b/src/defines.h
+index 6de51291..1de0c266 100644
+--- a/src/defines.h
++++ b/src/defines.h
+@@ -102,6 +102,15 @@
+ // 33rd root of 0.01 = 0.86
+ #define LEVEL_BETA           0.86
+ 
++// TX Loudness (LU) meter -- test-only prototype, see LoudnessMeterStep.h.
++// Target/max match AgcStep's own AGC_LOUDNESS_TARGET_LUFS so the meter
++// shows the same reference AGC is normalising toward.
++#define TX_LU_METER_TARGET_LUFS   (-23.0)
++#define TX_LU_METER_FULL_SCALE_LUFS (-20.0)
++#define TX_LU_METER_FLOOR_LUFS    (-40.0)
++// Moderate hang: displayed value rises instantly but falls at this rate.
++#define TX_LU_METER_RELEASE_DB_PER_SEC 3.0
++
+ // TX Attenuation (0.1 dB increments)
+ #define TX_ATTENUATION_MIN (-300) /* -30 dB */
+ #define TX_ATTENUATION_MAX (0)
+diff --git a/src/main.cpp b/src/main.cpp
+index 2e6b4793..ba6390aa 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -47,6 +47,7 @@
+ #include "freedv_interface.h"
+ #include "audio/AudioEngineFactory.h"
+ #include "pipeline/TxRxThread.h"
++#include "pipeline/LoudnessMeterStep.h"
+ #include "reporting/pskreporter.h"
+ #include "reporting/FreeDVReporter.h"
+ #include "reporting/CsvReporter.h"
+@@ -2506,6 +2507,37 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+             m_gaugeLevel->SetValue(std::max(-40, maxScaled) + 40); // 1/32767 -> -90dB
+             m_maxLevel *= LEVEL_BETA;
+         }
++
++        // TX LU (loudness) meter -- test-only prototype, see
++        // LoudnessMeterStep.h. Deliberately kept separate from the Level
++        // Gauge block above -- own atomic, own held/displayed state, own
++        // widgets -- so it cannot affect RX-mode Level Gauge behaviour.
++        if (timerId == ID_TIMER_SPEECH_IN)
++        {
++            float rawLufs = g_txLoudnessLufs.load(std::memory_order_relaxed);
++            if (rawLufs > m_heldLevelLU)
++            {
++                m_heldLevelLU = rawLufs;
++            }
++            else
++            {
++                m_heldLevelLU -= TX_LU_METER_RELEASE_DB_PER_SEC * DT;
++            }
++            m_heldLevelLU = std::max((float)TX_LU_METER_FLOOR_LUFS, std::min((float)TX_LU_METER_FULL_SCALE_LUFS, m_heldLevelLU));
++
++            int gaugeMax = m_gaugeLevelLU->GetRange();
++            int gaugeValue = (int)((m_heldLevelLU - TX_LU_METER_FLOOR_LUFS) /
++                (TX_LU_METER_FULL_SCALE_LUFS - TX_LU_METER_FLOOR_LUFS) * gaugeMax);
++            m_gaugeLevelLU->SetValue(std::clamp(gaugeValue, 0, gaugeMax));
++
++            m_textLevelLU->SetLabel(wxString::Format(_("%.0f LUFS"), m_heldLevelLU));
++
++            bool overTarget = m_heldLevelLU > TX_LU_METER_TARGET_LUFS;
++            m_textLevelLU->SetForegroundColour(overTarget
++                ? wxColour(230, 90, 20)
++                : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT));
++            m_textLevelLU->Refresh();
++        }
+     }
+ }
+ #endif
+@@ -2697,10 +2729,14 @@ void MainFrame::performFreeDVOn_()
+     memset(m_callsign, 0, sizeof(m_callsign));
+ 
+     m_maxLevel = 0;
+-    executeOnUiThreadAndWait_([&]() 
++    m_heldLevelLU = TX_LU_METER_FLOOR_LUFS;
++    g_txLoudnessLufs.store(-HUGE_VAL, std::memory_order_relaxed);
++    executeOnUiThreadAndWait_([&]()
+     {
+         m_gaugeLevel->SetValue(0);
+-        
++        m_gaugeLevelLU->SetValue(0);
++        m_textLevelLU->SetLabel(wxEmptyString);
++
+         if (wxGetApp().logger != nullptr)
+         {
+             m_logQSO->Enable(true);
+diff --git a/src/main.h b/src/main.h
+index ed76e2f4..1a004db8 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -579,6 +579,11 @@ class MainFrame : public TopFrame
+         // level Gauge
+         float       m_maxLevel;
+ 
++        // TX LU (loudness) meter -- test-only prototype, see LoudnessMeterStep.h.
++        // Held/displayed value, separate from g_txLoudnessLufs's raw reading
++        // so the display has a moderate hang instead of jumping every DT tick.
++        float       m_heldLevelLU;
++
+         // flags to indicate when new EQ filters need to be designed
+ 
+         bool        m_newMicInFilter;
+diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
+index 1570556e..ae6d405a 100644
+--- a/src/pipeline/CMakeLists.txt
++++ b/src/pipeline/CMakeLists.txt
+@@ -2,6 +2,7 @@ add_library(fdv_audio_pipeline_extra STATIC
+     BeepStep.cpp
+     ComputeRfSpectrumStep.cpp
+     EqualizerStep.cpp
++    LoudnessMeterStep.cpp
+     MixStep.cpp
+     PlaybackStep.cpp
+     RecordStep.cpp
+@@ -18,6 +19,20 @@ target_compile_options(fdv_audio_pipeline_extra PRIVATE ${WARNINGS_AS_ERRORS_FLA
+ target_link_libraries(fdv_audio_pipeline_extra PUBLIC fdv_audio_pipeline fdv_util samplerate rnnoise_inc)
+ target_include_directories(fdv_audio_pipeline_extra PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
+ 
++# LoudnessMeterStep.cpp needs libebur128, which the freedv-backend submodule
++# already builds statically for AgcStep (see BuildEbur128.cmake there), but
++# its `ebur128` CMake target is IMPORTED without GLOBAL, so it's only
++# visible within the backend's own directory subtree -- not here. Link the
++# built .a directly instead, and depend on the backend's own ExternalProject
++# step target (build_ebur128, which *is* globally visible) so it's actually
++# built first. Test-only prototype -- see LoudnessMeterStep.h.
++target_include_directories(fdv_audio_pipeline_extra PRIVATE
++    ${freedv_backend_BINARY_DIR}/ebur128_src/ebur128
++    ${freedv_backend_BINARY_DIR}/ebur128_build)
++target_link_libraries(fdv_audio_pipeline_extra PRIVATE
++    ${freedv_backend_BINARY_DIR}/ebur128_build/libebur128${CMAKE_STATIC_LIBRARY_SUFFIX})
++add_dependencies(fdv_audio_pipeline_extra build_ebur128)
++
+ if(BOOTSTRAP_WXWIDGETS)
+     add_dependencies(fdv_audio_pipeline_extra wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
+     target_compile_definitions(fdv_audio_pipeline_extra PRIVATE ${WXBUILD_BUILD_DEFS})
+diff --git a/src/pipeline/LoudnessMeterStep.cpp b/src/pipeline/LoudnessMeterStep.cpp
+new file mode 100644
+index 00000000..f6c905f2
+--- /dev/null
++++ b/src/pipeline/LoudnessMeterStep.cpp
+@@ -0,0 +1,72 @@
++//=========================================================================
++// Name:            LoudnessMeterStep.cpp
++// Purpose:         Measures EBU R128 momentary loudness of TX audio for
++//                  testing a loudness-based alternative to the peak Level
++//                  meter (see PR #1464 discussion).
++//
++// All rights reserved.
++//=========================================================================
++
++#include "LoudnessMeterStep.h"
++#include "ebur128.h" // from libebur128, same library AgcStep already uses
++
++#include <assert.h>
++
++std::atomic<float> g_txLoudnessLufs{-HUGE_VALF};
++
++namespace
++{
++    // Matches AgcStep's own silence gate so the meter and AGC agree on
++    // what counts as "no real signal yet".
++    constexpr float SILENCE_THRESHOLD_LUFS = -33.0;
++}
++
++LoudnessMeterStep::LoudnessMeterStep(int sampleRate)
++    : sampleRate_(sampleRate)
++{
++    ebur128State_ = ebur128_init(1, sampleRate_, EBUR128_MODE_M);
++    assert(ebur128State_ != nullptr);
++}
++
++LoudnessMeterStep::~LoudnessMeterStep()
++{
++    ebur128_destroy((ebur128_state**)&ebur128State_);
++}
++
++int LoudnessMeterStep::getInputSampleRate() const FREEDV_NONBLOCKING
++{
++    return sampleRate_;
++}
++
++int LoudnessMeterStep::getOutputSampleRate() const FREEDV_NONBLOCKING
++{
++    return sampleRate_;
++}
++
++short* LoudnessMeterStep::execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING
++{
++    ebur128_state* state = static_cast<ebur128_state*>(ebur128State_);
++
++    if (numInputSamples > 0 && inputSamples != nullptr)
++    {
++        double lufs = 0.0;
++
++        // Note: libebur128 is unlikely to use RT-unsafe constructs in normal
++        // operation (per AgcStep's existing RTSan-enabled tests, verified
++        // 2025-09-30). This step also always runs on TapStep's own
++        // background thread rather than the realtime audio thread, so
++        // there's no hard RT requirement here regardless.
++        FREEDV_BEGIN_VERIFIED_SAFE
++        ebur128_add_frames_short(state, inputSamples, numInputSamples);
++        auto result = ebur128_loudness_momentary(state, &lufs);
++        FREEDV_END_VERIFIED_SAFE
++
++        if (result == EBUR128_SUCCESS && lufs != -HUGE_VAL && lufs > SILENCE_THRESHOLD_LUFS)
++        {
++            g_txLoudnessLufs.store((float)lufs, std::memory_order_relaxed);
++        }
++    }
++
++    *numOutputSamples = numInputSamples;
++    return inputSamples;
++}
+diff --git a/src/pipeline/LoudnessMeterStep.h b/src/pipeline/LoudnessMeterStep.h
+new file mode 100644
+index 00000000..e38ce1f5
+--- /dev/null
++++ b/src/pipeline/LoudnessMeterStep.h
+@@ -0,0 +1,44 @@
++//=========================================================================
++// Name:            LoudnessMeterStep.h
++// Purpose:         Measures EBU R128 momentary loudness of TX audio for
++//                  testing a loudness-based alternative to the peak Level
++//                  meter (see PR #1464 discussion).
++//
++// All rights reserved.
++//=========================================================================
++
++#ifndef AUDIO_PIPELINE__LOUDNESS_METER_STEP_H
++#define AUDIO_PIPELINE__LOUDNESS_METER_STEP_H
++
++#include "IPipelineStep.h"
++#include <atomic>
++#include <cmath>
++
++// Measures EBU R128 momentary loudness (LUFS) of whatever audio passes
++// through it, without modifying the signal. Meant to run only as a
++// TapStep's inner pipeline (see TxRxThread::initializePipeline_) so it
++// never touches the main TX signal path. Test-only prototype for
++// evaluating a loudness meter tapped post-EQ/pre-AGC, as discussed on
++// PR #1464.
++class LoudnessMeterStep : public IPipelineStep
++{
++public:
++    LoudnessMeterStep(int sampleRate);
++    virtual ~LoudnessMeterStep();
++
++    virtual int getInputSampleRate() const FREEDV_NONBLOCKING override;
++    virtual int getOutputSampleRate() const FREEDV_NONBLOCKING override;
++    virtual short* execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING override;
++
++private:
++    int sampleRate_;
++    void* ebur128State_;
++};
++
++// Most recent momentary (400ms) TX loudness reading, in LUFS. Stays at
++// -HUGE_VAL until real (non-silent) audio has been measured. Written from
++// LoudnessMeterStep's TapStep background thread, read from the UI thread
++// in MainFrame::OnTimer -- std::atomic so no locking is required.
++extern std::atomic<float> g_txLoudnessLufs;
++
++#endif // AUDIO_PIPELINE__LOUDNESS_METER_STEP_H
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index a3616a4a..bd3e601d 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -52,6 +52,7 @@ using namespace std::chrono_literals;
+ #include "EitherOrStep.h"
+ #include "RNNoiseStep.h"
+ #include "EqualizerStep.h"
++#include "LoudnessMeterStep.h"
+ #include "ResamplePlotStep.h"
+ #include "ResampleStep.h"
+ #include "TapStep.h"
+@@ -247,6 +248,18 @@ void TxRxThread::initializePipeline_()
+         auto resampleForPlotTapBeforeAGC = new TapStep(inputSampleRate_, resampleForPlotPipelineBeforeAGC);
+         pipeline_->appendPipelineStep(resampleForPlotTapBeforeAGC);
+ 
++        // Loudness (LUFS) meter tap -- test-only, see LoudnessMeterStep.h.
++        // Deliberately reuses this same post-EQ/pre-AGC point (not the
++        // BeforeEQ/AfterAGC taps above) so the meter reflects any level
++        // change the equalizer introduces, since that's what AGC itself is
++        // about to see and react to.
++        auto loudnessMeterStep = new LoudnessMeterStep(inputSampleRate_);
++        auto loudnessMeterPipeline = new AudioPipeline(inputSampleRate_, inputSampleRate_);
++        loudnessMeterPipeline->appendPipelineStep(loudnessMeterStep);
++
++        auto loudnessMeterTap = new TapStep(inputSampleRate_, loudnessMeterPipeline);
++        pipeline_->appendPipelineStep(loudnessMeterTap);
++
+         // AGC step (optional)
+         auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+         auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+diff --git a/src/topFrame.cpp b/src/topFrame.cpp
+index 594bff93..5a150f42 100644
+--- a/src/topFrame.cpp
++++ b/src/topFrame.cpp
+@@ -887,6 +887,29 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     levelBox->GetContentSizer()->Add(m_gaugeLevel, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
+ 
+     leftSizer->Add(levelBox, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
++
++    //------------------------------
++    // TX LU (loudness) meter -- test-only prototype, see LoudnessMeterStep.h.
++    // Separate box from Level above: doesn't touch the existing peak meter's
++    // widget, formula, or behaviour in either RX or TX mode. Tapped
++    // post-EQ/pre-AGC so it reflects any level change the equalizer makes,
++    // same point AGC itself is about to see. Target/full-scale match
++    // AgcStep's own AGC_LOUDNESS_TARGET_LUFS (-23 LUFS).
++    //------------------------------
++    luTestBox = new TintedGroupBox(m_panel, _("LU Test"), wxHORIZONTAL); // not part of the Show menu / movable-box registry -- test-only
++
++    m_gaugeLevelLU = new wxGauge(luTestBox, wxID_ANY, 200, wxDefaultPosition, wxSize(100,15), wxGA_SMOOTH); // -40 to -20 LUFS, 0.1 LU/unit
++    m_gaugeLevelLU->SetToolTip(_("TEST: TX loudness (EBU R128 momentary LUFS), tapped post-EQ/pre-AGC. Target -23 LUFS, full scale -20 LUFS."));
++#if defined(__WXGTK__) && defined(HAS_GTK3)
++    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(m_gaugeLevelLU->GetHandle())), "freedv-meter");
++#endif // defined(__WXGTK__) && defined(HAS_GTK3)
++    luTestBox->GetContentSizer()->Add(m_gaugeLevelLU, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
++
++    m_textLevelLU = new wxStaticText(luTestBox, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(60,-1), wxALIGN_LEFT);
++    luTestBox->GetContentSizer()->Add(m_textLevelLU, 0, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 5);
++
++    leftSizer->Add(luTestBox, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
++
+     //------------------------------
+     // Sync  Indicator box
+     //------------------------------
+diff --git a/src/topFrame.h b/src/topFrame.h
+index 64e187d7..5050cc65 100644
+--- a/src/topFrame.h
++++ b/src/topFrame.h
+@@ -180,6 +180,13 @@ class TopFrame : public wxFrame
+         TintedGroupBox* levelBox;
+         wxGauge* m_gaugeLevel;
+ 
++        // TX LU (loudness) meter -- test-only prototype, see
++        // LoudnessMeterStep.h. Separate box/widgets from levelBox/m_gaugeLevel
++        // above so the existing peak meter (RX and TX) is untouched.
++        TintedGroupBox* luTestBox;
++        wxGauge* m_gaugeLevelLU;
++        wxStaticText* m_textLevelLU;
++
+         wxTextCtrl*   m_txtCtrlCallSign;
+         
+         wxComboCtrl*   m_cboLastReportedCallsigns;
