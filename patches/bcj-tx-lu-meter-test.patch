@@ -22,7 +22,7 @@ index 6de51291..1de0c266 100644
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
  #define TX_ATTENUATION_MAX (0)
 diff --git a/src/main.cpp b/src/main.cpp
-index 2e6b4793..ba6390aa 100644
+index 2e6b4793..13053f99 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -47,6 +47,7 @@
@@ -33,7 +33,21 @@ index 2e6b4793..ba6390aa 100644
  #include "reporting/pskreporter.h"
  #include "reporting/FreeDVReporter.h"
  #include "reporting/CsvReporter.h"
-@@ -2506,6 +2507,37 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -1603,6 +1604,13 @@ void MainFrame::reflowGroupBoxes_()
+             leftSizer->Add(box, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
+         }
+     }
++    // TX LU (loudness) meter -- test-only prototype, see LoudnessMeterStep.h.
++    // Not part of leftOrder/the movable-box set (same as statsBox below), so
++    // it must be re-added here explicitly or reflowGroupBoxes_()'s
++    // leftSizer->Clear(false) above permanently detaches it from the sizer
++    // the first time this runs (i.e. at startup, via loadConfiguration_()),
++    // before the window is ever shown.
++    leftSizer->Add(luTestBox, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
+     leftSizer->Add(statsBox, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
+ 
+     for (int index : rightOrder.get())
+@@ -2506,6 +2514,37 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
              m_gaugeLevel->SetValue(std::max(-40, maxScaled) + 40); // 1/32767 -> -90dB
              m_maxLevel *= LEVEL_BETA;
          }
@@ -71,7 +85,7 @@ index 2e6b4793..ba6390aa 100644
      }
  }
  #endif
-@@ -2697,10 +2729,14 @@ void MainFrame::performFreeDVOn_()
+@@ -2697,10 +2736,14 @@ void MainFrame::performFreeDVOn_()
      memset(m_callsign, 0, sizeof(m_callsign));
  
      m_maxLevel = 0;
