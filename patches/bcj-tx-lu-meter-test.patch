@@ -2,10 +2,10 @@
 # adds a tap at the post-EQ/pre-AGC point that patch introduces).
 # Test-only prototype for the LU-meter discussion on upstream PR #1464.
 diff --git a/src/defines.h b/src/defines.h
-index 6de51291..1de0c266 100644
+index 6de51291..36d52e69 100644
 --- a/src/defines.h
 +++ b/src/defines.h
-@@ -102,6 +102,15 @@
+@@ -102,6 +102,18 @@
  // 33rd root of 0.01 = 0.86
  #define LEVEL_BETA           0.86
  
@@ -14,7 +14,10 @@ index 6de51291..1de0c266 100644
 +// shows the same reference AGC is normalising toward.
 +#define TX_LU_METER_TARGET_LUFS   (-23.0)
 +#define TX_LU_METER_FULL_SCALE_LUFS (-20.0)
-+#define TX_LU_METER_FLOOR_LUFS    (-40.0)
++// Matches SILENCE_THRESHOLD_LUFS in LoudnessMeterStep.cpp: below that gate
++// the reading just holds rather than tracking further down, so a lower
++// floor here would only ever waste scale on unreachable values.
++#define TX_LU_METER_FLOOR_LUFS    (-33.0)
 +// Moderate hang: displayed value rises instantly but falls at this rate.
 +#define TX_LU_METER_RELEASE_DB_PER_SEC 3.0
 +
@@ -22,7 +25,7 @@ index 6de51291..1de0c266 100644
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
  #define TX_ATTENUATION_MAX (0)
 diff --git a/src/main.cpp b/src/main.cpp
-index 2e6b4793..13053f99 100644
+index 2e6b4793..9eb3bebe 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -47,6 +47,7 @@
@@ -47,7 +50,7 @@ index 2e6b4793..13053f99 100644
      leftSizer->Add(statsBox, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
  
      for (int index : rightOrder.get())
-@@ -2506,6 +2514,37 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2506,6 +2514,31 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
              m_gaugeLevel->SetValue(std::max(-40, maxScaled) + 40); // 1/32767 -> -90dB
              m_maxLevel *= LEVEL_BETA;
          }
@@ -74,18 +77,12 @@ index 2e6b4793..13053f99 100644
 +                (TX_LU_METER_FULL_SCALE_LUFS - TX_LU_METER_FLOOR_LUFS) * gaugeMax);
 +            m_gaugeLevelLU->SetValue(std::clamp(gaugeValue, 0, gaugeMax));
 +
-+            m_textLevelLU->SetLabel(wxString::Format(_("%.0f LUFS"), m_heldLevelLU));
-+
-+            bool overTarget = m_heldLevelLU > TX_LU_METER_TARGET_LUFS;
-+            m_textLevelLU->SetForegroundColour(overTarget
-+                ? wxColour(230, 90, 20)
-+                : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT));
-+            m_textLevelLU->Refresh();
++            m_textLevelLU->SetLabel(wxString::Format(_("%.0f"), m_heldLevelLU)); // units explained in the tooltip instead, to save width
 +        }
      }
  }
  #endif
-@@ -2697,10 +2736,14 @@ void MainFrame::performFreeDVOn_()
+@@ -2697,10 +2730,14 @@ void MainFrame::performFreeDVOn_()
      memset(m_callsign, 0, sizeof(m_callsign));
  
      m_maxLevel = 0;
@@ -322,10 +319,94 @@ index a3616a4a..bd3e601d 100644
          auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
          auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 594bff93..5a150f42 100644
+index 594bff93..1f61d78e 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
-@@ -887,6 +887,29 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -25,6 +25,7 @@
+ #include <set>
+ #include <vector>
+ 
++#include <wx/dcbuffer.h>
+ #include <wx/regex.h>
+ #include <wx/wrapsizer.h>
+ #include <wx/aui/tabmdi.h>
+@@ -32,6 +33,7 @@
+ #include <wx/textfile.h>
+ 
+ #include "topFrame.h"
++#include "defines.h"
+ 
+ #if !wxCHECK_VERSION(3, 3, 0)
+ #include <set>
+@@ -689,6 +691,67 @@ void TintedGroupBox::SetToolTip(const wxString& tip)
+     m_title->SetToolTip(tip);
+ }
+ 
++TxLuMeterGauge::TxLuMeterGauge(wxWindow* parent, int range, int thresholdValue)
++    : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE)
++    , m_range(range)
++    , m_value(0)
++    , m_thresholdValue(thresholdValue)
++{
++    SetBackgroundStyle(wxBG_STYLE_PAINT);
++    Bind(wxEVT_PAINT, &TxLuMeterGauge::OnPaint, this);
++}
++
++void TxLuMeterGauge::SetValue(int value)
++{
++    m_value = value;
++    Refresh();
++}
++
++void TxLuMeterGauge::OnPaint(wxPaintEvent&)
++{
++    wxAutoBufferedPaintDC dc(this);
++    wxSize sz = GetClientSize();
++
++    dc.SetPen(*wxTRANSPARENT_PEN);
++    dc.SetBrush(wxBrush(GroupBoxBackgroundColour()));
++    dc.DrawRectangle(0, 0, sz.x, sz.y);
++
++    if (m_range <= 0 || sz.x <= 0 || sz.y <= 0)
++    {
++        return;
++    }
++
++    // Trough
++    dc.SetBrush(wxBrush(wxColour(180, 180, 180)));
++    dc.DrawRectangle(0, 0, sz.x, sz.y);
++
++    int clampedValue = std::clamp(m_value, 0, m_range);
++    int normalPortion = std::min(clampedValue, m_thresholdValue);
++    int overPortion = clampedValue - normalPortion;
++
++    int normalWidth = (int)((float)normalPortion / m_range * sz.x);
++    int overWidth = (int)((float)overPortion / m_range * sz.x);
++
++    // Filled portion up to target: green.
++    if (normalWidth > 0)
++    {
++        dc.SetBrush(wxBrush(wxColour(70, 150, 70)));
++        dc.DrawRectangle(0, 0, normalWidth, sz.y);
++    }
++
++    // Filled portion beyond target: orange -- same colour as the numeric
++    // label's over-target text, so the two indicators agree.
++    if (overWidth > 0)
++    {
++        dc.SetBrush(wxBrush(wxColour(230, 90, 20)));
++        dc.DrawRectangle(normalWidth, 0, overWidth, sz.y);
++    }
++
++    dc.SetPen(wxPen(GetGroupBoxForegroundColour()));
++    dc.SetBrush(*wxTRANSPARENT_BRUSH);
++    dc.DrawRectangle(0, 0, sz.x, sz.y);
++}
++
+ //=========================================================================
+ // Code that lays out the main application window
+ //=========================================================================
+@@ -887,6 +950,38 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      levelBox->GetContentSizer()->Add(m_gaugeLevel, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
  
      leftSizer->Add(levelBox, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
@@ -340,14 +421,23 @@ index 594bff93..5a150f42 100644
 +    //------------------------------
 +    luTestBox = new TintedGroupBox(m_panel, _("LU Test"), wxHORIZONTAL); // not part of the Show menu / movable-box registry -- test-only
 +
-+    m_gaugeLevelLU = new wxGauge(luTestBox, wxID_ANY, 200, wxDefaultPosition, wxSize(100,15), wxGA_SMOOTH); // -40 to -20 LUFS, 0.1 LU/unit
-+    m_gaugeLevelLU->SetToolTip(_("TEST: TX loudness (EBU R128 momentary LUFS), tapped post-EQ/pre-AGC. Target -23 LUFS, full scale -20 LUFS."));
-+#if defined(__WXGTK__) && defined(HAS_GTK3)
-+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(m_gaugeLevelLU->GetHandle())), "freedv-meter");
-+#endif // defined(__WXGTK__) && defined(HAS_GTK3)
++    wxString luMeterToolTip = _("TEST: TX loudness in LUFS (Loudness Units relative to Full Scale), EBU R128 momentary measurement, tapped post-EQ/pre-AGC. Target -23 LUFS, full scale -20 LUFS.");
++
++    // -33 (AGC's own silence gate, below which the reading just holds
++    // rather than tracking down further) to -20 LUFS, 0.1 LU/unit. Floor
++    // matches SILENCE_THRESHOLD_LUFS in LoudnessMeterStep.cpp so the scale
++    // isn't wasted on values the meter can never actually show.
++    int luMeterRange = (int)((TX_LU_METER_FULL_SCALE_LUFS - TX_LU_METER_FLOOR_LUFS) * 10);
++    int luMeterThreshold = (int)((TX_LU_METER_TARGET_LUFS - TX_LU_METER_FLOOR_LUFS) * 10);
++    m_gaugeLevelLU = new TxLuMeterGauge(luTestBox, luMeterRange, luMeterThreshold);
++    m_gaugeLevelLU->SetMinSize(wxSize(100,15));
++    m_gaugeLevelLU->SetToolTip(luMeterToolTip);
 +    luTestBox->GetContentSizer()->Add(m_gaugeLevelLU, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
 +
-+    m_textLevelLU = new wxStaticText(luTestBox, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(60,-1), wxALIGN_LEFT);
++    // Numeric-only label (no "LUFS" suffix -- that's spelled out in the
++    // tooltip instead) so it doesn't eat width the gauge could use.
++    m_textLevelLU = new wxStaticText(luTestBox, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(30,-1), wxALIGN_LEFT);
++    m_textLevelLU->SetToolTip(luMeterToolTip);
 +    luTestBox->GetContentSizer()->Add(m_textLevelLU, 0, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 5);
 +
 +    leftSizer->Add(luTestBox, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
@@ -356,10 +446,40 @@ index 594bff93..5a150f42 100644
      // Sync  Indicator box
      //------------------------------
 diff --git a/src/topFrame.h b/src/topFrame.h
-index 64e187d7..5050cc65 100644
+index 64e187d7..f899d817 100644
 --- a/src/topFrame.h
 +++ b/src/topFrame.h
-@@ -180,6 +180,13 @@ class TopFrame : public wxFrame
+@@ -128,6 +128,29 @@ class TintedGroupBox : public wxPanel
+         wxSizer* m_contentSizer;
+ };
+ 
++// Test-only prototype, see LoudnessMeterStep.h. wxGauge has no per-segment
++// fill colour on any platform (it's a single theme-drawn bar), so a plain
++// wxGauge can't show "green up to target, orange beyond it" -- this draws
++// its own two-colour bar instead. API mirrors the small subset of wxGauge
++// used elsewhere (SetValue/SetRange/GetRange) so it's a drop-in replacement
++// at call sites.
++class TxLuMeterGauge : public wxPanel
++{
++    public:
++        TxLuMeterGauge(wxWindow* parent, int range, int thresholdValue);
++
++        void SetValue(int value);
++        void SetRange(int range) { m_range = range; Refresh(); }
++        int GetRange() const { return m_range; }
++
++    private:
++        void OnPaint(wxPaintEvent& event);
++
++        int m_range;
++        int m_value;
++        int m_thresholdValue;
++};
++
+ // Returns the same tinted "card" background colour used by TintedGroupBox,
+ // for other controls (e.g. plot graticule label margins) that want to match.
+ wxColour GroupBoxBackgroundColour();
+@@ -180,6 +203,13 @@ class TopFrame : public wxFrame
          TintedGroupBox* levelBox;
          wxGauge* m_gaugeLevel;
  
@@ -367,7 +487,7 @@ index 64e187d7..5050cc65 100644
 +        // LoudnessMeterStep.h. Separate box/widgets from levelBox/m_gaugeLevel
 +        // above so the existing peak meter (RX and TX) is untouched.
 +        TintedGroupBox* luTestBox;
-+        wxGauge* m_gaugeLevelLU;
++        TxLuMeterGauge* m_gaugeLevelLU;
 +        wxStaticText* m_textLevelLU;
 +
          wxTextCtrl*   m_txtCtrlCallSign;
