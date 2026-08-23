@@ -236,10 +236,10 @@ index 1570556e..7c7d0870 100644
      target_compile_definitions(fdv_audio_pipeline_extra PRIVATE ${WXBUILD_BUILD_DEFS})
 diff --git a/src/pipeline/LoudnessMeterStep.cpp b/src/pipeline/LoudnessMeterStep.cpp
 new file mode 100644
-index 00000000..4531b8de
+index 00000000..64a55d52
 --- /dev/null
 +++ b/src/pipeline/LoudnessMeterStep.cpp
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,115 @@
 +//=========================================================================
 +// Name:            LoudnessMeterStep.cpp
 +// Purpose:         Measures EBU R128 momentary loudness of TX audio for
@@ -253,6 +253,8 @@ index 00000000..4531b8de
 +#include "ebur128.h" // from libebur128, same library AgcStep already uses
 +
 +#include <assert.h>
++#include <cstdlib>
++#include <string>
 +
 +std::atomic<float> g_txLoudnessLufs{-HUGE_VALF};
 +
@@ -274,14 +276,35 @@ index 00000000..4531b8de
 +
 +LoudnessMeterStep::LoudnessMeterStep(int sampleRate)
 +    : sampleRate_(sampleRate)
++    , nativeRateLogFile_(nullptr)
 +{
 +    ebur128State_ = ebur128_init(1, sampleRate_, EBUR128_MODE_M);
 +    assert(ebur128State_ != nullptr);
++
++    // DIAGNOSTIC ONLY, see nativeRateLogFile_'s declaration in the header.
++    const char* home = std::getenv("HOME");
++    if (home != nullptr)
++    {
++        std::string path = std::string(home) + "/lu_meter_native_rate.csv";
++        nativeRateLogFile_ = fopen(path.c_str(), "w");
++        if (nativeRateLogFile_ != nullptr)
++        {
++            fprintf(nativeRateLogFile_, "elapsed_ms,raw_lufs\n");
++            fflush(nativeRateLogFile_);
++        }
++    }
++    logStartTime_ = std::chrono::steady_clock::now();
 +}
 +
 +LoudnessMeterStep::~LoudnessMeterStep()
 +{
 +    ebur128_destroy((ebur128_state**)&ebur128State_);
++
++    if (nativeRateLogFile_ != nullptr)
++    {
++        fclose(nativeRateLogFile_);
++        nativeRateLogFile_ = nullptr;
++    }
 +}
 +
 +int LoudnessMeterStep::getInputSampleRate() const FREEDV_NONBLOCKING
@@ -310,6 +333,17 @@ index 00000000..4531b8de
 +        FREEDV_BEGIN_VERIFIED_SAFE
 +        ebur128_add_frames_short(state, inputSamples, numInputSamples);
 +        auto result = ebur128_loudness_momentary(state, &lufs);
++
++        // DIAGNOSTIC ONLY: log at native ~10ms cadence, independent of the
++        // 100ms UI timer -- see nativeRateLogFile_'s declaration in the
++        // header for why.
++        if (nativeRateLogFile_ != nullptr)
++        {
++            auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
++                std::chrono::steady_clock::now() - logStartTime_).count();
++            fprintf(nativeRateLogFile_, "%lld,%.2f\n", (long long)elapsedMs, (result == EBUR128_SUCCESS) ? lufs : -HUGE_VAL);
++            fflush(nativeRateLogFile_);
++        }
 +        FREEDV_END_VERIFIED_SAFE
 +
 +        if (result == EBUR128_SUCCESS && lufs != -HUGE_VAL)
@@ -323,10 +357,10 @@ index 00000000..4531b8de
 +}
 diff --git a/src/pipeline/LoudnessMeterStep.h b/src/pipeline/LoudnessMeterStep.h
 new file mode 100644
-index 00000000..e38ce1f5
+index 00000000..d1c557ce
 --- /dev/null
 +++ b/src/pipeline/LoudnessMeterStep.h
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,56 @@
 +//=========================================================================
 +// Name:            LoudnessMeterStep.h
 +// Purpose:         Measures EBU R128 momentary loudness of TX audio for
@@ -342,6 +376,8 @@ index 00000000..e38ce1f5
 +#include "IPipelineStep.h"
 +#include <atomic>
 +#include <cmath>
++#include <cstdio>
++#include <chrono>
 +
 +// Measures EBU R128 momentary loudness (LUFS) of whatever audio passes
 +// through it, without modifying the signal. Meant to run only as a
@@ -362,6 +398,16 @@ index 00000000..e38ce1f5
 +private:
 +    int sampleRate_;
 +    void* ebur128State_;
++
++    // DIAGNOSTIC ONLY: logs every execute() call's raw lufs at its native
++    // ~10ms cadence (TapStep's own chunk size), independent of the 100ms
++    // UI timer, to check whether jumpiness seen in the UI-polled log is a
++    // real measurement artifact or a sampling/aliasing artifact of polling
++    // an atomic that TapStep updates in uneven bursts. Only this step's own
++    // single background thread (TapStep's) ever calls execute(), so no
++    // locking is needed around this file handle.
++    FILE* nativeRateLogFile_;
++    std::chrono::steady_clock::time_point logStartTime_;
 +};
 +
 +// Most recent momentary (400ms) TX loudness reading, in LUFS. Stays at
@@ -372,7 +418,7 @@ index 00000000..e38ce1f5
 +
 +#endif // AUDIO_PIPELINE__LOUDNESS_METER_STEP_H
 diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
-index a3616a4a..bd3e601d 100644
+index a3616a4a..69669d9a 100644
 --- a/src/pipeline/TxRxThread.cpp
 +++ b/src/pipeline/TxRxThread.cpp
 @@ -52,6 +52,7 @@ using namespace std::chrono_literals;
@@ -383,15 +429,21 @@ index a3616a4a..bd3e601d 100644
  #include "ResamplePlotStep.h"
  #include "ResampleStep.h"
  #include "TapStep.h"
-@@ -247,6 +248,18 @@ void TxRxThread::initializePipeline_()
-         auto resampleForPlotTapBeforeAGC = new TapStep(inputSampleRate_, resampleForPlotPipelineBeforeAGC);
-         pipeline_->appendPipelineStep(resampleForPlotTapBeforeAGC);
+@@ -153,6 +154,24 @@ void TxRxThread::initializePipeline_()
+     {
+         pipeline_ = std::make_unique<AudioPipeline>(inputSampleRate_, outputSampleRate_);
  
 +        // Loudness (LUFS) meter tap -- test-only, see LoudnessMeterStep.h.
-+        // Deliberately reuses this same post-EQ/pre-AGC point (not the
-+        // BeforeEQ/AfterAGC taps above) so the meter reflects any level
-+        // change the equalizer introduces, since that's what AGC itself is
-+        // about to see and react to.
++        // CORRELATION TESTING (2026-08-23): moved here, to the very first
++        // step of the pipeline -- i.e. the raw mic input, before recording/
++        // mic-in-playback/RNNoise/EQ/AGC/anything -- to match exactly where
++        // the user's external reference "ebumeter" is physically connected
++        // (JACK, straight off the mic input), eliminating every remaining
++        // FreeDV-internal signal-chain difference as a variable. Was
++        // originally tapped post-EQ/pre-AGC deliberately (to include any
++        // level change EQ introduces, since that's what AGC itself reacts
++        // to) -- move back there once raw-mic correlation is confirmed, if
++        // the post-EQ tap point is still wanted for the final design.
 +        auto loudnessMeterStep = new LoudnessMeterStep(inputSampleRate_);
 +        auto loudnessMeterPipeline = new AudioPipeline(inputSampleRate_, inputSampleRate_);
 +        loudnessMeterPipeline->appendPipelineStep(loudnessMeterStep);
@@ -399,9 +451,9 @@ index a3616a4a..bd3e601d 100644
 +        auto loudnessMeterTap = new TapStep(inputSampleRate_, loudnessMeterPipeline);
 +        pipeline_->appendPipelineStep(loudnessMeterTap);
 +
-         // AGC step (optional)
-         auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
-         auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+         // Record from mic step (optional)
+         auto recordMicStep = new RecordStep(
+             inputSampleRate_, 
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
 index 594bff93..f1ca1e5f 100644
 --- a/src/topFrame.cpp
