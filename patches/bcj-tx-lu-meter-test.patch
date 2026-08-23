@@ -25,7 +25,7 @@ index 6de51291..36d52e69 100644
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
  #define TX_ATTENUATION_MAX (0)
 diff --git a/src/main.cpp b/src/main.cpp
-index 2e6b4793..23652a20 100644
+index 2e6b4793..5ee8a11c 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -47,6 +47,7 @@
@@ -59,7 +59,7 @@ index 2e6b4793..23652a20 100644
      leftSizer->Add(statsBox, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
  
      for (int index : rightOrder.get())
-@@ -2506,6 +2516,45 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2506,6 +2516,48 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
              m_gaugeLevel->SetValue(std::max(-40, maxScaled) + 40); // 1/32767 -> -90dB
              m_maxLevel *= LEVEL_BETA;
          }
@@ -71,15 +71,18 @@ index 2e6b4793..23652a20 100644
 +        if (timerId == ID_TIMER_SPEECH_IN)
 +        {
 +            float rawLufs = g_txLoudnessLufs.load(std::memory_order_relaxed);
-+            if (rawLufs > m_heldLevelLU)
-+            {
-+                m_heldLevelLU = rawLufs;
-+            }
-+            else
-+            {
-+                m_heldLevelLU -= TX_LU_METER_RELEASE_DB_PER_SEC * DT;
-+            }
-+            m_heldLevelLU = std::max((float)TX_LU_METER_FLOOR_LUFS, std::min((float)TX_LU_METER_FULL_SCALE_LUFS, m_heldLevelLU));
++
++            // PHASE 1 (correlation testing against ebumeter, 2026-08-23):
++            // direct passthrough, no hold/decay/clamp -- matches ebumeter's
++            // own display philosophy (raw value, refreshed every tick, no
++            // extra ballistics at all -- confirmed from its actual source).
++            // The label below can show a value outside the gauge's visual
++            // range; only the gauge fill itself is clamped, for the bar's
++            // own sake, not the displayed number. Re-add hold/decay/clamp
++            // here deliberately once raw is confirmed to correlate with
++            // ebumeter -- see TX_LU_METER_RELEASE_DB_PER_SEC/FULL_SCALE/
++            // FLOOR in defines.h, still defined and ready to reuse.
++            m_heldLevelLU = rawLufs;
 +
 +            int gaugeMax = m_gaugeLevelLU->GetRange();
 +            int gaugeValue = (int)((m_heldLevelLU - TX_LU_METER_FLOOR_LUFS) /
@@ -105,7 +108,7 @@ index 2e6b4793..23652a20 100644
      }
  }
  #endif
-@@ -2598,6 +2647,17 @@ void MainFrame::OnExit(wxCommandEvent&)
+@@ -2598,6 +2650,17 @@ void MainFrame::OnExit(wxCommandEvent&)
  void MainFrame::performFreeDVOn_()
  {
      log_debug("Start .....");
@@ -123,7 +126,7 @@ index 2e6b4793..23652a20 100644
      isModemRunning.store(false, std::memory_order_release);
      endingTx.store(false, std::memory_order_release);
      g_voice_keyer_tx.store(false, std::memory_order_release);
-@@ -2697,10 +2757,15 @@ void MainFrame::performFreeDVOn_()
+@@ -2697,10 +2760,15 @@ void MainFrame::performFreeDVOn_()
      memset(m_callsign, 0, sizeof(m_callsign));
  
      m_maxLevel = 0;
@@ -141,7 +144,7 @@ index 2e6b4793..23652a20 100644
          if (wxGetApp().logger != nullptr)
          {
              m_logQSO->Enable(true);
-@@ -2889,13 +2954,21 @@ void MainFrame::performFreeDVOn_()
+@@ -2889,13 +2957,21 @@ void MainFrame::performFreeDVOn_()
  void MainFrame::performFreeDVOff_()
  {
      log_debug("Stop .....");
@@ -233,10 +236,10 @@ index 1570556e..7c7d0870 100644
      target_compile_definitions(fdv_audio_pipeline_extra PRIVATE ${WXBUILD_BUILD_DEFS})
 diff --git a/src/pipeline/LoudnessMeterStep.cpp b/src/pipeline/LoudnessMeterStep.cpp
 new file mode 100644
-index 00000000..f6c905f2
+index 00000000..4531b8de
 --- /dev/null
 +++ b/src/pipeline/LoudnessMeterStep.cpp
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,81 @@
 +//=========================================================================
 +// Name:            LoudnessMeterStep.cpp
 +// Purpose:         Measures EBU R128 momentary loudness of TX audio for
@@ -255,9 +258,18 @@ index 00000000..f6c905f2
 +
 +namespace
 +{
-+    // Matches AgcStep's own silence gate so the meter and AGC agree on
-+    // what counts as "no real signal yet".
-+    constexpr float SILENCE_THRESHOLD_LUFS = -33.0;
++    // PHASE 1 (correlation testing against ebumeter, 2026-08-23): matched
++    // AgcStep's own silence gate so the meter and AGC agree on what counts
++    // as "no real signal yet" -- but this gate meant g_txLoudnessLufs simply
++    // stopped updating (froze) during any pause quiet enough to read below
++    // it, for as long as the pause lasted. ebumeter has no such gate at all
++    // (confirmed from its actual source) and keeps updating continuously
++    // however quiet -- so this was a real source of the two meters looking
++    // very different in behaviour, on top of anything else. Removed for now
++    // to get a clean baseline; reintroduce deliberately (as an explicit,
++    // understood divergence from ebumeter, not an accidental one) once raw
++    // values are confirmed to correlate.
++    // constexpr float SILENCE_THRESHOLD_LUFS = -33.0;
 +}
 +
 +LoudnessMeterStep::LoudnessMeterStep(int sampleRate)
@@ -300,7 +312,7 @@ index 00000000..f6c905f2
 +        auto result = ebur128_loudness_momentary(state, &lufs);
 +        FREEDV_END_VERIFIED_SAFE
 +
-+        if (result == EBUR128_SUCCESS && lufs != -HUGE_VAL && lufs > SILENCE_THRESHOLD_LUFS)
++        if (result == EBUR128_SUCCESS && lufs != -HUGE_VAL)
 +        {
 +            g_txLoudnessLufs.store((float)lufs, std::memory_order_relaxed);
 +        }
