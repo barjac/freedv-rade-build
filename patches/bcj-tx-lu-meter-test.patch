@@ -2,10 +2,10 @@
 # adds a tap at the post-EQ/pre-AGC point that patch introduces).
 # Test-only prototype for the LU-meter discussion on upstream PR #1464.
 diff --git a/src/defines.h b/src/defines.h
-index 6de51291..36d52e69 100644
+index 6de51291..faa098cc 100644
 --- a/src/defines.h
 +++ b/src/defines.h
-@@ -102,6 +102,18 @@
+@@ -102,6 +102,30 @@
  // 33rd root of 0.01 = 0.86
  #define LEVEL_BETA           0.86
  
@@ -20,6 +20,18 @@ index 6de51291..36d52e69 100644
 +#define TX_LU_METER_FLOOR_LUFS    (-33.0)
 +// Moderate hang: displayed value rises instantly but falls at this rate.
 +#define TX_LU_METER_RELEASE_DB_PER_SEC 3.0
++// Integration window, via libebur128's generic ebur128_loudness_window()
++// rather than the fixed ebur128_loudness_momentary() (400ms) / _shortterm()
++// (3000ms) calls -- lets this sit anywhere between EBU R128's two standard
++// windows rather than being locked to one. Set to 3000ms (matching EBU
++// R128 Short-term) for correlation testing against the user's reference
++// "ebumeter" tool's own S(hort-term) mode, which is what they normally
++// monitor with day to day -- 400ms Momentary looked far jumpier by design
++// (a genuinely different, both-correct measurement, not a bug) once
++// compared like-for-like. Tune freely; must not exceed whatever
++// ebur128_set_max_window() was called with in LoudnessMeterStep's
++// constructor.
++#define TX_LU_METER_WINDOW_MS     (3000UL)
 +
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
@@ -236,21 +248,23 @@ index 1570556e..7c7d0870 100644
      target_compile_definitions(fdv_audio_pipeline_extra PRIVATE ${WXBUILD_BUILD_DEFS})
 diff --git a/src/pipeline/LoudnessMeterStep.cpp b/src/pipeline/LoudnessMeterStep.cpp
 new file mode 100644
-index 00000000..64a55d52
+index 00000000..f3e705e8
 --- /dev/null
 +++ b/src/pipeline/LoudnessMeterStep.cpp
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,123 @@
 +//=========================================================================
 +// Name:            LoudnessMeterStep.cpp
-+// Purpose:         Measures EBU R128 momentary loudness of TX audio for
-+//                  testing a loudness-based alternative to the peak Level
-+//                  meter (see PR #1464 discussion).
++// Purpose:         Measures EBU R128 windowed loudness of TX audio (window
++//                  length tunable via TX_LU_METER_WINDOW_MS, see defines.h)
++//                  for testing a loudness-based alternative to the peak
++//                  Level meter (see PR #1464 discussion).
 +//
 +// All rights reserved.
 +//=========================================================================
 +
 +#include "LoudnessMeterStep.h"
 +#include "ebur128.h" // from libebur128, same library AgcStep already uses
++#include "../defines.h" // TX_LU_METER_WINDOW_MS
 +
 +#include <assert.h>
 +#include <cstdlib>
@@ -278,8 +292,12 @@ index 00000000..64a55d52
 +    : sampleRate_(sampleRate)
 +    , nativeRateLogFile_(nullptr)
 +{
-+    ebur128State_ = ebur128_init(1, sampleRate_, EBUR128_MODE_M);
++    // EBUR128_MODE_S (implies EBUR128_MODE_M) so the internal buffer is
++    // sized generously enough for ebur128_set_max_window() below regardless
++    // of exactly what TX_LU_METER_WINDOW_MS is tuned to.
++    ebur128State_ = ebur128_init(1, sampleRate_, EBUR128_MODE_S);
 +    assert(ebur128State_ != nullptr);
++    ebur128_set_max_window((ebur128_state*)ebur128State_, TX_LU_METER_WINDOW_MS);
 +
 +    // DIAGNOSTIC ONLY, see nativeRateLogFile_'s declaration in the header.
 +    const char* home = std::getenv("HOME");
@@ -332,7 +350,9 @@ index 00000000..64a55d52
 +        // there's no hard RT requirement here regardless.
 +        FREEDV_BEGIN_VERIFIED_SAFE
 +        ebur128_add_frames_short(state, inputSamples, numInputSamples);
-+        auto result = ebur128_loudness_momentary(state, &lufs);
++        // Generic windowed query rather than the fixed _momentary()/
++        // _shortterm() calls -- see TX_LU_METER_WINDOW_MS in defines.h.
++        auto result = ebur128_loudness_window(state, TX_LU_METER_WINDOW_MS, &lufs);
 +
 +        // DIAGNOSTIC ONLY: log at native ~10ms cadence, independent of the
 +        // 100ms UI timer -- see nativeRateLogFile_'s declaration in the
@@ -357,15 +377,16 @@ index 00000000..64a55d52
 +}
 diff --git a/src/pipeline/LoudnessMeterStep.h b/src/pipeline/LoudnessMeterStep.h
 new file mode 100644
-index 00000000..d1c557ce
+index 00000000..47172c7d
 --- /dev/null
 +++ b/src/pipeline/LoudnessMeterStep.h
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,58 @@
 +//=========================================================================
 +// Name:            LoudnessMeterStep.h
-+// Purpose:         Measures EBU R128 momentary loudness of TX audio for
-+//                  testing a loudness-based alternative to the peak Level
-+//                  meter (see PR #1464 discussion).
++// Purpose:         Measures EBU R128 windowed loudness of TX audio (window
++//                  length tunable via TX_LU_METER_WINDOW_MS, see defines.h)
++//                  for testing a loudness-based alternative to the peak
++//                  Level meter (see PR #1464 discussion).
 +//
 +// All rights reserved.
 +//=========================================================================
@@ -379,12 +400,12 @@ index 00000000..d1c557ce
 +#include <cstdio>
 +#include <chrono>
 +
-+// Measures EBU R128 momentary loudness (LUFS) of whatever audio passes
-+// through it, without modifying the signal. Meant to run only as a
-+// TapStep's inner pipeline (see TxRxThread::initializePipeline_) so it
-+// never touches the main TX signal path. Test-only prototype for
-+// evaluating a loudness meter tapped post-EQ/pre-AGC, as discussed on
-+// PR #1464.
++// Measures EBU R128 windowed loudness (LUFS, window length set by
++// TX_LU_METER_WINDOW_MS) of whatever audio passes through it, without
++// modifying the signal. Meant to run only as a TapStep's inner pipeline
++// (see TxRxThread::initializePipeline_) so it never touches the main TX
++// signal path. Test-only prototype for evaluating a loudness meter, as
++// discussed on PR #1464.
 +class LoudnessMeterStep : public IPipelineStep
 +{
 +public:
@@ -410,7 +431,8 @@ index 00000000..d1c557ce
 +    std::chrono::steady_clock::time_point logStartTime_;
 +};
 +
-+// Most recent momentary (400ms) TX loudness reading, in LUFS. Stays at
++// Most recent windowed (TX_LU_METER_WINDOW_MS) TX loudness reading, in
++// LUFS. Stays at
 +// -HUGE_VAL until real (non-silent) audio has been measured. Written from
 +// LoudnessMeterStep's TapStep background thread, read from the UI thread
 +// in MainFrame::OnTimer -- std::atomic so no locking is required.
@@ -455,7 +477,7 @@ index a3616a4a..69669d9a 100644
          auto recordMicStep = new RecordStep(
              inputSampleRate_, 
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 594bff93..f1ca1e5f 100644
+index 594bff93..d6e52452 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -25,6 +25,7 @@
@@ -542,7 +564,7 @@ index 594bff93..f1ca1e5f 100644
  //=========================================================================
  // Code that lays out the main application window
  //=========================================================================
-@@ -887,6 +950,46 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -887,6 +950,49 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      levelBox->GetContentSizer()->Add(m_gaugeLevel, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
  
      leftSizer->Add(levelBox, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
@@ -550,14 +572,17 @@ index 594bff93..f1ca1e5f 100644
 +    //------------------------------
 +    // TX LU (loudness) meter -- test-only prototype, see LoudnessMeterStep.h.
 +    // Separate box from Level above: doesn't touch the existing peak meter's
-+    // widget, formula, or behaviour in either RX or TX mode. Tapped
-+    // post-EQ/pre-AGC so it reflects any level change the equalizer makes,
-+    // same point AGC itself is about to see. Target/full-scale match
-+    // AgcStep's own AGC_LOUDNESS_TARGET_LUFS (-23 LUFS).
++    // widget, formula, or behaviour in either RX or TX mode. CORRELATION
++    // TESTING (2026-08-23): tapped at the raw mic input (was post-EQ/
++    // pre-AGC) to match exactly where the user's external reference
++    // "ebumeter" is connected, and window length set to 3000ms (was the
++    // fixed 400ms Momentary) to match ebumeter's own Short-term mode --
++    // see TX_LU_METER_WINDOW_MS in defines.h. Target/full-scale still
++    // match AgcStep's own AGC_LOUDNESS_TARGET_LUFS (-23 LUFS).
 +    //------------------------------
 +    luTestBox = new TintedGroupBox(m_panel, _("LU Test"), wxHORIZONTAL); // not part of the Show menu / movable-box registry -- test-only
 +
-+    wxString luMeterToolTip = _("TEST: TX loudness in LUFS (Loudness Units relative to Full Scale), EBU R128 momentary measurement, tapped post-EQ/pre-AGC. Target -23 LUFS, full scale -20 LUFS.");
++    wxString luMeterToolTip = _("TEST: TX loudness in LUFS (Loudness Units relative to Full Scale), EBU R128 windowed measurement, tapped at raw mic input. Target -23 LUFS, full scale -20 LUFS.");
 +
 +    // -33 (AGC's own silence gate, below which the reading just holds
 +    // rather than tracking down further) to -20 LUFS, 0.1 LU/unit. Floor
@@ -576,12 +601,12 @@ index 594bff93..f1ca1e5f 100644
 +    m_textLevelLU->SetToolTip(luMeterToolTip);
 +    luTestBox->GetContentSizer()->Add(m_textLevelLU, 0, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 5);
 +
-+    // DIAGNOSTIC ONLY: raw EBU momentary reading, bypassing the held/decay
++    // DIAGNOSTIC ONLY: raw EBU windowed reading, bypassing the held/decay
 +    // display value and the -20 LUFS full-scale clamp above, so it can be
 +    // compared directly against an external reference loudness meter to
 +    // check whether the difference is in the measurement or the ballistics.
 +    m_textLevelLURaw = new wxStaticText(luTestBox, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(40,-1), wxALIGN_LEFT);
-+    m_textLevelLURaw->SetToolTip(_("TEST DIAGNOSTIC: raw EBU R128 momentary loudness, no hold/decay/clamp applied"));
++    m_textLevelLURaw->SetToolTip(_("TEST DIAGNOSTIC: raw EBU R128 windowed loudness, no hold/decay/clamp applied"));
 +    luTestBox->GetContentSizer()->Add(m_textLevelLURaw, 0, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 5);
 +
 +    leftSizer->Add(luTestBox, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
