@@ -105,7 +105,7 @@ index ed76e2f4..1a004db8 100644
  
          bool        m_newMicInFilter;
 diff --git a/src/pipeline/CMakeLists.txt b/src/pipeline/CMakeLists.txt
-index 1570556e..ae6d405a 100644
+index 1570556e..7c7d0870 100644
 --- a/src/pipeline/CMakeLists.txt
 +++ b/src/pipeline/CMakeLists.txt
 @@ -2,6 +2,7 @@ add_library(fdv_audio_pipeline_extra STATIC
@@ -116,23 +116,34 @@ index 1570556e..ae6d405a 100644
      MixStep.cpp
      PlaybackStep.cpp
      RecordStep.cpp
-@@ -18,6 +19,20 @@ target_compile_options(fdv_audio_pipeline_extra PRIVATE ${WARNINGS_AS_ERRORS_FLA
+@@ -18,6 +19,31 @@ target_compile_options(fdv_audio_pipeline_extra PRIVATE ${WARNINGS_AS_ERRORS_FLA
  target_link_libraries(fdv_audio_pipeline_extra PUBLIC fdv_audio_pipeline fdv_util samplerate rnnoise_inc)
  target_include_directories(fdv_audio_pipeline_extra PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
  
 +# LoudnessMeterStep.cpp needs libebur128, which the freedv-backend submodule
-+# already builds statically for AgcStep (see BuildEbur128.cmake there), but
-+# its `ebur128` CMake target is IMPORTED without GLOBAL, so it's only
-+# visible within the backend's own directory subtree -- not here. Link the
-+# built .a directly instead, and depend on the backend's own ExternalProject
-+# step target (build_ebur128, which *is* globally visible) so it's actually
-+# built first. Test-only prototype -- see LoudnessMeterStep.h.
-+target_include_directories(fdv_audio_pipeline_extra PRIVATE
-+    ${freedv_backend_BINARY_DIR}/ebur128_src/ebur128
-+    ${freedv_backend_BINARY_DIR}/ebur128_build)
-+target_link_libraries(fdv_audio_pipeline_extra PRIVATE
-+    ${freedv_backend_BINARY_DIR}/ebur128_build/libebur128${CMAKE_STATIC_LIBRARY_SUFFIX})
-+add_dependencies(fdv_audio_pipeline_extra build_ebur128)
++# already builds/finds for AgcStep (see its CMakeLists.txt "Look for
++# libebur128" block). Match that same choice here rather than assuming
++# either outcome -- LIBEBUR128/LIBEBUR128_INCLUDE_DIR are CACHE variables
++# (visible project-wide) that record what the backend actually decided.
++# Test-only prototype -- see LoudnessMeterStep.h.
++if(LIBEBUR128 AND LIBEBUR128_INCLUDE_DIR)
++    # Backend found and is using a system-installed libebur128.
++    target_include_directories(fdv_audio_pipeline_extra PRIVATE ${LIBEBUR128_INCLUDE_DIR})
++    target_link_libraries(fdv_audio_pipeline_extra PRIVATE ${LIBEBUR128})
++else()
++    # Backend fell back to its own static ExternalProject build (no system
++    # devel package found). Its `ebur128` CMake target is IMPORTED without
++    # GLOBAL though, so it's invisible outside the backend's own directory
++    # subtree -- link the built .a directly, and depend on the backend's own
++    # ExternalProject step target (build_ebur128, which *is* globally
++    # visible) so it's actually built first.
++    target_include_directories(fdv_audio_pipeline_extra PRIVATE
++        ${freedv_backend_BINARY_DIR}/ebur128_src/ebur128
++        ${freedv_backend_BINARY_DIR}/ebur128_build)
++    target_link_libraries(fdv_audio_pipeline_extra PRIVATE
++        ${freedv_backend_BINARY_DIR}/ebur128_build/libebur128${CMAKE_STATIC_LIBRARY_SUFFIX})
++    add_dependencies(fdv_audio_pipeline_extra build_ebur128)
++endif()
 +
  if(BOOTSTRAP_WXWIDGETS)
      add_dependencies(fdv_audio_pipeline_extra wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
