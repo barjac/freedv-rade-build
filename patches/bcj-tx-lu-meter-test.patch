@@ -25,7 +25,7 @@ index 6de51291..36d52e69 100644
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
  #define TX_ATTENUATION_MAX (0)
 diff --git a/src/main.cpp b/src/main.cpp
-index 2e6b4793..b96f8d58 100644
+index 2e6b4793..23652a20 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -47,6 +47,7 @@
@@ -36,7 +36,16 @@ index 2e6b4793..b96f8d58 100644
  #include "reporting/pskreporter.h"
  #include "reporting/FreeDVReporter.h"
  #include "reporting/CsvReporter.h"
-@@ -1603,6 +1604,13 @@ void MainFrame::reflowGroupBoxes_()
+@@ -1196,6 +1197,8 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
+ {
+     SetThreadName("GUI");
+ 
++    m_luMeterLogFile = nullptr; // DIAGNOSTIC ONLY, see main.h
++
+     terminating_ = false;
+     syncState_ = false;
+     realigned_ = false;
+@@ -1603,6 +1606,13 @@ void MainFrame::reflowGroupBoxes_()
              leftSizer->Add(box, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
          }
      }
@@ -50,7 +59,7 @@ index 2e6b4793..b96f8d58 100644
      leftSizer->Add(statsBox, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
  
      for (int index : rightOrder.get())
-@@ -2506,6 +2514,35 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2506,6 +2516,45 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
              m_gaugeLevel->SetValue(std::max(-40, maxScaled) + 40); // 1/32767 -> -90dB
              m_maxLevel *= LEVEL_BETA;
          }
@@ -82,11 +91,39 @@ index 2e6b4793..b96f8d58 100644
 +            // DIAGNOSTIC ONLY: raw value, no hold/decay/clamp -- see
 +            // m_textLevelLURaw's declaration in topFrame.h.
 +            m_textLevelLURaw->SetLabel(wxString::Format(_("%.1f"), rawLufs));
++
++            // DIAGNOSTIC ONLY: log both values for offline comparison
++            // against an external reference loudness meter -- see
++            // m_luMeterLogFile's declaration in main.h.
++            if (m_luMeterLogFile != nullptr)
++            {
++                long elapsedMs = (wxGetLocalTimeMillis() - m_luMeterLogStartMs).ToLong();
++                fprintf(m_luMeterLogFile, "%ld,%.2f,%.2f\n", elapsedMs, rawLufs, m_heldLevelLU);
++                fflush(m_luMeterLogFile);
++            }
 +        }
      }
  }
  #endif
-@@ -2697,10 +2734,15 @@ void MainFrame::performFreeDVOn_()
+@@ -2598,6 +2647,17 @@ void MainFrame::OnExit(wxCommandEvent&)
+ void MainFrame::performFreeDVOn_()
+ {
+     log_debug("Start .....");
++
++    // DIAGNOSTIC ONLY: LU meter test logging -- see m_luMeterLogFile's
++    // declaration in main.h. Fresh file each session (not appended) to keep
++    // each test run's data easy to isolate.
++    m_luMeterLogFile = fopen(wxString(wxGetHomeDir() + wxT("/lu_meter_diagnostic.csv")).utf8_str(), "w");
++    if (m_luMeterLogFile != nullptr)
++    {
++        fprintf(m_luMeterLogFile, "elapsed_ms,raw_lufs,held_lufs\n");
++        fflush(m_luMeterLogFile);
++    }
++    m_luMeterLogStartMs = wxGetLocalTimeMillis();
+     isModemRunning.store(false, std::memory_order_release);
+     endingTx.store(false, std::memory_order_release);
+     g_voice_keyer_tx.store(false, std::memory_order_release);
+@@ -2697,10 +2757,15 @@ void MainFrame::performFreeDVOn_()
      memset(m_callsign, 0, sizeof(m_callsign));
  
      m_maxLevel = 0;
@@ -104,11 +141,34 @@ index 2e6b4793..b96f8d58 100644
          if (wxGetApp().logger != nullptr)
          {
              m_logQSO->Enable(true);
+@@ -2889,13 +2954,21 @@ void MainFrame::performFreeDVOn_()
+ void MainFrame::performFreeDVOff_()
+ {
+     log_debug("Stop .....");
+-    
++
+     //
+     // Stop Running -------------------------------------------------
+     //
+ 
+     isModemRunning.store(false, std::memory_order_release);
+ 
++    // DIAGNOSTIC ONLY: close the LU meter test log -- see
++    // m_luMeterLogFile's declaration in main.h.
++    if (m_luMeterLogFile != nullptr)
++    {
++        fclose(m_luMeterLogFile);
++        m_luMeterLogFile = nullptr;
++    }
++
+ #ifdef _USE_TIMER
+     executeOnUiThreadAndWait_([&]() 
+     {
 diff --git a/src/main.h b/src/main.h
-index ed76e2f4..1a004db8 100644
+index ed76e2f4..0902016f 100644
 --- a/src/main.h
 +++ b/src/main.h
-@@ -579,6 +579,11 @@ class MainFrame : public TopFrame
+@@ -579,6 +579,18 @@ class MainFrame : public TopFrame
          // level Gauge
          float       m_maxLevel;
  
@@ -116,6 +176,13 @@ index ed76e2f4..1a004db8 100644
 +        // Held/displayed value, separate from g_txLoudnessLufs's raw reading
 +        // so the display has a moderate hang instead of jumping every DT tick.
 +        float       m_heldLevelLU;
++
++        // DIAGNOSTIC ONLY: logs raw + held LU meter values to a CSV file for
++        // offline comparison against an external reference loudness meter.
++        // Opened on FreeDV start, closed on stop -- see performFreeDVOn_()/
++        // performFreeDVOff_() in main.cpp.
++        FILE*       m_luMeterLogFile;
++        wxLongLong  m_luMeterLogStartMs;
 +
          // flags to indicate when new EQ filters need to be designed
  
