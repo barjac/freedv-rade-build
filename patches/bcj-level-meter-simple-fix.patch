@@ -16,7 +16,7 @@ index 2b350553..b8f63f74 100644
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
 diff --git a/src/main.cpp b/src/main.cpp
-index 5925f03d..ddb66e0c 100644
+index 5925f03d..ed2a3aba 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -150,6 +150,10 @@ GenericFIFO<short>  g_plotDemodInFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
@@ -38,7 +38,7 @@ index 5925f03d..ddb66e0c 100644
      bool txState = false;
      bool halfDuplexState = false;
      int syncState = 0;
-@@ -2398,44 +2403,44 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2398,44 +2403,52 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          // Level Gauge -----------------------------------------------------------------------
  
          bool updated = false;
@@ -97,10 +97,18 @@ index 5925f03d..ddb66e0c 100644
              int maxScaled = (int)(100.0 * ((float)m_maxLevel/32767.0));
              m_gaugeLevel->SetValue(maxScaled);
 -            m_maxLevel *= LEVEL_BETA;
++
++            // DIAGNOSTIC ONLY: confirm whether a low reading traces back to
++            // a low tickPeak (upstream tap/fifo issue) or to the ballistics
++            // math (this calculation) eating a healthy peak.
++            if (timerId == ID_TIMER_SPEECH_IN)
++            {
++                log_debug("LevelMeter TX: tickPeak=%d m_maxLevel=%.1f maxScaled=%d", tickPeak, m_maxLevel, maxScaled);
++            }
          }
      }
  }
-@@ -2603,6 +2608,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2603,6 +2616,7 @@ void MainFrame::performFreeDVOn_()
          g_plotDemodInFifo.reset();
          g_plotSpeechOutFifo.reset();
          g_plotSpeechInFifo.reset();
