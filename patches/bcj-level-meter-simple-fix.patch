@@ -1,8 +1,8 @@
 diff --git a/src/defines.h b/src/defines.h
-index 2b350553..33f6ad03 100644
+index 2b350553..c2962e4d 100644
 --- a/src/defines.h
 +++ b/src/defines.h
-@@ -86,7 +86,27 @@
+@@ -86,7 +86,33 @@
  // Level Gauge
  #define FROM_RADIO_MAX       0.8
  #define FROM_MIC_MAX         0.8
@@ -17,7 +17,7 @@ index 2b350553..33f6ad03 100644
 +// symmetric exponential average with tau=LEVEL_METER_TIME_CONSTANT_SEC;
 +// the trade-off is added latency to genuine level changes, accepted
 +// deliberately in exchange for not reacting to short-lived extremes.
-+#define LEVEL_METER_TIME_CONSTANT_SEC 2.0
++#define LEVEL_METER_TIME_CONSTANT_SEC 1.0
 +
 +// dBFS level that maps to 100% on the TX level meter's scale, set below
 +// true digital full scale (0 dBFS) so a nominal -23 LUFS test signal swings
@@ -28,6 +28,12 @@ index 2b350553..33f6ad03 100644
 +// gauge-contamination bug fixed, -23 LUFS measured ~20% on the old 0dBFS
 +// scale; -8dB brings that to ~50%.
 +#define LEVEL_METER_REFERENCE_DB (-8.0)
++
++// Acceptable-range marker drawn as a thin green strip above the level
++// meter's gauge, in % of the gauge's own 0-100 scale. Centred on the
++// ~50% mid-scale target from LEVEL_METER_REFERENCE_DB above.
++#define LEVEL_METER_TARGET_LOW_PCT  40
++#define LEVEL_METER_TARGET_HIGH_PCT 60
  
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
@@ -176,3 +182,54 @@ index 949e04b4..eeb17711 100644
          // AGC step (optional)
          auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
          auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+diff --git a/src/topFrame.cpp b/src/topFrame.cpp
+index 705f14e5..5460f218 100644
+--- a/src/topFrame.cpp
++++ b/src/topFrame.cpp
+@@ -572,10 +572,32 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
+     levelSizer = new wxStaticBoxSizer(levelBox, wxHORIZONTAL);
+ 
++    wxBoxSizer* levelGaugeSizer = new wxBoxSizer(wxVERTICAL);
++
++    // Thin static strip marking the acceptable range (LEVEL_METER_TARGET_LOW_PCT
++    // to LEVEL_METER_TARGET_HIGH_PCT) just above the gauge -- a plain painted
++    // panel rather than a custom meter widget.
++    m_levelTargetMarker = new wxPanel(levelBox, wxID_ANY, wxDefaultPosition, wxSize(135,5));
++    m_levelTargetMarker->SetToolTip(_("Acceptable level range"));
++    m_levelTargetMarker->Bind(wxEVT_PAINT, [this](wxPaintEvent&) {
++        wxPaintDC dc(m_levelTargetMarker);
++        wxSize sz = m_levelTargetMarker->GetClientSize();
++        dc.SetBackground(wxBrush(m_levelTargetMarker->GetParent()->GetBackgroundColour()));
++        dc.Clear();
++        int loX = sz.GetWidth() * LEVEL_METER_TARGET_LOW_PCT / 100;
++        int hiX = sz.GetWidth() * LEVEL_METER_TARGET_HIGH_PCT / 100;
++        dc.SetPen(*wxTRANSPARENT_PEN);
++        dc.SetBrush(wxBrush(wxColour(0, 200, 0)));
++        dc.DrawRectangle(loX, 0, hiX - loX, sz.GetHeight());
++    });
++    levelGaugeSizer->Add(m_levelTargetMarker, 0, static_cast<int>(wxALIGN_CENTER_HORIZONTAL));
++
+     m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 100, wxDefaultPosition, wxSize(135,15), wxGA_SMOOTH);
+     m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode."));
+-    levelSizer->Add(m_gaugeLevel, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
+-    
++    levelGaugeSizer->Add(m_gaugeLevel, 0, wxTOP, 2);
++
++    levelSizer->Add(levelGaugeSizer, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
++
+     leftSizer->Add(levelSizer, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
+     
+     //------------------------------
+diff --git a/src/topFrame.h b/src/topFrame.h
+index ba220262..93f41bc2 100644
+--- a/src/topFrame.h
++++ b/src/topFrame.h
+@@ -103,6 +103,7 @@ class TopFrame : public wxFrame
+         wxStaticText* m_textSNR;
+         wxCheckBox* m_ckboxSNR;
+         wxGauge* m_gaugeLevel;
++        wxPanel* m_levelTargetMarker;
+ 
+         wxButton*     m_BtnCallSignReset;
+         wxTextCtrl*   m_txtCtrlCallSign;
