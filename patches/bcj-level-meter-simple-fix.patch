@@ -183,10 +183,18 @@ index 949e04b4..eeb17711 100644
          auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
          auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 705f14e5..5460f218 100644
+index 705f14e5..65335d46 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
-@@ -572,10 +572,32 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -29,6 +29,7 @@
+ #include <wx/numformatter.h>
+ 
+ #include "topFrame.h"
++#include "defines.h"
+ 
+ #if !wxCHECK_VERSION(3, 3, 0)
+ #include <set>
+@@ -572,10 +573,32 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
      levelSizer = new wxStaticBoxSizer(levelBox, wxHORIZONTAL);
  
