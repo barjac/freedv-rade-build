@@ -194,7 +194,7 @@ index 949e04b4..eeb17711 100644
          auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
          auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 705f14e5..68d8d9b8 100644
+index 705f14e5..eea1b498 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -29,6 +29,7 @@
@@ -205,7 +205,7 @@ index 705f14e5..68d8d9b8 100644
  
  #if !wxCHECK_VERSION(3, 3, 0)
  #include <set>
-@@ -572,10 +573,54 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -572,10 +573,60 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
      levelSizer = new wxStaticBoxSizer(levelBox, wxHORIZONTAL);
  
@@ -243,19 +243,25 @@ index 705f14e5..68d8d9b8 100644
 +    // through more rebuild cycles.
 +    levelBox->Bind(wxEVT_SIZE, [this, levelBox](wxSizeEvent& evt) {
 +        evt.Skip();
-+        static bool logged = false;
-+        if (!logged)
++        static bool scheduled = false;
++        if (!scheduled)
 +        {
-+            logged = true;
-+            wxSize gaugeSz = m_gaugeLevel->GetSize();
-+            wxPoint gaugePos = m_gaugeLevel->GetPosition();
-+            wxSize markerSz = m_levelTargetMarker->GetSize();
-+            wxPoint markerPos = m_levelTargetMarker->GetPosition();
-+            wxSize boxSz = levelBox->GetSize();
-+            log_debug("LevelBox geometry: box=%dx%d gauge pos=(%d,%d) size=%dx%d marker pos=(%d,%d) size=%dx%d",
-+                boxSz.GetWidth(), boxSz.GetHeight(),
-+                gaugePos.x, gaugePos.y, gaugeSz.GetWidth(), gaugeSz.GetHeight(),
-+                markerPos.x, markerPos.y, markerSz.GetWidth(), markerSz.GetHeight());
++            scheduled = true;
++            // Deferred via CallAfter -- reading geometry directly in the size
++            // handler ran ahead of the sizer's own layout pass for that same
++            // event (both children read back as (0,0)). CallAfter queues
++            // this for after the current event cycle, once layout's settled.
++            this->CallAfter([this, levelBox]() {
++                wxSize gaugeSz = m_gaugeLevel->GetSize();
++                wxPoint gaugePos = m_gaugeLevel->GetPosition();
++                wxSize markerSz = m_levelTargetMarker->GetSize();
++                wxPoint markerPos = m_levelTargetMarker->GetPosition();
++                wxSize boxSz = levelBox->GetSize();
++                log_debug("LevelBox geometry (deferred): box=%dx%d gauge pos=(%d,%d) size=%dx%d marker pos=(%d,%d) size=%dx%d",
++                    boxSz.GetWidth(), boxSz.GetHeight(),
++                    gaugePos.x, gaugePos.y, gaugeSz.GetWidth(), gaugeSz.GetHeight(),
++                    markerPos.x, markerPos.y, markerSz.GetWidth(), markerSz.GetHeight());
++            });
 +        }
 +    });
 +
