@@ -194,7 +194,7 @@ index 949e04b4..eeb17711 100644
          auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
          auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 705f14e5..df9d2fe7 100644
+index 705f14e5..e3d22515 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -29,6 +29,7 @@
@@ -215,7 +215,7 @@ index 705f14e5..df9d2fe7 100644
      m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode."));
 -    levelSizer->Add(m_gaugeLevel, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
 -    
-+    levelGaugeSizer->Add(m_gaugeLevel, 0, static_cast<int>(wxALIGN_CENTER_HORIZONTAL)|static_cast<int>(wxEXPAND));
++    levelGaugeSizer->Add(m_gaugeLevel, 0, static_cast<int>(wxEXPAND));
 +
 +    // Thin static strip marking the acceptable TX range (LEVEL_METER_TARGET_LOW_PCT
 +    // to LEVEL_METER_TARGET_HIGH_PCT) below the gauge -- a plain painted panel
