@@ -38,7 +38,7 @@ index 2b350553..f0ff932e 100644
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
 diff --git a/src/main.cpp b/src/main.cpp
-index 5925f03d..73229de8 100644
+index 5925f03d..31b25692 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -21,6 +21,7 @@
@@ -68,7 +68,7 @@ index 5925f03d..73229de8 100644
      bool txState = false;
      bool halfDuplexState = false;
      int syncState = 0;
-@@ -2398,44 +2404,65 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2398,44 +2404,77 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          // Level Gauge -----------------------------------------------------------------------
  
          bool updated = false;
@@ -125,6 +125,18 @@ index 5925f03d..73229de8 100644
 +            {
 +                m_levelTargetMarker->Show();
 +                m_levelTargetMarker->GetParent()->Layout();
++
++                // DIAGNOSTIC ONLY: previous geometry log was captured while
++                // still hidden (GTK doesn't allocate hidden widgets, so it
++                // read back as (0,0)) -- log again now that it's actually
++                // visible, to see the real position/size once shown.
++                wxSize gaugeSz = m_gaugeLevel->GetSize();
++                wxPoint gaugePos = m_gaugeLevel->GetPosition();
++                wxSize markerSz = m_levelTargetMarker->GetSize();
++                wxPoint markerPos = m_levelTargetMarker->GetPosition();
++                log_debug("LevelBox geometry (on TX show): gauge pos=(%d,%d) size=%dx%d marker pos=(%d,%d) size=%dx%d",
++                    gaugePos.x, gaugePos.y, gaugeSz.GetWidth(), gaugeSz.GetHeight(),
++                    markerPos.x, markerPos.y, markerSz.GetWidth(), markerSz.GetHeight());
 +            }
  
             updated = true;
@@ -151,7 +163,7 @@ index 5925f03d..73229de8 100644
          }
      }
  }
-@@ -2603,6 +2630,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2603,6 +2642,7 @@ void MainFrame::performFreeDVOn_()
          g_plotDemodInFifo.reset();
          g_plotSpeechOutFifo.reset();
          g_plotSpeechInFifo.reset();
