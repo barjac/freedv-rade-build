@@ -1,8 +1,8 @@
 diff --git a/src/defines.h b/src/defines.h
-index 2b350553..b8f63f74 100644
+index 2b350553..5b6c4497 100644
 --- a/src/defines.h
 +++ b/src/defines.h
-@@ -86,7 +86,11 @@
+@@ -86,7 +86,21 @@
  // Level Gauge
  #define FROM_RADIO_MAX       0.8
  #define FROM_MIC_MAX         0.8
@@ -12,14 +12,32 @@ index 2b350553..b8f63f74 100644
 +// alpha = 1 - exp(-DT/tau), with tau=0.3s approximating a real VU meter's
 +// ~300ms rise/fall time constant at our DT=100ms update rate.
 +#define LEVEL_METER_ALPHA    0.28
++
++// dBFS level that maps to 100% on the TX level meter's scale, set below
++// true digital full scale (0 dBFS) so a nominal -23 LUFS test signal swings
++// around half scale (matching the old meter's look/feel that users are
++// used to), while genuine full-scale peaks still show above the old
++// meter's normal operating range instead of pegging at the same point as
++// everyday speech. -8dB chosen empirically (2026-08-24): with the RX/TX
++// gauge-contamination bug fixed, -23 LUFS measured ~20% on the old 0dBFS
++// scale; -8dB brings that to ~50%.
++#define LEVEL_METER_REFERENCE_DB (-8.0)
  
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
 diff --git a/src/main.cpp b/src/main.cpp
-index 5925f03d..d2ee805e 100644
+index 5925f03d..e48828bc 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
-@@ -150,6 +150,10 @@ GenericFIFO<short>  g_plotDemodInFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
+@@ -21,6 +21,7 @@
+ //==========================================================================
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <inttypes.h>
+ #include <time.h>
+ #include <fstream>
+@@ -150,6 +151,10 @@ GenericFIFO<short>  g_plotDemodInFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
  GenericFIFO<short>  g_plotSpeechOutFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
  GenericFIFO<short>  g_plotSpeechInFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
  
@@ -30,7 +48,7 @@ index 5925f03d..d2ee805e 100644
  // Soundcard config
  int                 g_nSoundCards;
  
-@@ -1834,6 +1838,7 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -1834,6 +1839,7 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
      short speechInPlotSamples[WAVEFORM_PLOT_BUF];
      short speechOutPlotSamples[WAVEFORM_PLOT_BUF];
      short demodInPlotSamples[WAVEFORM_PLOT_BUF];
@@ -38,7 +56,7 @@ index 5925f03d..d2ee805e 100644
      bool txState = false;
      bool halfDuplexState = false;
      int syncState = 0;
-@@ -2398,44 +2403,56 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2398,44 +2404,61 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          // Level Gauge -----------------------------------------------------------------------
  
          bool updated = false;
@@ -92,6 +110,7 @@ index 5925f03d..d2ee805e 100644
          if (updated)
          {
 -            // Peak Reading meter: updates peaks immediately, then slowly decays
+-            int maxScaled = (int)(100.0 * ((float)m_maxLevel/32767.0));
 +            // Moving-average ("moving coil meter") ballistics: the bar swings
 +            // toward each tick's peak instead of jumping straight to it and
 +            // only slowly decaying, so a single brief transient no longer
@@ -99,7 +118,12 @@ index 5925f03d..d2ee805e 100644
 +            // in both directions, approximating a real VU meter's needle
 +            // swing (see LEVEL_METER_ALPHA in defines.h).
 +            m_maxLevel += (tickPeak - m_maxLevel) * LEVEL_METER_ALPHA;
-             int maxScaled = (int)(100.0 * ((float)m_maxLevel/32767.0));
++
++            // 100% maps to LEVEL_METER_REFERENCE_DB, not true 0dBFS -- see
++            // that constant's comment in defines.h for why.
++            static const float levelMeterRefAmplitude = 32767.0f * powf(10.0f, (float)LEVEL_METER_REFERENCE_DB / 20.0f);
++            int maxScaled = (int)(100.0 * ((float)m_maxLevel/levelMeterRefAmplitude));
++            maxScaled = std::min(maxScaled, 100);
              m_gaugeLevel->SetValue(maxScaled);
 -            m_maxLevel *= LEVEL_BETA;
 +
@@ -113,7 +137,7 @@ index 5925f03d..d2ee805e 100644
          }
      }
  }
-@@ -2603,6 +2620,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2603,6 +2626,7 @@ void MainFrame::performFreeDVOn_()
          g_plotDemodInFifo.reset();
          g_plotSpeechOutFifo.reset();
          g_plotSpeechInFifo.reset();
