@@ -1,5 +1,5 @@
 diff --git a/src/defines.h b/src/defines.h
-index 2b350553..c2962e4d 100644
+index 2b350553..4c6531d1 100644
 --- a/src/defines.h
 +++ b/src/defines.h
 @@ -86,7 +86,33 @@
@@ -17,7 +17,7 @@ index 2b350553..c2962e4d 100644
 +// symmetric exponential average with tau=LEVEL_METER_TIME_CONSTANT_SEC;
 +// the trade-off is added latency to genuine level changes, accepted
 +// deliberately in exchange for not reacting to short-lived extremes.
-+#define LEVEL_METER_TIME_CONSTANT_SEC 1.0
++#define LEVEL_METER_TIME_CONSTANT_SEC 0.5
 +
 +// dBFS level that maps to 100% on the TX level meter's scale, set below
 +// true digital full scale (0 dBFS) so a nominal -23 LUFS test signal swings
@@ -38,7 +38,7 @@ index 2b350553..c2962e4d 100644
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
 diff --git a/src/main.cpp b/src/main.cpp
-index 5925f03d..4882c536 100644
+index 5925f03d..73229de8 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -21,6 +21,7 @@
@@ -68,7 +68,7 @@ index 5925f03d..4882c536 100644
      bool txState = false;
      bool halfDuplexState = false;
      int syncState = 0;
-@@ -2398,44 +2404,52 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2398,44 +2404,65 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          // Level Gauge -----------------------------------------------------------------------
  
          bool updated = false;
@@ -86,12 +86,18 @@ index 5925f03d..4882c536 100644
              for(int i=0; i<WAVEFORM_PLOT_BUF; i++)
 -                if (maxDemodIn < abs(demodInPlotSamples[i]))
 -                    maxDemodIn = abs(demodInPlotSamples[i]);
--
++                if (tickPeak < abs(demodInPlotSamples[i]))
++                    tickPeak = abs(demodInPlotSamples[i]);
+ 
 -            // peak from last second
 -            if (maxDemodIn > m_maxLevel)
 -                m_maxLevel = maxDemodIn;
-+                if (tickPeak < abs(demodInPlotSamples[i]))
-+                    tickPeak = abs(demodInPlotSamples[i]);
++            // Target-range marker is TX-only.
++            if (m_levelTargetMarker->IsShown())
++            {
++                m_levelTargetMarker->Hide();
++                m_levelTargetMarker->GetParent()->Layout();
++            }
  
              updated = true;
          }
@@ -109,12 +115,17 @@ index 5925f03d..4882c536 100644
              for(int i=0; i<WAVEFORM_PLOT_BUF; i++)
 -                if (maxSpeechIn < abs(speechInPlotSamples[i]))
 -                    maxSpeechIn = abs(speechInPlotSamples[i]);
--
++                if (tickPeak < abs(levelMeterMicSamples[i]))
++                    tickPeak = abs(levelMeterMicSamples[i]);
+ 
 -            // peak from last second
 -            if (maxSpeechIn > m_maxLevel)
 -                m_maxLevel = maxSpeechIn;
-+                if (tickPeak < abs(levelMeterMicSamples[i]))
-+                    tickPeak = abs(levelMeterMicSamples[i]);
++            if (!m_levelTargetMarker->IsShown())
++            {
++                m_levelTargetMarker->Show();
++                m_levelTargetMarker->GetParent()->Layout();
++            }
  
             updated = true;
          }
@@ -140,7 +151,7 @@ index 5925f03d..4882c536 100644
          }
      }
  }
-@@ -2603,6 +2617,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2603,6 +2630,7 @@ void MainFrame::performFreeDVOn_()
          g_plotDemodInFifo.reset();
          g_plotSpeechOutFifo.reset();
          g_plotSpeechInFifo.reset();
@@ -183,7 +194,7 @@ index 949e04b4..eeb17711 100644
          auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
          auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 705f14e5..65335d46 100644
+index 705f14e5..dd41b9c7 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -29,6 +29,7 @@
@@ -194,17 +205,24 @@ index 705f14e5..65335d46 100644
  
  #if !wxCHECK_VERSION(3, 3, 0)
  #include <set>
-@@ -572,10 +573,32 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -572,10 +573,34 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
      levelSizer = new wxStaticBoxSizer(levelBox, wxHORIZONTAL);
  
 +    wxBoxSizer* levelGaugeSizer = new wxBoxSizer(wxVERTICAL);
 +
-+    // Thin static strip marking the acceptable range (LEVEL_METER_TARGET_LOW_PCT
-+    // to LEVEL_METER_TARGET_HIGH_PCT) just above the gauge -- a plain painted
-+    // panel rather than a custom meter widget.
-+    m_levelTargetMarker = new wxPanel(levelBox, wxID_ANY, wxDefaultPosition, wxSize(135,5));
-+    m_levelTargetMarker->SetToolTip(_("Acceptable level range"));
+     m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 100, wxDefaultPosition, wxSize(135,15), wxGA_SMOOTH);
+     m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode."));
+-    levelSizer->Add(m_gaugeLevel, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
+-    
++    levelGaugeSizer->Add(m_gaugeLevel, 0, static_cast<int>(wxALIGN_CENTER_HORIZONTAL));
++
++    // Thin static strip marking the acceptable TX range (LEVEL_METER_TARGET_LOW_PCT
++    // to LEVEL_METER_TARGET_HIGH_PCT) below the gauge -- a plain painted panel
++    // rather than a custom meter widget. TX-only: shown/hidden alongside the
++    // gauge's RX/TX branch switch in OnTimer().
++    m_levelTargetMarker = new wxPanel(levelBox, wxID_ANY, wxDefaultPosition, wxSize(270,5));
++    m_levelTargetMarker->SetToolTip(_("Acceptable TX level range"));
 +    m_levelTargetMarker->Bind(wxEVT_PAINT, [this](wxPaintEvent&) {
 +        wxPaintDC dc(m_levelTargetMarker);
 +        wxSize sz = m_levelTargetMarker->GetClientSize();
@@ -216,13 +234,8 @@ index 705f14e5..65335d46 100644
 +        dc.SetBrush(wxBrush(wxColour(0, 200, 0)));
 +        dc.DrawRectangle(loX, 0, hiX - loX, sz.GetHeight());
 +    });
-+    levelGaugeSizer->Add(m_levelTargetMarker, 0, static_cast<int>(wxALIGN_CENTER_HORIZONTAL));
-+
-     m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 100, wxDefaultPosition, wxSize(135,15), wxGA_SMOOTH);
-     m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode."));
--    levelSizer->Add(m_gaugeLevel, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
--    
-+    levelGaugeSizer->Add(m_gaugeLevel, 0, wxTOP, 2);
++    levelGaugeSizer->Add(m_levelTargetMarker, 0, static_cast<int>(wxALIGN_CENTER_HORIZONTAL)|wxTOP, 2);
++    m_levelTargetMarker->Hide(); // TX-only; OnTimer() shows/hides it with the RX/TX branch switch.
 +
 +    levelSizer->Add(levelGaugeSizer, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
 +
