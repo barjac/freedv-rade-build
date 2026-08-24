@@ -1,5 +1,5 @@
 diff --git a/src/defines.h b/src/defines.h
-index 2b350553..4c6531d1 100644
+index 2b350553..f0ff932e 100644
 --- a/src/defines.h
 +++ b/src/defines.h
 @@ -86,7 +86,33 @@
@@ -29,11 +29,11 @@ index 2b350553..4c6531d1 100644
 +// scale; -8dB brings that to ~50%.
 +#define LEVEL_METER_REFERENCE_DB (-8.0)
 +
-+// Acceptable-range marker drawn as a thin green strip above the level
++// Acceptable-range marker drawn as a thin green strip below the level
 +// meter's gauge, in % of the gauge's own 0-100 scale. Centred on the
 +// ~50% mid-scale target from LEVEL_METER_REFERENCE_DB above.
-+#define LEVEL_METER_TARGET_LOW_PCT  40
-+#define LEVEL_METER_TARGET_HIGH_PCT 60
++#define LEVEL_METER_TARGET_LOW_PCT  30
++#define LEVEL_METER_TARGET_HIGH_PCT 70
  
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
@@ -194,7 +194,7 @@ index 949e04b4..eeb17711 100644
          auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
          auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 705f14e5..dd41b9c7 100644
+index 705f14e5..90514c2d 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -29,6 +29,7 @@
@@ -221,7 +221,7 @@ index 705f14e5..dd41b9c7 100644
 +    // to LEVEL_METER_TARGET_HIGH_PCT) below the gauge -- a plain painted panel
 +    // rather than a custom meter widget. TX-only: shown/hidden alongside the
 +    // gauge's RX/TX branch switch in OnTimer().
-+    m_levelTargetMarker = new wxPanel(levelBox, wxID_ANY, wxDefaultPosition, wxSize(270,5));
++    m_levelTargetMarker = new wxPanel(levelBox, wxID_ANY, wxDefaultPosition, wxSize(135,5));
 +    m_levelTargetMarker->SetToolTip(_("Acceptable TX level range"));
 +    m_levelTargetMarker->Bind(wxEVT_PAINT, [this](wxPaintEvent&) {
 +        wxPaintDC dc(m_levelTargetMarker);
