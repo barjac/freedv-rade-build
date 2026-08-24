@@ -38,7 +38,7 @@ index 2b350553..f0ff932e 100644
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
 diff --git a/src/main.cpp b/src/main.cpp
-index 5925f03d..31b25692 100644
+index 5925f03d..39b9d349 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -21,6 +21,7 @@
@@ -68,7 +68,7 @@ index 5925f03d..31b25692 100644
      bool txState = false;
      bool halfDuplexState = false;
      int syncState = 0;
-@@ -2398,44 +2404,77 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2398,44 +2404,65 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          // Level Gauge -----------------------------------------------------------------------
  
          bool updated = false;
@@ -93,10 +93,10 @@ index 5925f03d..31b25692 100644
 -            if (maxDemodIn > m_maxLevel)
 -                m_maxLevel = maxDemodIn;
 +            // Target-range marker is TX-only.
-+            if (m_levelTargetMarker->IsShown())
++            if (m_levelTargetMarkerActive)
 +            {
-+                m_levelTargetMarker->Hide();
-+                m_levelTargetMarker->GetParent()->Layout();
++                m_levelTargetMarkerActive = false;
++                m_levelTargetMarker->Refresh();
 +            }
  
              updated = true;
@@ -121,22 +121,10 @@ index 5925f03d..31b25692 100644
 -            // peak from last second
 -            if (maxSpeechIn > m_maxLevel)
 -                m_maxLevel = maxSpeechIn;
-+            if (!m_levelTargetMarker->IsShown())
++            if (!m_levelTargetMarkerActive)
 +            {
-+                m_levelTargetMarker->Show();
-+                m_levelTargetMarker->GetParent()->Layout();
-+
-+                // DIAGNOSTIC ONLY: previous geometry log was captured while
-+                // still hidden (GTK doesn't allocate hidden widgets, so it
-+                // read back as (0,0)) -- log again now that it's actually
-+                // visible, to see the real position/size once shown.
-+                wxSize gaugeSz = m_gaugeLevel->GetSize();
-+                wxPoint gaugePos = m_gaugeLevel->GetPosition();
-+                wxSize markerSz = m_levelTargetMarker->GetSize();
-+                wxPoint markerPos = m_levelTargetMarker->GetPosition();
-+                log_debug("LevelBox geometry (on TX show): gauge pos=(%d,%d) size=%dx%d marker pos=(%d,%d) size=%dx%d",
-+                    gaugePos.x, gaugePos.y, gaugeSz.GetWidth(), gaugeSz.GetHeight(),
-+                    markerPos.x, markerPos.y, markerSz.GetWidth(), markerSz.GetHeight());
++                m_levelTargetMarkerActive = true;
++                m_levelTargetMarker->Refresh();
 +            }
  
             updated = true;
@@ -163,7 +151,7 @@ index 5925f03d..31b25692 100644
          }
      }
  }
-@@ -2603,6 +2642,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2603,6 +2630,7 @@ void MainFrame::performFreeDVOn_()
          g_plotDemodInFifo.reset();
          g_plotSpeechOutFifo.reset();
          g_plotSpeechInFifo.reset();
@@ -206,7 +194,7 @@ index 949e04b4..eeb17711 100644
          auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
          auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 705f14e5..eea1b498 100644
+index 705f14e5..cd969cf4 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -29,6 +29,7 @@
@@ -217,7 +205,7 @@ index 705f14e5..eea1b498 100644
  
  #if !wxCHECK_VERSION(3, 3, 0)
  #include <set>
-@@ -572,10 +573,60 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -572,10 +573,42 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
      levelSizer = new wxStaticBoxSizer(levelBox, wxHORIZONTAL);
  
@@ -225,7 +213,14 @@ index 705f14e5..eea1b498 100644
 +
 +    // Thin static strip marking the acceptable range (LEVEL_METER_TARGET_LOW_PCT
 +    // to LEVEL_METER_TARGET_HIGH_PCT) just above the gauge -- a plain painted
-+    // panel rather than a custom meter widget.
++    // panel rather than a custom meter widget. Always visible (never
++    // Show()/Hide()'d) -- GTK doesn't finish allocating a widget's real
++    // on-screen position until it's been shown once, and reading its
++    // geometry immediately after a first Show()+Layout() during TX
++    // confirmed it was still stuck at (0,0) regardless (2026-08-24
++    // diagnostic). TX-only-ness is now purely a paint-time decision via
++    // m_levelTargetMarkerActive, toggled+Refresh()'d by OnTimer() instead.
++    m_levelTargetMarkerActive = false;
 +    m_levelTargetMarker = new wxPanel(levelBox, wxID_ANY, wxDefaultPosition, wxSize(135,5));
 +    m_levelTargetMarker->SetToolTip(_("Acceptable level range"));
 +    m_levelTargetMarker->Bind(wxEVT_PAINT, [this](wxPaintEvent&) {
@@ -233,14 +228,16 @@ index 705f14e5..eea1b498 100644
 +        wxSize sz = m_levelTargetMarker->GetClientSize();
 +        dc.SetBackground(wxBrush(m_levelTargetMarker->GetParent()->GetBackgroundColour()));
 +        dc.Clear();
-+        int loX = sz.GetWidth() * LEVEL_METER_TARGET_LOW_PCT / 100;
-+        int hiX = sz.GetWidth() * LEVEL_METER_TARGET_HIGH_PCT / 100;
-+        dc.SetPen(*wxTRANSPARENT_PEN);
-+        dc.SetBrush(wxBrush(wxColour(0, 200, 0)));
-+        dc.DrawRectangle(loX, 0, hiX - loX, sz.GetHeight());
++        if (m_levelTargetMarkerActive)
++        {
++            int loX = sz.GetWidth() * LEVEL_METER_TARGET_LOW_PCT / 100;
++            int hiX = sz.GetWidth() * LEVEL_METER_TARGET_HIGH_PCT / 100;
++            dc.SetPen(*wxTRANSPARENT_PEN);
++            dc.SetBrush(wxBrush(wxColour(0, 200, 0)));
++            dc.DrawRectangle(loX, 0, hiX - loX, sz.GetHeight());
++        }
 +    });
 +    levelGaugeSizer->Add(m_levelTargetMarker, 0, static_cast<int>(wxALIGN_CENTER_HORIZONTAL));
-+    m_levelTargetMarker->Hide(); // TX-only; OnTimer() shows/hides it with the RX/TX branch switch.
 +
      m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 100, wxDefaultPosition, wxSize(135,15), wxGA_SMOOTH);
      m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode."));
@@ -250,45 +247,19 @@ index 705f14e5..eea1b498 100644
 +
 +    levelSizer->Add(levelGaugeSizer, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
 +
-+    // DIAGNOSTIC ONLY: log the actual widget geometry once, to see exactly
-+    // why the marker isn't aligning with the gauge instead of guessing
-+    // through more rebuild cycles.
-+    levelBox->Bind(wxEVT_SIZE, [this, levelBox](wxSizeEvent& evt) {
-+        evt.Skip();
-+        static bool scheduled = false;
-+        if (!scheduled)
-+        {
-+            scheduled = true;
-+            // Deferred via CallAfter -- reading geometry directly in the size
-+            // handler ran ahead of the sizer's own layout pass for that same
-+            // event (both children read back as (0,0)). CallAfter queues
-+            // this for after the current event cycle, once layout's settled.
-+            this->CallAfter([this, levelBox]() {
-+                wxSize gaugeSz = m_gaugeLevel->GetSize();
-+                wxPoint gaugePos = m_gaugeLevel->GetPosition();
-+                wxSize markerSz = m_levelTargetMarker->GetSize();
-+                wxPoint markerPos = m_levelTargetMarker->GetPosition();
-+                wxSize boxSz = levelBox->GetSize();
-+                log_debug("LevelBox geometry (deferred): box=%dx%d gauge pos=(%d,%d) size=%dx%d marker pos=(%d,%d) size=%dx%d",
-+                    boxSz.GetWidth(), boxSz.GetHeight(),
-+                    gaugePos.x, gaugePos.y, gaugeSz.GetWidth(), gaugeSz.GetHeight(),
-+                    markerPos.x, markerPos.y, markerSz.GetWidth(), markerSz.GetHeight());
-+            });
-+        }
-+    });
-+
      leftSizer->Add(levelSizer, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
      
      //------------------------------
 diff --git a/src/topFrame.h b/src/topFrame.h
-index ba220262..93f41bc2 100644
+index ba220262..29db3af8 100644
 --- a/src/topFrame.h
 +++ b/src/topFrame.h
-@@ -103,6 +103,7 @@ class TopFrame : public wxFrame
+@@ -103,6 +103,8 @@ class TopFrame : public wxFrame
          wxStaticText* m_textSNR;
          wxCheckBox* m_ckboxSNR;
          wxGauge* m_gaugeLevel;
 +        wxPanel* m_levelTargetMarker;
++        bool m_levelTargetMarkerActive;
  
          wxButton*     m_BtnCallSignReset;
          wxTextCtrl*   m_txtCtrlCallSign;
