@@ -16,10 +16,29 @@ index 2b350553..b8f63f74 100644
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
 diff --git a/src/main.cpp b/src/main.cpp
-index 5925f03d..bbf3f29a 100644
+index 5925f03d..ddb66e0c 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
-@@ -2398,18 +2398,14 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -150,6 +150,10 @@ GenericFIFO<short>  g_plotDemodInFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
+ GenericFIFO<short>  g_plotSpeechOutFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
+ GenericFIFO<short>  g_plotSpeechInFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
+ 
++// Separate pre-AGC/pre-EQ tap for the TX level meter, so it reflects true
++// mic drive rather than the "Frm Mic" plot's post-AGC/EQ encoder input.
++GenericFIFO<short>  g_levelMeterMicFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
++
+ // Soundcard config
+ int                 g_nSoundCards;
+ 
+@@ -1834,6 +1838,7 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+     short speechInPlotSamples[WAVEFORM_PLOT_BUF];
+     short speechOutPlotSamples[WAVEFORM_PLOT_BUF];
+     short demodInPlotSamples[WAVEFORM_PLOT_BUF];
++    short levelMeterMicSamples[WAVEFORM_PLOT_BUF];
+     bool txState = false;
+     bool halfDuplexState = false;
+     int syncState = 0;
+@@ -2398,44 +2403,44 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          // Level Gauge -----------------------------------------------------------------------
  
          bool updated = false;
@@ -41,8 +60,14 @@ index 5925f03d..bbf3f29a 100644
  
              updated = true;
          }
-@@ -2418,24 +2414,24 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
-             // transmit mode - display From Mic peaks
+         else if (timerId == ID_TIMER_SPEECH_IN)
+         {
+-            // transmit mode - display From Mic peaks
++            // transmit mode - display true mic drive (pre-AGC/EQ), separate
++            // from the "Frm Mic" plot which shows post-AGC/EQ encoder input.
++            if (g_levelMeterMicFifo.read(levelMeterMicSamples, WAVEFORM_PLOT_BUF)) {
++                memset(levelMeterMicSamples, 0, WAVEFORM_PLOT_BUF*sizeof(short));
++            }
  
              // peak from this DT sampling period
 -            int maxSpeechIn = 0;
@@ -53,8 +78,8 @@ index 5925f03d..bbf3f29a 100644
 -            // peak from last second
 -            if (maxSpeechIn > m_maxLevel)
 -                m_maxLevel = maxSpeechIn;
-+                if (tickPeak < abs(speechInPlotSamples[i]))
-+                    tickPeak = abs(speechInPlotSamples[i]);
++                if (tickPeak < abs(levelMeterMicSamples[i]))
++                    tickPeak = abs(levelMeterMicSamples[i]);
  
             updated = true;
          }
@@ -75,3 +100,45 @@ index 5925f03d..bbf3f29a 100644
          }
      }
  }
+@@ -2603,6 +2608,7 @@ void MainFrame::performFreeDVOn_()
+         g_plotDemodInFifo.reset();
+         g_plotSpeechOutFifo.reset();
+         g_plotSpeechInFifo.reset();
++        g_levelMeterMicFifo.reset();
+ 
+         m_txtCtrlCallSign->SetValue(wxT(""));
+         m_lastReportedCallsignListView->DeleteAllItems();
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index 949e04b4..eeb17711 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -96,6 +96,7 @@ extern bool g_loopPlayFileToMicIn;
+ extern std::atomic<float> g_TxFreqOffsetHz;
+ extern GenericFIFO<short> g_plotSpeechInFifo;
+ extern GenericFIFO<short> g_plotDemodInFifo;
++extern GenericFIFO<short> g_levelMeterMicFifo;
+ extern GenericFIFO<short> g_plotSpeechOutFifo;
+ extern int g_mode;
+ extern int g_txLevel;
+@@ -217,6 +218,21 @@ void TxRxThread::initializePipeline_()
+             eitherOrBypassRNNoise);
+         pipeline_->appendPipelineStep(eitherOrRNNoiseStep);
+ 
++        // Level meter tap (pre-AGC, pre-EQ). Kept separate from the "Frm Mic"
++        // plot tap below, which intentionally reflects post-AGC/EQ encoder
++        // input -- this one exists so the TX level meter can show true mic
++        // drive/overdrive, which AGC would otherwise mask.
++        auto levelMeterTapStep = new ResampleForPlotStep(&g_levelMeterMicFifo);
++        auto levelMeterTapPipeline = new AudioPipeline(inputSampleRate_, levelMeterTapStep->getOutputSampleRate());
++#if defined(ENABLE_FASTER_PLOTS)
++        auto levelMeterTapResampler = new ResampleStep(inputSampleRate_, levelMeterTapStep->getInputSampleRate(), true); // need to create manually to get access to "plot only" optimizations
++        levelMeterTapPipeline->appendPipelineStep(levelMeterTapResampler);
++#endif // defined(ENABLE_FASTER_PLOTS)
++        levelMeterTapPipeline->appendPipelineStep(levelMeterTapStep);
++
++        auto levelMeterTap = new TapStep(inputSampleRate_, levelMeterTapPipeline);
++        pipeline_->appendPipelineStep(levelMeterTap);
++
+         // AGC step (optional)
+         auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+         auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
