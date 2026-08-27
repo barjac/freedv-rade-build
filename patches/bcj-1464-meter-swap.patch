@@ -1,0 +1,215 @@
+diff --git a/src/defines.h b/src/defines.h
+index 6de51291..6b2130d6 100644
+--- a/src/defines.h
++++ b/src/defines.h
+@@ -90,17 +90,30 @@
+ #define FROM_RADIO_MAX       0.8
+ #define FROM_MIC_MAX         0.8
+ 
+-// Decay rate for the Level meter.
+-// Calculated based on desired 12dB/sec decay:
+-// -40 = 20 log(x/INT16_MAX)
+-// -2 = log(x/INT16_MAX)
+-// 10^-2 = x/INT16_MAX
+-// 0.01 * INT16_MAX = 327 = x
+-//
+-// 40/12 = 3.33s to fully decay = 33 timer fires @ DT sec
+-// 327 = 32767 * y^33
+-// 33rd root of 0.01 = 0.86
+-#define LEVEL_BETA           0.86
++// Running average (NOT an instantaneous peak-follower) of the level
++// meter's per-tick peaks, deliberately slow so a single loud
++// syllable/plosive gets smoothed into the average instead of individually
++// pegging the meter -- confirmed needed 2026-08-24: an instant-attack
++// design pegged on the 't' of "two" while ebumeter hadn't even reached
++// -23 LUFS and the pre-encode plot was well within normal limits. A
++// symmetric exponential average with tau=LEVEL_METER_TIME_CONSTANT_SEC;
++// the trade-off is added latency to genuine level changes, accepted
++// deliberately in exchange for not reacting to short-lived extremes.
++#define LEVEL_METER_TIME_CONSTANT_SEC 1.0
++
++// dBFS level that maps to 100% on the TX level meter's scale, set below
++// true digital full scale (0 dBFS) so a nominal -23 LUFS test signal swings
++// around half scale (matching the old meter's look/feel that users are
++// used to), while genuine full-scale peaks still show above the old
++// meter's normal operating range instead of pegging at the same point as
++// everyday speech.
++#define LEVEL_METER_REFERENCE_DB (-6.0)
++
++// Acceptable-range marker drawn as a thin strip below the level meter's
++// gauge, in % of the gauge's own 0-100 scale. Centred on the ~50%
++// mid-scale target from LEVEL_METER_REFERENCE_DB above.
++#define LEVEL_METER_TARGET_LOW_PCT  30
++#define LEVEL_METER_TARGET_HIGH_PCT 70
+ 
+ // TX Attenuation (0.1 dB increments)
+ #define TX_ATTENUATION_MIN (-300) /* -30 dB */
+diff --git a/src/main.cpp b/src/main.cpp
+index 06df4bd1..04b187a9 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -21,6 +21,7 @@
+ //==========================================================================
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <inttypes.h>
+ #include <time.h>
+ #include <fstream>
+@@ -2153,44 +2154,62 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+         // Level Gauge -----------------------------------------------------------------------
+ 
+         bool updated = false;
+-        if (timerId == ID_TIMER_DEMOD_IN && !txState && m_RxRunning)
++        int tickPeak = 0;
++        if (timerId == ID_TIMER_DEMOD_IN && !g_tx.load(std::memory_order_relaxed) && m_RxRunning)
+         {
+             // receive mode - display From Radio peaks
++            // Note: txState is a per-call local only populated when timerId
++            // is ID_TIMER_UPDATE_OTHER/ID_TIMER_SNR, so it's stale (always
++            // false) here -- read g_tx directly instead, otherwise this
++            // branch also fires during TX and stomps the TX mic reading.
+             // peak from this DT sampling period
+-            int maxDemodIn = 0;
+             for(int i=0; i<WAVEFORM_PLOT_BUF; i++)
+-                if (maxDemodIn < abs(demodInPlotSamples[i]))
+-                    maxDemodIn = abs(demodInPlotSamples[i]);
++                if (tickPeak < abs(demodInPlotSamples[i]))
++                    tickPeak = abs(demodInPlotSamples[i]);
+ 
+-            // peak from last second
+-            if (maxDemodIn > m_maxLevel)
+-                m_maxLevel = maxDemodIn;
++            // Target-range marker is TX-only.
++            if (m_levelTargetMarkerActive)
++            {
++                m_levelTargetMarkerActive = false;
++                m_levelTargetMarker->Refresh();
++            }
+ 
+             updated = true;
+         }
+         else if (timerId == ID_TIMER_SPEECH_IN)
+         {
+-            // transmit mode - display From Mic peaks
++            // transmit mode - display true mic drive (pre-AGC/EQ), same tap
++            // point PR #1464 already introduced for this same reason.
+ 
+             // peak from this DT sampling period
+-            int maxSpeechIn = 0;
+             for(int i=0; i<WAVEFORM_PLOT_BUF; i++)
+-                if (maxSpeechIn < abs(speechInPlotSamplesBeforeEQ[i]))
+-                    maxSpeechIn = abs(speechInPlotSamplesBeforeEQ[i]);
++                if (tickPeak < abs(speechInPlotSamplesBeforeEQ[i]))
++                    tickPeak = abs(speechInPlotSamplesBeforeEQ[i]);
+ 
+-            // peak from last second
+-            if (maxSpeechIn > m_maxLevel)
+-                m_maxLevel = maxSpeechIn;
++            if (!m_levelTargetMarkerActive)
++            {
++                m_levelTargetMarkerActive = true;
++                m_levelTargetMarker->Refresh();
++            }
+ 
+            updated = true;
+         }
+ 
+         if (updated)
+         {
+-            // Peak Reading meter: updates peaks immediately, then slowly decays
+-            int maxScaled = m_maxLevel == 0 ? -40 : 20 * std::log10((float)m_maxLevel/32767.0); // log(0) is undefined
+-            m_gaugeLevel->SetValue(std::max(-40, maxScaled) + 40); // 1/32767 -> -90dB
+-            m_maxLevel *= LEVEL_BETA;
++            // Running average of tickPeak, deliberately slow (see
++            // LEVEL_METER_TIME_CONSTANT_SEC in defines.h) so brief
++            // transients wash out instead of individually pegging the
++            // meter -- this is NOT a peak-follower.
++            static const float levelMeterAlpha = 1.0f - expf(-(float)DT / (float)LEVEL_METER_TIME_CONSTANT_SEC);
++            m_maxLevel += ((float)tickPeak - m_maxLevel) * levelMeterAlpha;
++
++            // 100% maps to LEVEL_METER_REFERENCE_DB, not true 0dBFS -- see
++            // that constant's comment in defines.h for why.
++            static const float levelMeterRefAmplitude = 32767.0f * powf(10.0f, (float)LEVEL_METER_REFERENCE_DB / 20.0f);
++            int maxScaled = (int)(100.0 * ((float)m_maxLevel/levelMeterRefAmplitude));
++            maxScaled = std::min(maxScaled, 100);
++            m_gaugeLevel->SetValue(maxScaled);
+         }
+     }
+ }
+diff --git a/src/topFrame.cpp b/src/topFrame.cpp
+index 2f6da3bc..b0aac070 100644
+--- a/src/topFrame.cpp
++++ b/src/topFrame.cpp
+@@ -29,6 +29,7 @@
+ #include <wx/numformatter.h>
+ 
+ #include "topFrame.h"
++#include "defines.h"
+ 
+ #if !wxCHECK_VERSION(3, 3, 0)
+ #include <set>
+@@ -570,10 +571,46 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
+     levelSizer = new wxStaticBoxSizer(levelBox, wxHORIZONTAL);
+ 
+-    m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 40, wxDefaultPosition, wxSize(100,15), wxGA_SMOOTH); // log scale, -40 dB to 0 dB
+-    m_gaugeLevel->SetToolTip(_("RX: Peak level of radio's audio output, TX: Peak level of microphone audio as recorded by FreeDV (before AGC/level settings)."));
+-    levelSizer->Add(m_gaugeLevel, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
+-    
++    wxBoxSizer* levelGaugeSizer = new wxBoxSizer(wxVERTICAL);
++
++    // Thin static strip marking the acceptable range (LEVEL_METER_TARGET_LOW_PCT
++    // to LEVEL_METER_TARGET_HIGH_PCT) just above the gauge -- a plain painted
++    // panel rather than a custom meter widget. Always visible (never
++    // Show()/Hide()'d) -- GTK doesn't finish allocating a widget's real
++    // on-screen position until it's been shown once, and reading its
++    // geometry immediately after a first Show()+Layout() during TX
++    // confirmed it was still stuck at (0,0) regardless (2026-08-24
++    // diagnostic). TX-only-ness is now purely a paint-time decision via
++    // m_levelTargetMarkerActive, toggled+Refresh()'d by OnTimer() instead.
++    m_levelTargetMarkerActive = false;
++    m_levelTargetMarker = new wxPanel(levelBox, wxID_ANY, wxDefaultPosition, wxSize(135,3));
++    m_levelTargetMarker->SetToolTip(_("Acceptable level range (amber = too low, green = target, red = too high)"));
++    m_levelTargetMarker->Bind(wxEVT_PAINT, [this](wxPaintEvent&) {
++        wxPaintDC dc(m_levelTargetMarker);
++        wxSize sz = m_levelTargetMarker->GetClientSize();
++        dc.SetBackground(wxBrush(m_levelTargetMarker->GetParent()->GetBackgroundColour()));
++        dc.Clear();
++        if (m_levelTargetMarkerActive)
++        {
++            int loX = sz.GetWidth() * LEVEL_METER_TARGET_LOW_PCT / 100;
++            int hiX = sz.GetWidth() * LEVEL_METER_TARGET_HIGH_PCT / 100;
++            dc.SetPen(*wxTRANSPARENT_PEN);
++            dc.SetBrush(wxBrush(wxColour(255, 165, 0)));
++            dc.DrawRectangle(0, 0, loX, sz.GetHeight());
++            dc.SetBrush(wxBrush(wxColour(0, 200, 0)));
++            dc.DrawRectangle(loX, 0, hiX - loX, sz.GetHeight());
++            dc.SetBrush(wxBrush(*wxRED));
++            dc.DrawRectangle(hiX, 0, sz.GetWidth() - hiX, sz.GetHeight());
++        }
++    });
++    levelGaugeSizer->Add(m_levelTargetMarker, 0, static_cast<int>(wxALIGN_CENTER_HORIZONTAL));
++
++    m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, 100, wxDefaultPosition, wxSize(135,15), wxGA_SMOOTH);
++    m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode."));
++    levelGaugeSizer->Add(m_gaugeLevel, 0, wxTOP, 0);
++
++    levelSizer->Add(levelGaugeSizer, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
++
+     leftSizer->Add(levelSizer, 0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
+     
+     //------------------------------
+diff --git a/src/topFrame.h b/src/topFrame.h
+index 893a0324..3914141c 100644
+--- a/src/topFrame.h
++++ b/src/topFrame.h
+@@ -102,6 +102,8 @@ class TopFrame : public wxFrame
+         wxStaticText* m_textSNR;
+         wxCheckBox* m_ckboxSNR;
+         wxGauge* m_gaugeLevel;
++        wxPanel* m_levelTargetMarker;
++        bool m_levelTargetMarkerActive;
+ 
+         wxButton*     m_BtnCallSignReset;
+         wxTextCtrl*   m_txtCtrlCallSign;
