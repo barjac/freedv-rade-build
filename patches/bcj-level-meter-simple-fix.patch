@@ -1,23 +1,33 @@
 diff --git a/src/defines.h b/src/defines.h
-index 2b350553..e384b8b3 100644
+index 2b350553..00f959a8 100644
 --- a/src/defines.h
 +++ b/src/defines.h
-@@ -86,7 +86,33 @@
+@@ -86,7 +86,45 @@
  // Level Gauge
  #define FROM_RADIO_MAX       0.8
  #define FROM_MIC_MAX         0.8
 -#define LEVEL_BETA           0.99
 +
-+// Running average (NOT an instantaneous peak-follower) of the level
-+// meter's per-tick peaks, deliberately slow so a single loud
-+// syllable/plosive gets smoothed into the average instead of individually
-+// pegging the meter -- confirmed needed 2026-08-24: an instant-attack
-+// design pegged on the 't' of "two" while ebumeter hadn't even reached
-+// -23 LUFS and the pre-encode plot was well within normal limits. A
-+// symmetric exponential average with tau=LEVEL_METER_TIME_CONSTANT_SEC;
-+// the trade-off is added latency to genuine level changes, accepted
-+// deliberately in exchange for not reacting to short-lived extremes.
-+#define LEVEL_METER_TIME_CONSTANT_SEC 1.0
++// Running average (NOT a simple instantaneous peak-follower) of the level
++// meter's per-tick peaks. Uses an adaptive time constant rather than one
++// fixed value: slow (LEVEL_METER_TIME_CONSTANT_SEC) across the acceptable
++// LEVEL_METER_TARGET_LOW_PCT..HIGH_PCT range, so genuine level-setting is
++// smoothed against individual syllables/plosives (confirmed needed
++// 2026-08-24: a fixed instant-attack design pegged on the 't' of "two"
++// while ebumeter hadn't even reached -23 LUFS and the pre-encode plot was
++// well within normal limits) -- but fast (LEVEL_METER_FAST_TIME_CONSTANT_SEC)
++// below LEVEL_METER_RAMP_LOW_PCT or above LEVEL_METER_RAMP_HIGH_PCT, so the
++// meter snaps up quickly when speech starts from silence and doesn't hang
++// around in the red after a genuine overload, ramping linearly between the
++// two rates across LEVEL_METER_RAMP_LOW_PCT..TARGET_LOW_PCT and
++// LEVEL_METER_TARGET_HIGH_PCT..RAMP_HIGH_PCT. Which zone applies is decided
++// by the meter's own previous (already-smoothed) reading, not the raw
++// incoming peak, so the ramp itself moves gradually and doesn't flicker
++// between rates right at a boundary.
++#define LEVEL_METER_TIME_CONSTANT_SEC 1.5
++#define LEVEL_METER_FAST_TIME_CONSTANT_SEC 0.02
++#define LEVEL_METER_RAMP_LOW_PCT  15
++#define LEVEL_METER_RAMP_HIGH_PCT 85
 +
 +// dBFS level that maps to 100% on the TX level meter's scale, set below
 +// true digital full scale (0 dBFS) so a nominal -23 LUFS test signal swings
@@ -31,14 +41,16 @@ index 2b350553..e384b8b3 100644
 +
 +// Acceptable-range marker drawn as a thin green strip below the level
 +// meter's gauge, in % of the gauge's own 0-100 scale. Centred on the
-+// ~50% mid-scale target from LEVEL_METER_REFERENCE_DB above.
++// ~50% mid-scale target from LEVEL_METER_REFERENCE_DB above. Also used
++// as the inner edge of the adaptive time-constant ramp above, so the
++// meter's slowest ballistics line up exactly with the visible green zone.
 +#define LEVEL_METER_TARGET_LOW_PCT  30
 +#define LEVEL_METER_TARGET_HIGH_PCT 70
  
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
 diff --git a/src/main.cpp b/src/main.cpp
-index 5925f03d..39b9d349 100644
+index 5925f03d..5d6d35be 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -21,6 +21,7 @@
@@ -68,7 +80,7 @@ index 5925f03d..39b9d349 100644
      bool txState = false;
      bool halfDuplexState = false;
      int syncState = 0;
-@@ -2398,44 +2404,65 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2398,44 +2404,88 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          // Level Gauge -----------------------------------------------------------------------
  
          bool updated = false;
@@ -134,16 +146,39 @@ index 5925f03d..39b9d349 100644
          {
 -            // Peak Reading meter: updates peaks immediately, then slowly decays
 -            int maxScaled = (int)(100.0 * ((float)m_maxLevel/32767.0));
-+            // Running average of tickPeak, deliberately slow (see
-+            // LEVEL_METER_TIME_CONSTANT_SEC in defines.h) so brief
-+            // transients wash out instead of individually pegging the
-+            // meter -- this is NOT a peak-follower.
-+            static const float levelMeterAlpha = 1.0f - expf(-(float)DT / (float)LEVEL_METER_TIME_CONSTANT_SEC);
-+            m_maxLevel += ((float)tickPeak - m_maxLevel) * levelMeterAlpha;
-+
 +            // 100% maps to LEVEL_METER_REFERENCE_DB, not true 0dBFS -- see
 +            // that constant's comment in defines.h for why.
 +            static const float levelMeterRefAmplitude = 32767.0f * powf(10.0f, (float)LEVEL_METER_REFERENCE_DB / 20.0f);
++
++            // Adaptive time constant (see defines.h): slow through the
++            // acceptable TARGET_LOW..HIGH_PCT range, fast outside
++            // RAMP_LOW..HIGH_PCT, ramping linearly between. Keyed off the
++            // meter's own previous reading (not tickPeak) so the ramp
++            // itself can't flicker tick-to-tick right at a boundary.
++            float prevPct = 100.0f * ((float)m_maxLevel / levelMeterRefAmplitude);
++            float tau;
++            if (prevPct <= LEVEL_METER_RAMP_LOW_PCT || prevPct >= LEVEL_METER_RAMP_HIGH_PCT)
++            {
++                tau = LEVEL_METER_FAST_TIME_CONSTANT_SEC;
++            }
++            else if (prevPct < LEVEL_METER_TARGET_LOW_PCT)
++            {
++                float frac = (prevPct - LEVEL_METER_RAMP_LOW_PCT) / (float)(LEVEL_METER_TARGET_LOW_PCT - LEVEL_METER_RAMP_LOW_PCT);
++                tau = LEVEL_METER_FAST_TIME_CONSTANT_SEC + frac * (LEVEL_METER_TIME_CONSTANT_SEC - LEVEL_METER_FAST_TIME_CONSTANT_SEC);
++            }
++            else if (prevPct > LEVEL_METER_TARGET_HIGH_PCT)
++            {
++                float frac = (LEVEL_METER_RAMP_HIGH_PCT - prevPct) / (float)(LEVEL_METER_RAMP_HIGH_PCT - LEVEL_METER_TARGET_HIGH_PCT);
++                tau = LEVEL_METER_FAST_TIME_CONSTANT_SEC + frac * (LEVEL_METER_TIME_CONSTANT_SEC - LEVEL_METER_FAST_TIME_CONSTANT_SEC);
++            }
++            else
++            {
++                tau = LEVEL_METER_TIME_CONSTANT_SEC;
++            }
++
++            float levelMeterAlpha = 1.0f - expf(-(float)DT / tau);
++            m_maxLevel += ((float)tickPeak - m_maxLevel) * levelMeterAlpha;
++
 +            int maxScaled = (int)(100.0 * ((float)m_maxLevel/levelMeterRefAmplitude));
 +            maxScaled = std::min(maxScaled, 100);
              m_gaugeLevel->SetValue(maxScaled);
@@ -151,7 +186,7 @@ index 5925f03d..39b9d349 100644
          }
      }
  }
-@@ -2603,6 +2630,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2603,6 +2653,7 @@ void MainFrame::performFreeDVOn_()
          g_plotDemodInFifo.reset();
          g_plotSpeechOutFifo.reset();
          g_plotSpeechInFifo.reset();
@@ -194,7 +229,7 @@ index 949e04b4..eeb17711 100644
          auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
          auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 705f14e5..9ea56de7 100644
+index 705f14e5..cd969cf4 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -29,6 +29,7 @@
@@ -205,7 +240,7 @@ index 705f14e5..9ea56de7 100644
  
  #if !wxCHECK_VERSION(3, 3, 0)
  #include <set>
-@@ -572,10 +573,46 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -572,10 +573,42 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
      levelSizer = new wxStaticBoxSizer(levelBox, wxHORIZONTAL);
  
@@ -221,8 +256,8 @@ index 705f14e5..9ea56de7 100644
 +    // diagnostic). TX-only-ness is now purely a paint-time decision via
 +    // m_levelTargetMarkerActive, toggled+Refresh()'d by OnTimer() instead.
 +    m_levelTargetMarkerActive = false;
-+    m_levelTargetMarker = new wxPanel(levelBox, wxID_ANY, wxDefaultPosition, wxSize(135,3));
-+    m_levelTargetMarker->SetToolTip(_("Acceptable level range (amber = too low, green = target, red = too high)"));
++    m_levelTargetMarker = new wxPanel(levelBox, wxID_ANY, wxDefaultPosition, wxSize(135,5));
++    m_levelTargetMarker->SetToolTip(_("Acceptable level range"));
 +    m_levelTargetMarker->Bind(wxEVT_PAINT, [this](wxPaintEvent&) {
 +        wxPaintDC dc(m_levelTargetMarker);
 +        wxSize sz = m_levelTargetMarker->GetClientSize();
@@ -233,12 +268,8 @@ index 705f14e5..9ea56de7 100644
 +            int loX = sz.GetWidth() * LEVEL_METER_TARGET_LOW_PCT / 100;
 +            int hiX = sz.GetWidth() * LEVEL_METER_TARGET_HIGH_PCT / 100;
 +            dc.SetPen(*wxTRANSPARENT_PEN);
-+            dc.SetBrush(wxBrush(wxColour(255, 165, 0)));
-+            dc.DrawRectangle(0, 0, loX, sz.GetHeight());
 +            dc.SetBrush(wxBrush(wxColour(0, 200, 0)));
 +            dc.DrawRectangle(loX, 0, hiX - loX, sz.GetHeight());
-+            dc.SetBrush(wxBrush(*wxRED));
-+            dc.DrawRectangle(hiX, 0, sz.GetWidth() - hiX, sz.GetHeight());
 +        }
 +    });
 +    levelGaugeSizer->Add(m_levelTargetMarker, 0, static_cast<int>(wxALIGN_CENTER_HORIZONTAL));
@@ -247,7 +278,7 @@ index 705f14e5..9ea56de7 100644
      m_gaugeLevel->SetToolTip(_("Peak of From Radio in Rx, or peak of From Mic in Tx mode."));
 -    levelSizer->Add(m_gaugeLevel, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
 -    
-+    levelGaugeSizer->Add(m_gaugeLevel, 0, wxTOP, 0);
++    levelGaugeSizer->Add(m_gaugeLevel, 0, wxTOP, 2);
 +
 +    levelSizer->Add(levelGaugeSizer, 1, wxALIGN_CENTER_VERTICAL|static_cast<int>(wxALL), 10);
 +
