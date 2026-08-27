@@ -1,8 +1,8 @@
 diff --git a/src/defines.h b/src/defines.h
-index 6de51291..6b2130d6 100644
+index 6de51291..5f600c8e 100644
 --- a/src/defines.h
 +++ b/src/defines.h
-@@ -90,17 +90,30 @@
+@@ -90,17 +90,42 @@
  #define FROM_RADIO_MAX       0.8
  #define FROM_MIC_MAX         0.8
  
@@ -17,16 +17,26 @@ index 6de51291..6b2130d6 100644
 -// 327 = 32767 * y^33
 -// 33rd root of 0.01 = 0.86
 -#define LEVEL_BETA           0.86
-+// Running average (NOT an instantaneous peak-follower) of the level
-+// meter's per-tick peaks, deliberately slow so a single loud
-+// syllable/plosive gets smoothed into the average instead of individually
-+// pegging the meter -- confirmed needed 2026-08-24: an instant-attack
-+// design pegged on the 't' of "two" while ebumeter hadn't even reached
-+// -23 LUFS and the pre-encode plot was well within normal limits. A
-+// symmetric exponential average with tau=LEVEL_METER_TIME_CONSTANT_SEC;
-+// the trade-off is added latency to genuine level changes, accepted
-+// deliberately in exchange for not reacting to short-lived extremes.
-+#define LEVEL_METER_TIME_CONSTANT_SEC 1.0
++// Running average (NOT a simple instantaneous peak-follower) of the level
++// meter's per-tick peaks. Uses an adaptive time constant rather than one
++// fixed value: slow (LEVEL_METER_TIME_CONSTANT_SEC) across the acceptable
++// LEVEL_METER_TARGET_LOW_PCT..HIGH_PCT range, so genuine level-setting is
++// smoothed against individual syllables/plosives (confirmed needed
++// 2026-08-24: a fixed instant-attack design pegged on the 't' of "two"
++// while ebumeter hadn't even reached -23 LUFS and the pre-encode plot was
++// well within normal limits) -- but fast (LEVEL_METER_FAST_TIME_CONSTANT_SEC)
++// below LEVEL_METER_RAMP_LOW_PCT or above LEVEL_METER_RAMP_HIGH_PCT, so the
++// meter snaps up quickly when speech starts from silence and doesn't hang
++// around in the red after a genuine overload, ramping linearly between the
++// two rates across LEVEL_METER_RAMP_LOW_PCT..TARGET_LOW_PCT and
++// LEVEL_METER_TARGET_HIGH_PCT..RAMP_HIGH_PCT. Which zone applies is decided
++// by the meter's own previous (already-smoothed) reading, not the raw
++// incoming peak, so the ramp itself moves gradually and doesn't flicker
++// between rates right at a boundary.
++#define LEVEL_METER_TIME_CONSTANT_SEC 1.5
++#define LEVEL_METER_FAST_TIME_CONSTANT_SEC 0.02
++#define LEVEL_METER_RAMP_LOW_PCT  15
++#define LEVEL_METER_RAMP_HIGH_PCT 85
 +
 +// dBFS level that maps to 100% on the TX level meter's scale, set below
 +// true digital full scale (0 dBFS) so a nominal -23 LUFS test signal swings
@@ -36,16 +46,18 @@ index 6de51291..6b2130d6 100644
 +// everyday speech.
 +#define LEVEL_METER_REFERENCE_DB (-6.0)
 +
-+// Acceptable-range marker drawn as a thin strip below the level meter's
-+// gauge, in % of the gauge's own 0-100 scale. Centred on the ~50%
-+// mid-scale target from LEVEL_METER_REFERENCE_DB above.
++// Acceptable-range marker drawn as a thin green strip below the level
++// meter's gauge, in % of the gauge's own 0-100 scale. Centred on the
++// ~50% mid-scale target from LEVEL_METER_REFERENCE_DB above. Also used
++// as the inner edge of the adaptive time-constant ramp above, so the
++// meter's slowest ballistics line up exactly with the visible green zone.
 +#define LEVEL_METER_TARGET_LOW_PCT  30
 +#define LEVEL_METER_TARGET_HIGH_PCT 70
  
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
 diff --git a/src/main.cpp b/src/main.cpp
-index 06df4bd1..04b187a9 100644
+index 06df4bd1..74ea9190 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -21,6 +21,7 @@
@@ -56,7 +68,7 @@ index 06df4bd1..04b187a9 100644
  #include <inttypes.h>
  #include <time.h>
  #include <fstream>
-@@ -2153,44 +2154,62 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2153,44 +2154,85 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          // Level Gauge -----------------------------------------------------------------------
  
          bool updated = false;
@@ -121,16 +133,39 @@ index 06df4bd1..04b187a9 100644
 -            int maxScaled = m_maxLevel == 0 ? -40 : 20 * std::log10((float)m_maxLevel/32767.0); // log(0) is undefined
 -            m_gaugeLevel->SetValue(std::max(-40, maxScaled) + 40); // 1/32767 -> -90dB
 -            m_maxLevel *= LEVEL_BETA;
-+            // Running average of tickPeak, deliberately slow (see
-+            // LEVEL_METER_TIME_CONSTANT_SEC in defines.h) so brief
-+            // transients wash out instead of individually pegging the
-+            // meter -- this is NOT a peak-follower.
-+            static const float levelMeterAlpha = 1.0f - expf(-(float)DT / (float)LEVEL_METER_TIME_CONSTANT_SEC);
-+            m_maxLevel += ((float)tickPeak - m_maxLevel) * levelMeterAlpha;
-+
 +            // 100% maps to LEVEL_METER_REFERENCE_DB, not true 0dBFS -- see
 +            // that constant's comment in defines.h for why.
 +            static const float levelMeterRefAmplitude = 32767.0f * powf(10.0f, (float)LEVEL_METER_REFERENCE_DB / 20.0f);
++
++            // Adaptive time constant (see defines.h): slow through the
++            // acceptable TARGET_LOW..HIGH_PCT range, fast outside
++            // RAMP_LOW..HIGH_PCT, ramping linearly between. Keyed off the
++            // meter's own previous reading (not tickPeak) so the ramp
++            // itself can't flicker tick-to-tick right at a boundary.
++            float prevPct = 100.0f * ((float)m_maxLevel / levelMeterRefAmplitude);
++            float tau;
++            if (prevPct <= LEVEL_METER_RAMP_LOW_PCT || prevPct >= LEVEL_METER_RAMP_HIGH_PCT)
++            {
++                tau = LEVEL_METER_FAST_TIME_CONSTANT_SEC;
++            }
++            else if (prevPct < LEVEL_METER_TARGET_LOW_PCT)
++            {
++                float frac = (prevPct - LEVEL_METER_RAMP_LOW_PCT) / (float)(LEVEL_METER_TARGET_LOW_PCT - LEVEL_METER_RAMP_LOW_PCT);
++                tau = LEVEL_METER_FAST_TIME_CONSTANT_SEC + frac * (LEVEL_METER_TIME_CONSTANT_SEC - LEVEL_METER_FAST_TIME_CONSTANT_SEC);
++            }
++            else if (prevPct > LEVEL_METER_TARGET_HIGH_PCT)
++            {
++                float frac = (LEVEL_METER_RAMP_HIGH_PCT - prevPct) / (float)(LEVEL_METER_RAMP_HIGH_PCT - LEVEL_METER_TARGET_HIGH_PCT);
++                tau = LEVEL_METER_FAST_TIME_CONSTANT_SEC + frac * (LEVEL_METER_TIME_CONSTANT_SEC - LEVEL_METER_FAST_TIME_CONSTANT_SEC);
++            }
++            else
++            {
++                tau = LEVEL_METER_TIME_CONSTANT_SEC;
++            }
++
++            float levelMeterAlpha = 1.0f - expf(-(float)DT / tau);
++            m_maxLevel += ((float)tickPeak - m_maxLevel) * levelMeterAlpha;
++
 +            int maxScaled = (int)(100.0 * ((float)m_maxLevel/levelMeterRefAmplitude));
 +            maxScaled = std::min(maxScaled, 100);
 +            m_gaugeLevel->SetValue(maxScaled);
