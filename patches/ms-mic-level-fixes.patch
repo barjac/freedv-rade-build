@@ -22,69 +22,89 @@ index e64c60e3..6de51291 100644
  
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
+diff --git a/src/gui/dialogs/dlg_filter.cpp b/src/gui/dialogs/dlg_filter.cpp
+index 2abfda27..371ca471 100644
+--- a/src/gui/dialogs/dlg_filter.cpp
++++ b/src/gui/dialogs/dlg_filter.cpp
+@@ -639,7 +639,19 @@ void FilterDlg::OnNoiseReductionEnable(wxScrollEvent&) {
+ void FilterDlg::OnAgcEnable(wxScrollEvent&) {
+     wxGetApp().appConfiguration.filterConfiguration.agcEnabled = m_ckboxAgcEnabled->GetValue();
+     g_agcEnabled.store(wxGetApp().appConfiguration.filterConfiguration.agcEnabled, std::memory_order_release); // forces immediate change at pipeline level
++    if (wxGetApp().appConfiguration.filterConfiguration.agcEnabled)
++    {
++        // Mic level should be reset to 0 if AGC is enabled.
++        wxGetApp().appConfiguration.filterConfiguration.micInChannel.volInDB = 0;
++        m_MicInVol.gaindB = wxGetApp().appConfiguration.filterConfiguration.micInChannel.volInDB;
++        setGain(&m_MicInVol);
++
++        plotMicInFilterSpectrum();
++        adjRunTimeMicInFilter();
++    }
++
+     ExchangeData(EXCHANGE_DATA_OUT);
++    updateControlState();
+ }
+ 
+ void FilterDlg::OnBwExpandEnable(wxScrollEvent&) {
+@@ -662,7 +674,7 @@ void FilterDlg::updateControlState()
+     m_MicInTreble.sliderFreq->Enable(wxGetApp().appConfiguration.filterConfiguration.micInChannel.eqEnable);
+     m_MicInTreble.sliderGain->Enable(wxGetApp().appConfiguration.filterConfiguration.micInChannel.eqEnable);
+     
+-    m_MicInVol.sliderGain->Enable(true);
++    m_MicInVol.sliderGain->Enable(!wxGetApp().appConfiguration.filterConfiguration.agcEnabled);
+     
+     m_MicInDefault->Enable(wxGetApp().appConfiguration.filterConfiguration.micInChannel.eqEnable);
+     
 diff --git a/src/main.cpp b/src/main.cpp
-index f0cf48ea..2e6b4793 100644
+index f0cf48ea..44c095cd 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
-@@ -135,7 +135,9 @@ time_t              g_sync_time;
+@@ -135,7 +135,8 @@ time_t              g_sync_time;
  constexpr int PLOT_BUF_MULTIPLIER=8;
  GenericFIFO<short>  g_plotDemodInFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
  GenericFIFO<short>  g_plotSpeechOutFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
 -GenericFIFO<short>  g_plotSpeechInFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
 +GenericFIFO<short>  g_plotSpeechInFifoBeforeEQ(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
-+GenericFIFO<short>  g_plotSpeechInFifoBeforeAGC(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
 +GenericFIFO<short>  g_plotSpeechInFifoAfterAGC(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
  
  // Soundcard config
  int                 g_nSoundCards;
-@@ -1227,6 +1229,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
-     m_panelSpectrum = nullptr;
-     m_panelWaterfall = nullptr;
-     m_panelSpeechIn = nullptr;
-+    m_panelCoderIn = nullptr;
-     m_panelSpeechOut = nullptr;
-     m_panelDemodIn = nullptr;
-     m_panelSNR = nullptr;
-@@ -1262,6 +1265,10 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, _("FreeDV ")
-     m_panelSpeechIn = new PlotScalar(m_auiNbookCtrl, WAVEFORM_PLOT_TIME, 1.0/WAVEFORM_PLOT_FS, -1, 1, 1, 0.2, "%2.1f", 0);
-     m_auiNbookCtrl->AddPage(m_panelSpeechIn, _("Frm Mic"), false, wxNullBitmap);
- 
-+    // Add Coder Input window
-+    m_panelCoderIn = new PlotScalar(m_auiNbookCtrl, WAVEFORM_PLOT_TIME, 1.0/WAVEFORM_PLOT_FS, -1, 1, 1, 0.2, "%2.1f", 0);
-+    m_auiNbookCtrl->AddPage(m_panelCoderIn, _("To Mod"), false, wxNullBitmap);
+@@ -899,7 +900,12 @@ void MainFrame::loadConfiguration_()
+     
+     // Load AGC state
+     g_agcEnabled.store(wxGetApp().appConfiguration.filterConfiguration.agcEnabled, std::memory_order_release);
+-    
++    if (wxGetApp().appConfiguration.filterConfiguration.agcEnabled)
++    {
++        // Mic level should be reset to 0 if AGC is enabled.
++        wxGetApp().appConfiguration.filterConfiguration.micInChannel.volInDB = 0;
++    }
 +
-     // Add Speech Output window
-     m_panelSpeechOut = new PlotScalar(m_auiNbookCtrl, WAVEFORM_PLOT_TIME, 1.0/WAVEFORM_PLOT_FS, -1, 1, 1, 0.2, "%2.1f", 0);
-     m_auiNbookCtrl->AddPage(m_panelSpeechOut, _("Frm Decoder"), false, wxNullBitmap);
-@@ -1991,7 +1998,9 @@ int MainFrame::getIdealStationsHeardColumnLength_(int col)
+     // Load BW expander state
+     g_bwExpandEnabled.store(wxGetApp().appConfiguration.filterConfiguration.bwExpandEnabled, std::memory_order_release);
+     
+@@ -1991,7 +1997,8 @@ int MainFrame::getIdealStationsHeardColumnLength_(int col)
  //----------------------------------------------------------------
  void MainFrame::OnTimer(wxTimerEvent &evt)
  {
 -    short speechInPlotSamples[WAVEFORM_PLOT_BUF];
 +    short speechInPlotSamplesBeforeEQ[WAVEFORM_PLOT_BUF];
-+    short speechInPlotSamplesBeforeAGC[WAVEFORM_PLOT_BUF];
 +    short speechInPlotSamplesAfterAGC[WAVEFORM_PLOT_BUF];
      short speechOutPlotSamples[WAVEFORM_PLOT_BUF];
      short demodInPlotSamples[WAVEFORM_PLOT_BUF];
      bool txState = false;
-@@ -2056,11 +2065,22 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2056,11 +2063,16 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
        }
        else if (timerId == ID_TIMER_SPEECH_IN)
        {
 -          if (g_plotSpeechInFifo.read(speechInPlotSamples, WAVEFORM_PLOT_BUF)) {
 -              memset(speechInPlotSamples, 0, WAVEFORM_PLOT_BUF*sizeof(short));
-+          if (g_plotSpeechInFifoBeforeAGC.read(speechInPlotSamplesBeforeAGC, WAVEFORM_PLOT_BUF)) {
-+              memset(speechInPlotSamplesBeforeAGC, 0, WAVEFORM_PLOT_BUF*sizeof(short));
-           }
--          m_panelSpeechIn->add_new_short_samples(speechInPlotSamples, WAVEFORM_PLOT_BUF, 32767);
-+          m_panelSpeechIn->add_new_short_samples(speechInPlotSamplesBeforeAGC, WAVEFORM_PLOT_BUF, 32767);
-           m_panelSpeechIn->refreshData();
-+          
 +          if (g_plotSpeechInFifoAfterAGC.read(speechInPlotSamplesAfterAGC, WAVEFORM_PLOT_BUF)) {
 +              memset(speechInPlotSamplesAfterAGC, 0, WAVEFORM_PLOT_BUF*sizeof(short));
-+          }
-+          m_panelCoderIn->add_new_short_samples(speechInPlotSamplesAfterAGC, WAVEFORM_PLOT_BUF, 32767);
-+          m_panelCoderIn->refreshData();
+           }
+-          m_panelSpeechIn->add_new_short_samples(speechInPlotSamples, WAVEFORM_PLOT_BUF, 32767);
++          m_panelSpeechIn->add_new_short_samples(speechInPlotSamplesAfterAGC, WAVEFORM_PLOT_BUF, 32767);
+           m_panelSpeechIn->refreshData();
 +          
 +          if (g_plotSpeechInFifoBeforeEQ.read(speechInPlotSamplesBeforeEQ, WAVEFORM_PLOT_BUF))
 +          {
@@ -93,7 +113,23 @@ index f0cf48ea..2e6b4793 100644
        }
        else if (timerId == ID_TIMER_SPEECH_OUT)
        {
-@@ -2469,8 +2489,8 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2116,14 +2128,7 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+              if (m_filterDialog->haveVolumesBeenChanged())
+              {
+                 auto sliderVal = 0.0;
+-                if (txState)
+-                {
+-                    sliderVal = wxGetApp().appConfiguration.filterConfiguration.micInChannel.volInDB;
+-                }
+-                else
+-                {
+-                    sliderVal = wxGetApp().appConfiguration.filterConfiguration.spkOutChannel.volInDB;
+-                }
++                sliderVal = wxGetApp().appConfiguration.filterConfiguration.spkOutChannel.volInDB;
+ 
+                 if ((sliderVal * 10) != m_sliderMicSpkrLevel->GetValue())
+                 {
+@@ -2469,8 +2474,8 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
              // peak from this DT sampling period
              int maxSpeechIn = 0;
              for(int i=0; i<WAVEFORM_PLOT_BUF; i++)
@@ -104,7 +140,7 @@ index f0cf48ea..2e6b4793 100644
  
              // peak from last second
              if (maxSpeechIn > m_maxLevel)
-@@ -2482,8 +2502,8 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2482,8 +2487,8 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          if (updated)
          {
              // Peak Reading meter: updates peaks immediately, then slowly decays
@@ -115,45 +151,101 @@ index f0cf48ea..2e6b4793 100644
              m_maxLevel *= LEVEL_BETA;
          }
      }
-@@ -2599,7 +2619,9 @@ void MainFrame::performFreeDVOn_()
+@@ -2599,7 +2604,8 @@ void MainFrame::performFreeDVOn_()
          // Reset plot FIFOs
          g_plotDemodInFifo.reset();
          g_plotSpeechOutFifo.reset();
 -        g_plotSpeechInFifo.reset();
 +        g_plotSpeechInFifoBeforeEQ.reset();
-+        g_plotSpeechInFifoBeforeAGC.reset();
 +        g_plotSpeechInFifoAfterAGC.reset();
  
          m_txtCtrlCallSign->SetValue(wxT(""));
          m_lastReportedCallsignListView->DeleteAllItems();
-diff --git a/src/main.h b/src/main.h
-index a5adf933..ed76e2f4 100644
---- a/src/main.h
-+++ b/src/main.h
-@@ -294,6 +294,7 @@ class MainFrame : public TopFrame
-         PlotSpectrum*           m_panelSpectrum;
-         PlotWaterfall*          m_panelWaterfall;
-         PlotScalar*             m_panelSpeechIn;
-+        PlotScalar*             m_panelCoderIn;
-         PlotScalar*             m_panelSpeechOut;
-         PlotScalar*             m_panelDemodIn;
-         PlotScalar*             m_panelSNR;
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index 140415ba..0bc4b602 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -898,17 +898,8 @@ void MainFrame::OnTuneAttenContextMenu( wxContextMenuEvent& )
+ void MainFrame::OnChangeMicSpkrLevel( wxScrollEvent& )
+ {
+     auto sliderLevel = (double)m_sliderMicSpkrLevel->GetValue() / 10.0;
+-    
+-    if (g_tx.load(std::memory_order_acquire))
+-    {
+-        wxGetApp().appConfiguration.filterConfiguration.micInChannel.volInDB = sliderLevel;
+-        m_newMicInFilter = true;
+-    }
+-    else
+-    {
+-        wxGetApp().appConfiguration.filterConfiguration.spkOutChannel.volInDB = sliderLevel;
+-        m_newSpkOutFilter = true;
+-    }
++    wxGetApp().appConfiguration.filterConfiguration.spkOutChannel.volInDB = sliderLevel;
++    m_newSpkOutFilter = true;
+     
+     wxString fmtString = wxString::Format(MIC_SPKR_LEVEL_FORMAT_STR, wxNumberFormatter::ToString((double)sliderLevel, 1), DECIBEL_STR);
+     m_txtMicSpkrLevelNum->SetLabel(fmtString);
+@@ -1586,26 +1577,8 @@ void MainFrame::togglePTT(void) {
+     m_cboReportFrequency->Enable(!newTx);
+     m_btnTogTune->Enable(!newTx);
+ 
+-    if (newTx)
+-    {
+-        micSpeakerBox->SetLabel("Mic &Level");
+-
+-        m_sliderMicSpkrLevel->SetValue(wxGetApp().appConfiguration.filterConfiguration.micInChannel.volInDB * 10);
+-        wxString fmtString = wxString::Format(MIC_SPKR_LEVEL_FORMAT_STR, wxNumberFormatter::ToString((double)wxGetApp().appConfiguration.filterConfiguration.micInChannel.volInDB, 1), DECIBEL_STR);
+-        m_txtMicSpkrLevelNum->SetLabel(fmtString);
+-    }
+-    else
+-    {
+-        micSpeakerBox->SetLabel("Speaker &Level");
+-
+-        m_sliderMicSpkrLevel->SetValue(wxGetApp().appConfiguration.filterConfiguration.spkOutChannel.volInDB * 10);
+-        wxString fmtString = wxString::Format(MIC_SPKR_LEVEL_FORMAT_STR, wxNumberFormatter::ToString((double)wxGetApp().appConfiguration.filterConfiguration.spkOutChannel.volInDB, 1), DECIBEL_STR);
+-        m_txtMicSpkrLevelNum->SetLabel(fmtString);
+-    }
+-
+     CallAfter([&]() {
+         txChangeoverOccurring_ = false;
+-        m_sliderMicSpkrLevel->Refresh(); // Redraw doesn't happen immediately otherwise in some environments
+     });
+ 
+     if (newTx && m_momentaryKeyReleasedDuringChangeover_)
+@@ -2102,16 +2075,8 @@ void MainFrame::updateReportingFreqList_()
+ void MainFrame::OnResetMicSpkrLevel(wxMouseEvent&)
+ {
+     auto sliderLevel = 0;
+-    if (g_tx.load(std::memory_order_acquire))
+-    {
+-        wxGetApp().appConfiguration.filterConfiguration.micInChannel.volInDB = sliderLevel;
+-        m_newMicInFilter = true;
+-    }
+-    else
+-    {
+-        wxGetApp().appConfiguration.filterConfiguration.spkOutChannel.volInDB = sliderLevel;
+-        m_newSpkOutFilter = true;
+-    }
++    wxGetApp().appConfiguration.filterConfiguration.spkOutChannel.volInDB = sliderLevel;
++    m_newSpkOutFilter = true;
+     
+     wxString fmtString = wxString::Format(MIC_SPKR_LEVEL_FORMAT_STR, wxNumberFormatter::ToString((double)sliderLevel, 1), DECIBEL_STR);
+     m_txtMicSpkrLevelNum->SetLabel(fmtString);
 diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
-index dc03077f..a3616a4a 100644
+index dc03077f..ca8f421a 100644
 --- a/src/pipeline/TxRxThread.cpp
 +++ b/src/pipeline/TxRxThread.cpp
-@@ -90,7 +90,9 @@ extern std::atomic<bool> g_playFileToMicIn;
+@@ -90,7 +90,8 @@ extern std::atomic<bool> g_playFileToMicIn;
  extern int g_sfTxFs;
  extern bool g_loopPlayFileToMicIn;
  extern std::atomic<float> g_TxFreqOffsetHz;
 -extern GenericFIFO<short> g_plotSpeechInFifo;
 +extern GenericFIFO<short> g_plotSpeechInFifoBeforeEQ;
-+extern GenericFIFO<short> g_plotSpeechInFifoBeforeAGC;
 +extern GenericFIFO<short> g_plotSpeechInFifoAfterAGC;
  extern GenericFIFO<short> g_plotDemodInFifo;
  extern GenericFIFO<short> g_plotSpeechOutFifo;
  extern int g_txLevel;
-@@ -210,6 +212,41 @@ void TxRxThread::initializePipeline_()
+@@ -210,6 +211,29 @@ void TxRxThread::initializePipeline_()
              eitherOrBypassRNNoise);
          pipeline_->appendPipelineStep(eitherOrRNNoiseStep);
  
@@ -180,22 +272,10 @@ index dc03077f..a3616a4a 100644
 +            g_rxUserdata->micEqLock);
 +        pipeline_->appendPipelineStep(equalizerStep);
 +
-+        // Resample for plot step (after equalizer, before AGC)
-+        auto resampleForPlotStepBeforeAGC = new ResampleForPlotStep(&g_plotSpeechInFifoBeforeAGC);
-+        auto resampleForPlotPipelineBeforeAGC = new AudioPipeline(inputSampleRate_, resampleForPlotStepBeforeAGC->getOutputSampleRate());
-+#if defined(ENABLE_FASTER_PLOTS)
-+        auto resampleForPlotResamplerBeforeAGC = new ResampleStep(inputSampleRate_, resampleForPlotStepBeforeAGC->getInputSampleRate(), true); // need to create manually to get access to "plot only" optimizations
-+        resampleForPlotPipelineBeforeAGC->appendPipelineStep(resampleForPlotResamplerBeforeAGC);
-+#endif // defined(ENABLE_FASTER_PLOTS)
-+        resampleForPlotPipelineBeforeAGC->appendPipelineStep(resampleForPlotStepBeforeAGC);
-+
-+        auto resampleForPlotTapBeforeAGC = new TapStep(inputSampleRate_, resampleForPlotPipelineBeforeAGC);
-+        pipeline_->appendPipelineStep(resampleForPlotTapBeforeAGC);
-+
          // AGC step (optional)
          auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
          auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
-@@ -223,17 +260,18 @@ void TxRxThread::initializePipeline_()
+@@ -223,17 +247,18 @@ void TxRxThread::initializePipeline_()
              eitherOrBypassAgc);
          pipeline_->appendPipelineStep(eitherOrAgcStep); 
  
@@ -225,7 +305,7 @@ index dc03077f..a3616a4a 100644
          // Take TX audio post-equalizer and send it to RX for possible monitoring use.
          if (equalizedMicAudioLink_ != nullptr)
          {
-@@ -243,18 +281,6 @@ void TxRxThread::initializePipeline_()
+@@ -243,18 +268,6 @@ void TxRxThread::initializePipeline_()
              auto micAudioTap = new TapStep(inputSampleRate_, micAudioPipeline);
              pipeline_->appendPipelineStep(micAudioTap);
          }
