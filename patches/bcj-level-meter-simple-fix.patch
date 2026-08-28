@@ -1,8 +1,8 @@
 diff --git a/src/defines.h b/src/defines.h
-index 2b350553..8c2a1432 100644
+index 2b350553..f5f16e22 100644
 --- a/src/defines.h
 +++ b/src/defines.h
-@@ -86,7 +86,52 @@
+@@ -86,7 +86,61 @@
  // Level Gauge
  #define FROM_RADIO_MAX       0.8
  #define FROM_MIC_MAX         0.8
@@ -15,24 +15,33 @@ index 2b350553..8c2a1432 100644
 +// smoothed against individual syllables/plosives (confirmed needed
 +// 2026-08-24: a fixed instant-attack design pegged on the 't' of "two"
 +// while ebumeter hadn't even reached -23 LUFS and the pre-encode plot was
-+// well within normal limits) -- but fast (LEVEL_METER_FAST_TIME_CONSTANT_SEC)
-+// below LEVEL_METER_RAMP_LOW_PCT or above LEVEL_METER_RAMP_HIGH_PCT, so the
-+// meter snaps up quickly when speech starts from silence and doesn't hang
-+// around in the red after a genuine overload, ramping linearly between the
-+// two rates across LEVEL_METER_RAMP_LOW_PCT..TARGET_LOW_PCT and
++// well within normal limits) -- but fast below LEVEL_METER_RAMP_LOW_PCT
++// (LEVEL_METER_FAST_LOW_TIME_CONSTANT_SEC) or above LEVEL_METER_RAMP_HIGH_PCT
++// (LEVEL_METER_FAST_HIGH_TIME_CONSTANT_SEC -- deliberately slower than the
++// low end, see below), so the meter snaps up quickly when speech starts
++// from silence and doesn't hang around in the red after a genuine
++// overload, ramping linearly between the two rates across
++// LEVEL_METER_RAMP_LOW_PCT..TARGET_LOW_PCT and
 +// LEVEL_METER_TARGET_HIGH_PCT..RAMP_HIGH_PCT. Which zone applies is decided
 +// by the meter's own previous (already-smoothed) reading, not the raw
 +// incoming peak, so the ramp itself moves gradually and doesn't flicker
-+// between rates right at a boundary. LEVEL_METER_FAST_TIME_CONSTANT_SEC
-+// must stay comfortably above DT (the ~100ms tick period) -- a value much
-+// smaller than one tick gives the EMA essentially no memory between ticks
++// between rates right at a boundary. Both fast constants must stay
++// comfortably above DT (the ~100ms tick period) -- a value much smaller
++// than one tick gives the EMA essentially no memory between ticks
 +// (alpha -> 1), so it just displays whichever single 100ms window's raw
 +// peak happened to land; a lone plosive/quiet gap could then snap the
 +// meter straight to an end-stop or straight to zero with nothing to damp
-+// it (confirmed 2026-08-27: seen live with the original 0.02s value).
-+// 0.15s (~1.5 ticks) still reads as snappy but blends 2-3 windows.
++// it (confirmed 2026-08-27: seen live with the original single 0.02s
++// value used at both ends).
 +#define LEVEL_METER_TIME_CONSTANT_SEC 1.5
-+#define LEVEL_METER_FAST_TIME_CONSTANT_SEC 0.15
++// Low end (near silence): 0.15s (~1.5 ticks) reads as snappy but still
++// blends 2-3 windows.
++#define LEVEL_METER_FAST_LOW_TIME_CONSTANT_SEC 0.15
++// High end (at/above overload): kept deliberately slower than the low end
++// -- test value, raised from 0.15s on the theory that a too-fast release
++// out of the red risks the meter dropping away before a genuine overload
++// has actually registered with the user.
++#define LEVEL_METER_FAST_HIGH_TIME_CONSTANT_SEC 0.5
 +#define LEVEL_METER_RAMP_LOW_PCT  15
 +#define LEVEL_METER_RAMP_HIGH_PCT 85
 +
@@ -57,7 +66,7 @@ index 2b350553..8c2a1432 100644
  // TX Attenuation (0.1 dB increments)
  #define TX_ATTENUATION_MIN (-300) /* -30 dB */
 diff --git a/src/main.cpp b/src/main.cpp
-index 5925f03d..5d6d35be 100644
+index 5925f03d..1e7c97d4 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -21,6 +21,7 @@
@@ -87,7 +96,7 @@ index 5925f03d..5d6d35be 100644
      bool txState = false;
      bool halfDuplexState = false;
      int syncState = 0;
-@@ -2398,44 +2404,88 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2398,44 +2404,92 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          // Level Gauge -----------------------------------------------------------------------
  
          bool updated = false;
@@ -164,19 +173,23 @@ index 5925f03d..5d6d35be 100644
 +            // itself can't flicker tick-to-tick right at a boundary.
 +            float prevPct = 100.0f * ((float)m_maxLevel / levelMeterRefAmplitude);
 +            float tau;
-+            if (prevPct <= LEVEL_METER_RAMP_LOW_PCT || prevPct >= LEVEL_METER_RAMP_HIGH_PCT)
++            if (prevPct <= LEVEL_METER_RAMP_LOW_PCT)
 +            {
-+                tau = LEVEL_METER_FAST_TIME_CONSTANT_SEC;
++                tau = LEVEL_METER_FAST_LOW_TIME_CONSTANT_SEC;
++            }
++            else if (prevPct >= LEVEL_METER_RAMP_HIGH_PCT)
++            {
++                tau = LEVEL_METER_FAST_HIGH_TIME_CONSTANT_SEC;
 +            }
 +            else if (prevPct < LEVEL_METER_TARGET_LOW_PCT)
 +            {
 +                float frac = (prevPct - LEVEL_METER_RAMP_LOW_PCT) / (float)(LEVEL_METER_TARGET_LOW_PCT - LEVEL_METER_RAMP_LOW_PCT);
-+                tau = LEVEL_METER_FAST_TIME_CONSTANT_SEC + frac * (LEVEL_METER_TIME_CONSTANT_SEC - LEVEL_METER_FAST_TIME_CONSTANT_SEC);
++                tau = LEVEL_METER_FAST_LOW_TIME_CONSTANT_SEC + frac * (LEVEL_METER_TIME_CONSTANT_SEC - LEVEL_METER_FAST_LOW_TIME_CONSTANT_SEC);
 +            }
 +            else if (prevPct > LEVEL_METER_TARGET_HIGH_PCT)
 +            {
 +                float frac = (LEVEL_METER_RAMP_HIGH_PCT - prevPct) / (float)(LEVEL_METER_RAMP_HIGH_PCT - LEVEL_METER_TARGET_HIGH_PCT);
-+                tau = LEVEL_METER_FAST_TIME_CONSTANT_SEC + frac * (LEVEL_METER_TIME_CONSTANT_SEC - LEVEL_METER_FAST_TIME_CONSTANT_SEC);
++                tau = LEVEL_METER_FAST_HIGH_TIME_CONSTANT_SEC + frac * (LEVEL_METER_TIME_CONSTANT_SEC - LEVEL_METER_FAST_HIGH_TIME_CONSTANT_SEC);
 +            }
 +            else
 +            {
@@ -193,7 +206,7 @@ index 5925f03d..5d6d35be 100644
          }
      }
  }
-@@ -2603,6 +2653,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2603,6 +2657,7 @@ void MainFrame::performFreeDVOn_()
          g_plotDemodInFifo.reset();
          g_plotSpeechOutFifo.reset();
          g_plotSpeechInFifo.reset();
