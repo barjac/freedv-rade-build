@@ -1,5 +1,5 @@
 diff --git a/src/defines.h b/src/defines.h
-index 3f812590..01b1a589 100644
+index 8efc1d48..01b1a589 100644
 --- a/src/defines.h
 +++ b/src/defines.h
 @@ -29,23 +29,6 @@
@@ -26,21 +26,17 @@ index 3f812590..01b1a589 100644
  // Spectrogram and Waterfall
  
  #define MIN_MAG_DB        -40.0     // min of spectrogram/waterfall magnitude axis
-@@ -107,17 +90,71 @@
+@@ -107,13 +90,71 @@
  #define FROM_RADIO_MAX       0.8
  #define FROM_MIC_MAX         0.8
  
--// Decay rate for the Level meter.
--// Calculated based on desired 12dB/sec decay:
--// -40 = 20 log(x/INT16_MAX)
--// -2 = log(x/INT16_MAX)
--// 10^-2 = x/INT16_MAX
--// 0.01 * INT16_MAX = 327 = x
--//
--// 40/12 = 3.33s to fully decay = 33 timer fires @ DT sec
--// 327 = 32767 * y^33
--// 33rd root of 0.01 = 0.86
--#define LEVEL_BETA           0.86
+-// Decay rate for the Level meter, applied once per GUI update (every DT sec).
+-// Target: -12 dB/sec.
+-//   20*log10(LEVEL_BETA) = -12 * DT
+-//   LEVEL_BETA = 10^(-12*DT/20) = 10^(-0.06) ≈ 0.871   (for DT = 0.10)
+-// => -1.20 dB per timer fire; the 30 dB gauge range fully decays in 2.5 s.
+-#define LEVEL_DECAY_DB_PER_SEC 12.0
+-#define LEVEL_BETA (std::pow(10.0, -LEVEL_DECAY_DB_PER_SEC * DT / 20.0))
 +// Running average (NOT a simple instantaneous peak-follower) of the level
 +// meter's per-tick peaks. Uses an adaptive time constant rather than one
 +// fixed value: slow (LEVEL_METER_TIME_CONSTANT_SEC) across the acceptable
