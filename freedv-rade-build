@@ -174,7 +174,9 @@ case $ID in
     groups_to_add+=(dialout plugdev)
 
     # Check if this is LMDE (Debian-based) or regular Mint (Ubuntu-based)
-    if [[ $ID_LIKE == *"debian"* ]]; then
+    # Regular Mint's ID_LIKE is "ubuntu debian" (it always includes "debian" too),
+    # so test for the absence of "ubuntu" rather than the presence of "debian".
+    if [[ $ID_LIKE != *"ubuntu"* ]]; then
         # LMDE - use Debian packages
         echo "Detected Linux Mint Debian Edition"
         run_as_root "apt-get install -y --no-install-recommends libspeexdsp-dev libsamplerate0-dev sox git libwxgtk3.2-dev libgtk-3-dev libssl-dev libhamlib-dev \
