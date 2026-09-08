@@ -24,14 +24,22 @@ flock -n 8 || { echo "Another instance is already running"; exit 1; }
 # Set full path to log
 LOGFILE="$RUN_DIR/freedv-rade-update.log"
 
-# Parse flags: strip --restart from args, keep --debug for restart passthrough
+# Parse flags: strip --restart from args, keep --debug/--dev for restart passthrough
 RESTARTING=false
 DEBUG=false
+# --dev is deliberately undocumented (no --help/usage text exists anywhere
+# in this script or the README, so this is consistent with how --restart/
+# --debug are already handled) -- it unlocks 'fork:branchname' as a
+# PR(s)/branch entry, building directly from a personal freedv-gui fork
+# branch instead of requiring an open PR against upstream. Off by default
+# so ordinary users seeing 'fork:...' rejected never learn it's there.
+DEV_MODE=false
 _args=()
 for _arg in "$@"; do
     case "$_arg" in
         --restart) RESTARTING=true ;;
         --debug)   DEBUG=true; _args+=("$_arg") ;;
+        --dev)     DEV_MODE=true; _args+=("$_arg") ;;
         *)         _args+=("$_arg") ;;
     esac
 done
@@ -138,6 +146,23 @@ echo "Resetting any patches or edits"
 git reset --hard HEAD || { echo "ERROR: git reset failed"; exit 1; }
 git clean -fd || { echo "ERROR: git clean failed"; exit 1; }
 
+# --dev only: make sure this persistent clone also knows about the
+# personal freedv-gui fork, as a second remote alongside 'origin'
+# (upstream). This is what makes 'fork:branchname' resolvable below --
+# without a fetched 'fork/branchname' ref, checking it out would just
+# fail with "not a valid object name", so fetch it unconditionally
+# whenever --dev is active rather than only when a fork: entry is
+# actually used this run (keeps the branch-selection logic below simple,
+# and the extra fetch is cheap/one remote).
+if $DEV_MODE; then
+    echo "Developer fork mode (--dev): 'fork:branchname' is available (barjac/freedv-gui)"
+    if ! git remote get-url fork >/dev/null 2>&1; then
+        echo "Adding 'fork' remote (barjac/freedv-gui)"
+        git remote add fork https://github.com/barjac/freedv-gui.git
+    fi
+    git fetch fork || { echo "ERROR: git fetch fork failed - check network connection"; exit 1; }
+fi
+
 echo "Switching to $default and syncing with origin"
 git fetch origin || { echo "ERROR: git fetch failed - check network connection"; exit 1; }
 git checkout -B $default origin/$default || { echo "ERROR: failed to reset $default to origin/$default"; exit 1; }
@@ -157,7 +182,17 @@ if (( ${#prbranches[@]} == 0 )); then
     else
         # Split the selection into at most one branch/tag entry (the base)
         # and any number of PR-number entries to merge onto that base.
+        # fork_base_entry is the --dev-only sibling of base_entry: same
+        # "at most one base" rule, but sourced from the 'fork' remote
+        # (barjac/freedv-gui) instead of 'origin' (upstream), and it can BE
+        # the base outright -- unlike branch_entries below, which only ever
+        # merge an origin branch on top of whatever base was already
+        # chosen. That distinction matters here because a personal branch
+        # like bcj-agc-gain-meter already has its own base (v3.0-dev) plus
+        # feature commits baked in -- it needs to replace the base
+        # entirely, not be merged onto one.
         base_entry=""
+        fork_base_entry=""
         pr_entries=()
         branch_entries=()
         for entry in "${prbranches[@]}"; do
@@ -165,20 +200,45 @@ if (( ${#prbranches[@]} == 0 )); then
                 pr_entries+=("$entry")
             elif [[ "$entry" == branch:* ]]; then
                 branch_entries+=("$entry")
+            elif [[ "$entry" == fork:* ]]; then
+                if ! $DEV_MODE; then
+                    echo "ERROR: Fork branch '$entry' not in upstream. Use a PR number instead."
+                    exit 1
+                fi
+                if [[ -n "$base_entry" || -n "$fork_base_entry" ]]; then
+                    echo "ERROR: Only one branch/tag name may be used as the base ('${base_entry:-$fork_base_entry}' and '$entry' were both given). Use 'branch:name' to merge in additional branches, or PR numbers for PRs."
+                    exit 1
+                fi
+                fork_base_entry="${entry#fork:}"
             elif [[ "$entry" == *:* ]]; then
                 echo "ERROR: Fork branch '$entry' not in upstream. Use a PR number instead."
                 exit 1
             else
-                if [[ -n "$base_entry" ]]; then
-                    echo "ERROR: Only one branch/tag name may be used as the base ('$base_entry' and '$entry' were both given). Use 'branch:name' to merge in additional branches, or PR numbers for PRs."
+                if [[ -n "$base_entry" || -n "$fork_base_entry" ]]; then
+                    echo "ERROR: Only one branch/tag name may be used as the base ('${base_entry:-$fork_base_entry}' and '$entry' were both given). Use 'branch:name' to merge in additional branches, or PR numbers for PRs."
                     exit 1
                 fi
                 base_entry="$entry"
             fi
         done
-        base_branch="${base_entry:-$default}"
+        base_branch="${base_entry:-${fork_base_entry:-$default}}"
 
-        if [[ -n "$base_entry" ]]; then
+        if [[ -n "$fork_base_entry" ]]; then
+            # Same "force-sync local ref, then use it as the base" shape as
+            # the origin/$base_entry path below, just against the fork
+            # remote -- and unlike that path there's no tag/local fallback,
+            # since a fork: entry only ever means "a branch on my fork".
+            if ! git rev-parse --verify -q "fork/$fork_base_entry" >/dev/null; then
+                echo -e "\nError finding fork:$fork_base_entry - closing.\n"
+                exit 1
+            fi
+            if ! git checkout -B "$fork_base_entry" "fork/$fork_base_entry"; then
+                echo -e "\nError finding fork:$fork_base_entry - closing.\n"
+                exit 1
+            fi
+            git reset --hard "fork/$fork_base_entry" || { echo "ERROR: failed to reset $fork_base_entry to fork/$fork_base_entry"; exit 1; }
+            _bi_base="fork:${fork_base_entry} @ $(git rev-parse --short HEAD)"
+        elif [[ -n "$base_entry" ]]; then
             if git rev-parse --verify -q "origin/$base_entry" >/dev/null; then
                 # Remote branch - force-sync local ref to origin, same as $default,
                 # so a prior run's leftover local commits (e.g. from patches applied
@@ -608,6 +668,7 @@ if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch, tag or PR(s)?" "[N
     fi
 
     echo -e "\nNOTE: Enter PR numbers, a base branch/tag name, and/or 'branch:name' to merge in another branch, space-separated."
+    $DEV_MODE && echo "NOTE: --dev active -- 'fork:branchname' also accepted as the base (barjac/freedv-gui)."
     [[ -n "$_default_input" ]] && echo "(Edit or clear the previous selection below)"
     if [[ -n "$_default_input" ]]; then
         read -r -e -i "$_default_input" -p "PR(s)/branch: " _input
@@ -833,6 +894,8 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
                     _preview_prs+=("${_entry#pr:}")
                 elif [[ "$_entry" == branch:* ]]; then
                     _preview_branches+=("${_entry#branch:}")
+                elif [[ "$_entry" == fork:* ]]; then
+                    _preview_base="${_entry#fork:} (fork)"
                 else
                     _preview_base="$_entry"
                 fi
