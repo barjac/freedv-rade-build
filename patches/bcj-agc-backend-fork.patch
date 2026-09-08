@@ -1,0 +1,15 @@
+diff --git a/cmake/BuildFreeDVBackend.cmake b/cmake/BuildFreeDVBackend.cmake
+index da1bc85..3acf001 100644
+--- a/cmake/BuildFreeDVBackend.cmake
++++ b/cmake/BuildFreeDVBackend.cmake
+@@ -2,8 +2,8 @@
+ 
+ FetchContent_Declare(
+     freedv_backend
+-    GIT_REPOSITORY https://github.com/tmiw/freedv-backend
+-    GIT_TAG main
++    GIT_REPOSITORY https://github.com/barjac/freedv-backend
++    GIT_TAG bcj-agc-gain-meter
+ )
+ 
+ FetchContent_MakeAvailable(freedv_backend)
