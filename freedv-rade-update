@@ -34,12 +34,18 @@ DEBUG=false
 # branch instead of requiring an open PR against upstream. Off by default
 # so ordinary users seeing 'fork:...' rejected never learn it's there.
 DEV_MODE=false
+# --profile=NAME: skip the interactive base/PR/branch/patch questions
+# entirely and load a previously-saved named profile (see .profiles)
+# instead. Still stops at the final summary/confirm like everything
+# else -- this only fast-forwards through the *selection* questions.
+PROFILE_NAME=""
 _args=()
 for _arg in "$@"; do
     case "$_arg" in
         --restart) RESTARTING=true ;;
         --debug)   DEBUG=true; _args+=("$_arg") ;;
         --dev)     DEV_MODE=true; _args+=("$_arg") ;;
+        --profile=*) PROFILE_NAME="${_arg#--profile=}"; _args+=("$_arg") ;;
         *)         _args+=("$_arg") ;;
     esac
 done
@@ -655,7 +661,66 @@ else
 fi
 
 prbranches=()
-if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch, tag or PR(s)?" "[N/y]" "yY" "nN"; then
+patches=()
+_profile_loaded=false
+_profiles_file="/home/${user}/freedv-rade-build/.profiles"
+
+# --profile=NAME given on the command line: load it now and skip the
+# top-level menu entirely, same as picking (U)pdate by hand.
+if [[ -n "$PROFILE_NAME" ]]; then
+    fastupdt=1
+    _match_line=""
+    if [[ -f "$_profiles_file" ]] && [[ -s "$_profiles_file" ]]; then
+        _match_line=$(awk -F' \\| ' -v want="$PROFILE_NAME" '$1 == want' "$_profiles_file")
+    fi
+    if [[ -z "$_match_line" ]]; then
+        echo -e "\nERROR: No saved profile named '$PROFILE_NAME' found."
+        if [[ -f "$_profiles_file" ]] && [[ -s "$_profiles_file" ]]; then
+            echo "Available profiles:"
+            awk -F' \\| ' '{print "  - " $1}' "$_profiles_file"
+        fi
+        exit 1
+    fi
+    IFS='|' read -r _p_desc _p_prbranches _p_patches _p_cname <<< "$_match_line"
+    read -ra prbranches <<< "$_p_prbranches"
+    read -ra patches <<< "$_p_patches"
+    cname="$(echo "$_p_cname" | xargs)"
+    echo -e "\nLoaded profile '$(echo "$_p_desc" | xargs)' (--profile)."
+    _profile_loaded=true
+fi
+
+# Offer a saved profile as a shortcut for the questions below -- picking
+# one populates prbranches/patches/cname directly and skips the manual
+# branch/patch/commit questions that otherwise follow, since a profile
+# saved right after a successful build already has whatever those would
+# have produced (including any patch-sidecar commit pin).
+if (( fastupdt == 1 )) && ! $_profile_loaded && [[ -f "$_profiles_file" ]] && [[ -s "$_profiles_file" ]]; then
+    _profile_lines=()
+    while IFS= read -r _line; do
+        _profile_lines+=("$_line")
+    done < "$_profiles_file"
+
+    echo -e "\nSaved profiles:"
+    for _i in "${!_profile_lines[@]}"; do
+        printf "  %2d) %s\n" "$((_i+1))" "$(echo "${_profile_lines[$_i]%%|*}" | xargs)"
+    done
+
+    if confirm "\nLoad one of these saved profiles?" "[N/y]" "yY" "nN"; then
+        read -rp "Profile number: " _pnum
+        if [[ "$_pnum" =~ ^[0-9]+$ ]] && (( _pnum >= 1 && _pnum <= ${#_profile_lines[@]} )); then
+            IFS='|' read -r _p_desc _p_prbranches _p_patches _p_cname <<< "${_profile_lines[$((_pnum-1))]}"
+            read -ra prbranches <<< "$_p_prbranches"
+            read -ra patches <<< "$_p_patches"
+            cname="$(echo "$_p_cname" | xargs)"
+            echo -e "\nLoaded profile '$(echo "$_p_desc" | xargs)'."
+            _profile_loaded=true
+        else
+            echo "Invalid selection - continuing with manual entry."
+        fi
+    fi
+fi
+
+if (( fastupdt == 1 )) && ! $_profile_loaded && confirm "\n\nUse a specific branch, tag or PR(s)?" "[N/y]" "yY" "nN"; then
     _last_prs_file="/home/${user}/freedv-rade-build/.last-prs"
     _default_input=""
 
@@ -682,7 +747,7 @@ if (( fastupdt == 1 )) && confirm "\n\nUse a specific branch, tag or PR(s)?" "[N
     done
 fi
 
-if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
+if (( fastupdt == 1 )) && ! $_profile_loaded && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
     patches=()
     _bdir="/home/${user}/freedv-rade-build"
     _last_file="${_bdir}/.last-patches"
@@ -821,8 +886,10 @@ if (( fastupdt == 1 )) && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
     fi
 fi
 
-# Auto-detect base commit from per-patch sidecar .commit files
-if (( fastupdt == 1 )) && (( ${#patches[@]} > 0 )); then
+# Auto-detect base commit from per-patch sidecar .commit files. Skipped
+# when a profile was loaded -- its own saved cname already reflects
+# whatever this detection produced back when the profile was saved.
+if (( fastupdt == 1 )) && ! $_profile_loaded && (( ${#patches[@]} > 0 )); then
     for _p in "${patches[@]}"; do
         _sidecar="/home/${user}/freedv-rade-build/${_p%.patch}.commit"
         if [[ -f "$_sidecar" ]]; then
@@ -834,8 +901,9 @@ if (( fastupdt == 1 )) && (( ${#patches[@]} > 0 )); then
     done
 fi
 
-# Ask about a specific commit (skipped if a patch sidecar already set one)
-if (( fastupdt == 1 )) && [[ -z "$cname" ]] && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
+# Ask about a specific commit (skipped if a patch sidecar already set one,
+# or if a loaded profile already set one -- including intentionally empty)
+if (( fastupdt == 1 )) && ! $_profile_loaded && [[ -z "$cname" ]] && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
     read -r -p "Enter the commit git#: " cname
     if [[ -n "$cname" ]]; then
         read -r -e -i "$cname" -p "Edit if needed, Enter to confirm: " cname
@@ -965,6 +1033,16 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
             sleep 3
             if fastupdt; then
                 echo "Update complete"
+                if confirm "\nSave this build configuration as a reusable profile?" "[N/y]" "yY" "nN"; then
+                    read -rp "Description: " _profile_desc
+                    if [[ -n "$_profile_desc" ]]; then
+                        printf '%s | %s | %s | %s\n' "$_profile_desc" "${prbranches[*]}" "${patches[*]}" "$cname" \
+                            >> "/home/${user}/freedv-rade-build/.profiles"
+                        echo "Profile saved: $_profile_desc"
+                    else
+                        echo "No description entered - profile not saved."
+                    fi
+                fi
             else
                 echo "Update failed"
                 exit 1
