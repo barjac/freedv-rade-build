@@ -29,7 +29,7 @@ It is currently tested in **Mageia, MX Linux, LinuxMint, LMDE, Fedora, Ubuntu, X
   |ML4W OS           |OK    |Thanks to Tuyoshi JE1BTJ for testing!|
   |Gentoo            |OK    |Thanks to W6KS for help and testing!|
   |PiOS              |OK    |Thanks to 2D0DRM for testing (NOTE RPi models < 5 cannot handle RADE|
-  |PCLinuxOS         |OK*   |*Must not have distro hamlib development package installed as it is too old, latest upstream hamlib is built locally instead. FreeDV build|
+  |PCLinuxOS         |OK*   |*Must not have distro hamlib development package installed as it is too old, latest upstream hamlib is built locally instead.|
 ## What it does
 If you are not interested in how this all works and just want to use it then skip to the **Using the script** section below.
 
