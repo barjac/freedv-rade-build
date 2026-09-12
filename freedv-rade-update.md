@@ -119,10 +119,11 @@ Recent patches:
 
 - **U** uses exactly the same patches as last time.
 - **E** lets you edit that same list: type the numbers of any you want to
-  remove (space-separated), and/or include `a` in the same input to also be
-  offered the full `patches/` directory afterward for adding something new.
-  For example, `a 1` removes #1, then offers the full list so you can add
-  more. Leave the input blank to keep everything as-is.
+  remove (space-separated), and/or include `A` in the same input to also be
+  offered the full `patches/` directory afterward for adding something new
+  (case doesn't matter, `a` works too). For example, `A 1` removes #1, then
+  offers the full list so you can add more. Leave the input blank to keep
+  everything as-is.
 - **F** starts fresh from the full `patches/` listing.
 
 Patches are applied in the order they were last modified (oldest first), so

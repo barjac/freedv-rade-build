@@ -838,7 +838,7 @@ if (( fastupdt == 1 )) && ! $_profile_loaded && { $_profile_edit_mode || confirm
                 # (alone, or alongside numbers to remove) opts into a
                 # follow-up pick from the full patches/ directory.
                 patches=("${_last_patches[@]}")
-                read -rp "Numbers to REMOVE (blank to keep all), or add 'a' to also pick from the full list: " _edit_input
+                read -rp "Numbers to REMOVE (blank to keep all), or add 'A' to also pick from the full list: " _edit_input
                 _want_add=false
                 for _tok in $_edit_input; do
                     if [[ "$_tok" =~ ^[Aa]$ ]]; then
