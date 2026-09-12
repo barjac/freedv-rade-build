@@ -1071,7 +1071,14 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
             sleep 3
             if fastupdt; then
                 echo "Update complete"
-                if confirm "\nSave this build configuration as a reusable profile?" "[N/y]" "yY" "nN"; then
+                # Nothing to offer saving when there's nothing that could
+                # differ from what's already on disk/in .profiles: either
+                # an existing profile was used exactly as-is (_profile_loaded),
+                # or this was a plain default build with no branch/PR, patch,
+                # or commit customisation at all.
+                if ! $_profile_loaded \
+                    && ! { (( ${#prbranches[@]} == 0 )) && (( ${#patches[@]} == 0 )) && [[ -z "$cname" ]]; } \
+                    && confirm "\nSave this build configuration as a reusable profile?" "[N/y]" "yY" "nN"; then
                     read -rp "Description: " _profile_desc
                     if [[ -n "$_profile_desc" ]]; then
                         printf '%s | %s | %s | %s\n' "$_profile_desc" "${prbranches[*]}" "${patches[*]}" "$cname" \
