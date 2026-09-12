@@ -52,8 +52,9 @@ the right choice if you just want to stay in sync with the current master develo
 branch and have no reason to test anything unusual.
 
 Answering **n** instead leads into the more advanced questions below — you
-only need to go there if you specifically want to test a final release, Pull Request, a
-patch, or a saved profile.
+only need to go there if you specifically want to build a specific release
+rather than the current master branch, test a Pull Request or a patch, or
+(once you've used those) re-use a combination you saved earlier.
 
 **Nothing is ever done until you see a final summary and confirm it** — you
 can always back out at that point (answer `n`) with nothing changed.
