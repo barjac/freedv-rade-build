@@ -830,57 +830,36 @@ if (( fastupdt == 1 )) && ! $_profile_loaded && { $_profile_edit_mode || confirm
                 patches=("${_last_patches[@]}")
                 ;;
             1)
+                # Single step: remove by number from the one list already
+                # shown above (no second, differently-numbered list unless
+                # actually adding something new). 'a' anywhere in the input
+                # (alone, or alongside numbers to remove) opts into a
+                # follow-up pick from the full patches/ directory.
                 patches=("${_last_patches[@]}")
-                echo -e "\nEnter numbers to REMOVE (space-separated, blank for none):"
-                read -r _rm
-                for _num in $_rm; do
-                    if [[ "$_num" =~ ^[0-9]+$ ]] && (( _num >= 1 && _num <= ${#_last_patches[@]} )); then
-                        unset 'patches[_num-1]'
+                read -rp "Numbers to REMOVE (blank to keep all), or add 'a' to also pick from the full list: " _edit_input
+                _want_add=false
+                for _tok in $_edit_input; do
+                    if [[ "$_tok" =~ ^[Aa]$ ]]; then
+                        _want_add=true
+                    elif [[ "$_tok" =~ ^[0-9]+$ ]] && (( _tok >= 1 && _tok <= ${#_last_patches[@]} )); then
+                        unset 'patches[_tok-1]'
                     fi
                 done
                 patches=("${patches[@]}")
 
-                if (( ${#_available[@]} > 0 )); then
+                if $_want_add && (( ${#_available[@]} > 0 )); then
                     echo -e "\nAvailable patches:"
                     for _i in "${!_available[@]}"; do
                         printf "  %2d) %s\n" "$((_i+1))" "${_available[$_i]}"
                     done
-
-                    # Pre-fill with the numbers of patches already kept (so
-                    # they're visible and editable on this line too), pulling
-                    # them out of `patches` for now -- whatever's left in the
-                    # edited line is authoritative for anything with a number.
-                    _prefill_nums=()
-                    _kept_unmatched=()
-                    for _p in "${patches[@]}"; do
-                        _pname="$(basename "$_p")"
-                        _match=
-                        for _i in "${!_available[@]}"; do
-                            if [[ "${_available[$_i]}" == "$_pname" ]]; then
-                                _prefill_nums+=("$((_i+1))")
-                                _match=1
-                                break
-                            fi
-                        done
-                        [[ -z "$_match" ]] && _kept_unmatched+=("$_p")
-                    done
-                    patches=("${_kept_unmatched[@]}")
-
-                    echo -e "Numbers to keep/add (space-separated, blank for none):"
-                    read -e -i "${_prefill_nums[*]}" -r _add
+                    echo -e "Numbers to add (space-separated, blank for none):"
+                    read -r _add
                     for _num in $_add; do
                         if [[ "$_num" =~ ^[0-9]+$ ]] && (( _num >= 1 && _num <= ${#_available[@]} )); then
                             _new="patches/${_available[$((_num-1))]}"
                             [[ " ${patches[*]} " == *" $_new "* ]] || patches+=("$_new")
                         fi
                     done
-
-                    if (( ${#_kept_unmatched[@]} > 0 )); then
-                        echo -e "\nAlso kept (not found in patches/ listing):"
-                        for _p in "${_kept_unmatched[@]}"; do
-                            echo "  - $_p"
-                        done
-                    fi
                 fi
                 ;;
             *)
