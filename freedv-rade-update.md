@@ -1,9 +1,11 @@
 # Using freedv-rade-update
 
-This is a companion guide to `freedv-rade-update`, the script that keeps an
-existing FreeDV RADE install (originally created by `freedv-rade-build`) up to
-date, rebuilds it, or backs it up. If you just installed FreeDV via
-`freedv-rade-build` and want to keep it in sync with the latest code, the
+This is a guide to `freedv-rade-update`, the companion to freedv-rade-build.
+It keeps an existing FreeDV RADE install (originally created by `freedv-rade-build`) up to
+date, rebuilds it, or backs it up.
+
+If you just installed FreeDV via `freedv-rade-build` and want to keep it in sync
+with the latest code, the
 **Basic usage** section below is all you need. If you're comfortable with Git
 and want to test an upstream Pull Request, a patch, or a specific commit
 before it's merged, skip ahead to **Advanced usage**.
@@ -14,7 +16,7 @@ Run it from the `Update-RADE` desktop icon, or from a terminal with
 ## Basic usage
 
 Every time it starts, the script first checks itself for updates and quietly
-pulls any it finds — you never need to update `freedv-rade-build` by hand.
+pulls any it finds — you never need to update `freedv-rade-update` or `freedv-rade-build` by hand.
 
 You'll then see a short menu:
 
@@ -43,16 +45,15 @@ Choosing **(U)pdate** asks one more question first:
 Update to current master branch now? [Y/n]
 ```
 
-Just press **Enter** here (or type `Y`) and it will fetch the latest master
+Just press **Enter** here (or type `Y` + **Enter**) and it will fetch the latest master
 branch and rebuild — no further questions asked, other than the final backup
 prompt and a summary you confirm before anything actually happens. This is
-the right choice if you just want to stay in sync with the current release
-and have no reason to test anything unusual.
+the right choice if you just want to stay in sync with the current master development
+branch and have no reason to test anything unusual.
 
 Answering **n** instead leads into the more advanced questions below — you
-only need to go there if you specifically want to test a Pull Request or a
-patch (or, once you've used those, re-use a combination you saved earlier —
-more on that below).
+only need to go there if you specifically want to test a final release, Pull Request, a
+patch, or a saved profile.
 
 **Nothing is ever done until you see a final summary and confirm it** — you
 can always back out at that point (answer `n`) with nothing changed.
