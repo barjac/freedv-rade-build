@@ -1055,6 +1055,26 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
 
 # Fast update
         if (( fastupdt == 1 )); then
+            # If any chosen branch/PR entry needs the fork remote (a
+            # fork: prefix), auto-enable dev mode for this run regardless
+            # of whether --dev was passed on the command line. A fork:
+            # entry can only ever have gotten into prbranches by someone
+            # already using --dev at some point (manual typing at the
+            # branch/PR question isn't blocked without it, but fastupdt()
+            # itself would reject it later without --dev, and a saved
+            # profile could only have been created under --dev in the
+            # first place) -- so replaying it isn't the casual/uninformed
+            # use --dev is meant to guard against, and needlessly
+            # requiring --dev again just to reuse a past choice would only
+            # reproduce the "forgot the flag, error surfaces at the very
+            # end" problem this is meant to avoid.
+            for _entry in "${prbranches[@]}"; do
+                if [[ "$_entry" == fork:* ]]; then
+                    DEV_MODE=true
+                    break
+                fi
+            done
+
             if (( ${#prbranches[@]} > 1 )); then
                 echo -e "\nStarting fast update in 3 seconds combining PRs: ${prbranches[*]}."
             elif (( ${#prbranches[@]} == 1 )); then
