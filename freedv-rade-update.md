@@ -50,8 +50,9 @@ the right choice if you just want to stay in sync with the current release
 and have no reason to test anything unusual.
 
 Answering **n** instead leads into the more advanced questions below — you
-only need to go there if you specifically want to test a Pull Request, a
-patch, or a saved profile.
+only need to go there if you specifically want to test a Pull Request or a
+patch (or, once you've used those, re-use a combination you saved earlier —
+more on that below).
 
 **Nothing is ever done until you see a final summary and confirm it** — you
 can always back out at that point (answer `n`) with nothing changed.
