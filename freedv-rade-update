@@ -699,7 +699,7 @@ fi
 # Answering n falls through to whatever applies next: today's [N/e/y]
 # profile picker if any profile exists, or straight to the plain manual
 # questions if none do yet.
-if (( fastupdt == 1 )) && ! $_profile_loaded && confirm "\nBuild master now?" "[Y/n]" "Yy" "Nn"; then
+if (( fastupdt == 1 )) && ! $_profile_loaded && confirm "\nUpdate to current master branch now?" "[Y/n]" "Yy" "Nn"; then
     _profile_loaded=true
 fi
 
