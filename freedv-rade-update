@@ -663,6 +663,7 @@ fi
 prbranches=()
 patches=()
 _profile_loaded=false
+_profile_edit_mode=false
 _profiles_file="/home/${user}/freedv-rade-build/.profiles"
 
 # --profile=NAME given on the command line: load it now and skip the
@@ -689,43 +690,65 @@ if [[ -n "$PROFILE_NAME" ]]; then
     _profile_loaded=true
 fi
 
-# Offer a saved profile as a shortcut for the questions below -- picking
-# one populates prbranches/patches/cname directly and skips the manual
-# branch/patch/commit questions that otherwise follow, since a profile
-# saved right after a successful build already has whatever those would
-# have produced (including any patch-sidecar commit pin).
+# Offer a saved profile as a shortcut for the questions below. Three-way
+# choice, not a plain y/N -- (e)dit still walks through the branch/patch/
+# commit questions below (pre-filled from the chosen profile instead of
+# .last-prs/.last-patches/blank, so any single field can be changed before
+# a rebuild, then optionally re-saved under a new description at the end),
+# while (y) skips them entirely and uses the profile exactly as saved.
 if (( fastupdt == 1 )) && ! $_profile_loaded && [[ -f "$_profiles_file" ]] && [[ -s "$_profiles_file" ]]; then
-    if confirm "\nLoad a saved build profile?" "[N/y]" "yY" "nN"; then
-        _profile_lines=()
-        while IFS= read -r _line; do
-            _profile_lines+=("$_line")
-        done < "$_profiles_file"
+    _profile_lines=()
+    while IFS= read -r _line; do
+        _profile_lines+=("$_line")
+    done < "$_profiles_file"
+    # Newest-saved first, so the inline preview below ("the top one") and
+    # entry #1 in the picker are always the same profile.
+    _profile_lines_display=()
+    for (( _i=${#_profile_lines[@]}-1; _i>=0; _i-- )); do
+        _profile_lines_display+=("${_profile_lines[_i]}")
+    done
+    _top_desc="$(echo "${_profile_lines_display[0]%%|*}" | xargs)"
 
+    confirm "\nReuse previous build ('$_top_desc')?" "[N/e/y]" "Nn" "Ee" "Yy"
+    if (( rval == 1 || rval == 2 )); then
         echo -e "\nSaved profiles:"
-        for _i in "${!_profile_lines[@]}"; do
-            printf "  %2d) %s\n" "$((_i+1))" "$(echo "${_profile_lines[$_i]%%|*}" | xargs)"
+        for _i in "${!_profile_lines_display[@]}"; do
+            printf "  %2d) %s\n" "$((_i+1))" "$(echo "${_profile_lines_display[$_i]%%|*}" | xargs)"
         done
-
         read -rp "Profile number: " _pnum
-        if [[ "$_pnum" =~ ^[0-9]+$ ]] && (( _pnum >= 1 && _pnum <= ${#_profile_lines[@]} )); then
-            IFS='|' read -r _p_desc _p_prbranches _p_patches _p_cname <<< "${_profile_lines[$((_pnum-1))]}"
-            read -ra prbranches <<< "$_p_prbranches"
-            read -ra patches <<< "$_p_patches"
-            cname="$(echo "$_p_cname" | xargs)"
-            echo -e "\nLoaded profile '$(echo "$_p_desc" | xargs)'."
-            _profile_loaded=true
+        if [[ "$_pnum" =~ ^[0-9]+$ ]] && (( _pnum >= 1 && _pnum <= ${#_profile_lines_display[@]} )); then
+            IFS='|' read -r _p_desc _p_prbranches _p_patches _p_cname <<< "${_profile_lines_display[$((_pnum-1))]}"
+            if (( rval == 2 )); then
+                # y: use as-is, skip the questions below entirely.
+                read -ra prbranches <<< "$_p_prbranches"
+                read -ra patches <<< "$_p_patches"
+                cname="$(echo "$_p_cname" | xargs)"
+                echo -e "\nLoaded profile '$(echo "$_p_desc" | xargs)'."
+                _profile_loaded=true
+            else
+                # e: seed the questions below with this profile's values,
+                # but still ask each one so they can be changed.
+                _edit_prbranches="$(echo "$_p_prbranches" | xargs)"
+                _edit_patches="$(echo "$_p_patches" | xargs)"
+                _edit_cname="$(echo "$_p_cname" | xargs)"
+                echo -e "\nEditing from profile '$(echo "$_p_desc" | xargs)' -- each question below is pre-filled, change or accept as needed."
+                _profile_edit_mode=true
+            fi
         else
             echo "Invalid selection - continuing with manual entry."
         fi
     fi
 fi
 
-if (( fastupdt == 1 )) && ! $_profile_loaded && confirm "\n\nUse a specific branch, tag or PR(s)?" "[N/y]" "yY" "nN"; then
+if (( fastupdt == 1 )) && ! $_profile_loaded && { $_profile_edit_mode || confirm "\n\nUse a specific branch, tag or PR(s)?" "[N/y]" "yY" "nN"; }; then
     _last_prs_file="/home/${user}/freedv-rade-build/.last-prs"
     _default_input=""
 
+    # In edit mode, seed from the chosen profile instead of .last-prs.
+    if $_profile_edit_mode && [[ -n "$_edit_prbranches" ]]; then
+        _default_input="$_edit_prbranches"
     # Build editable default from previously used PRs/branches (strip pr: prefix)
-    if [[ -f "$_last_prs_file" ]] && [[ -s "$_last_prs_file" ]]; then
+    elif [[ -f "$_last_prs_file" ]] && [[ -s "$_last_prs_file" ]]; then
         while IFS= read -r _line; do
             _line="${_line#pr:}"
             _default_input="${_default_input:+$_default_input }$_line"
@@ -747,7 +770,7 @@ if (( fastupdt == 1 )) && ! $_profile_loaded && confirm "\n\nUse a specific bran
     done
 fi
 
-if (( fastupdt == 1 )) && ! $_profile_loaded && confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; then
+if (( fastupdt == 1 )) && ! $_profile_loaded && { $_profile_edit_mode || confirm "\n\nAdd patch(es)?" "[N/y]" "yY" "nN"; }; then
     patches=()
     _bdir="/home/${user}/freedv-rade-build"
     _last_file="${_bdir}/.last-patches"
@@ -775,9 +798,15 @@ if (( fastupdt == 1 )) && ! $_profile_loaded && confirm "\n\nAdd patch(es)?" "[N
         )
     fi
 
-    # Offer to reuse recent patches
-    if [[ -f "$_last_file" ]] && [[ -s "$_last_file" ]]; then
+    # Offer to reuse recent patches (or, in edit mode, the chosen profile's
+    # own patches instead of .last-patches).
+    _last_patches=()
+    if $_profile_edit_mode && [[ -n "$_edit_patches" ]]; then
+        read -ra _last_patches <<< "$_edit_patches"
+    elif [[ -f "$_last_file" ]] && [[ -s "$_last_file" ]]; then
         mapfile -t _last_patches < "$_last_file"
+    fi
+    if (( ${#_last_patches[@]} > 0 )); then
         echo -e "\nRecent patches:"
         for _i in "${!_last_patches[@]}"; do
             printf "  %2d) %s\n" "$((_i+1))" "${_last_patches[$_i]#patches/}"
@@ -902,11 +931,20 @@ if (( fastupdt == 1 )) && ! $_profile_loaded && (( ${#patches[@]} > 0 )); then
 fi
 
 # Ask about a specific commit (skipped if a patch sidecar already set one,
-# or if a loaded profile already set one -- including intentionally empty)
-if (( fastupdt == 1 )) && ! $_profile_loaded && [[ -z "$cname" ]] && confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
-    read -r -p "Enter the commit git#: " cname
-    if [[ -n "$cname" ]]; then
-        read -r -e -i "$cname" -p "Edit if needed, Enter to confirm: " cname
+# or if a loaded profile already set one -- including intentionally empty).
+# In edit mode, skip straight to the pre-filled edit-confirm line -- unless
+# the chosen profile had no commit pin at all, in which case leave it alone
+# rather than asking a fresh question that profile didn't have an answer to.
+if (( fastupdt == 1 )) && ! $_profile_loaded && [[ -z "$cname" ]]; then
+    if $_profile_edit_mode; then
+        if [[ -n "$_edit_cname" ]]; then
+            read -r -e -i "$_edit_cname" -p $'\nEdit commit if needed, Enter to confirm: ' cname
+        fi
+    elif confirm "\n\nUse a specific commit?" "[N/y]" "yY" "nN"; then
+        read -r -p "Enter the commit git#: " cname
+        if [[ -n "$cname" ]]; then
+            read -r -e -i "$cname" -p "Edit if needed, Enter to confirm: " cname
+        fi
     fi
 fi
 
