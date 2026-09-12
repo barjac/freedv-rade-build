@@ -481,7 +481,7 @@ return $make_exit
 
 bye() {
 echo -e "\nClosing - Goodbye! :)"
-sleep 2
+sleep 1
 flock -u 8 || { echo "Failed to release lock"; exit 1; }
 # Close the fds feeding the logging tee (exec > >(tee ...)) so it gets
 # EOF and exits promptly instead of lingering as an orphan holding the
