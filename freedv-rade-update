@@ -696,60 +696,62 @@ fi
 # flag) since "master, nothing customised" is exactly what an empty
 # prbranches/patches/cname with _profile_loaded=true already means to
 # every question below, including the save-profile skip logic.
-# Answering n falls through to whatever applies next: today's [N/e/y]
-# profile picker if any profile exists, or straight to the plain manual
-# questions if none do yet.
+# Answering n falls through to whatever applies next: the full profile
+# list if any profile exists, or straight to the plain manual questions
+# if none do yet.
 if (( fastupdt == 1 )) && ! $_profile_loaded && confirm "\nUpdate to current master branch now?" "[Y/n]" "Yy" "Nn"; then
     _profile_loaded=true
 fi
 
-# Offer a saved profile as a shortcut for the questions below. Three-way
-# choice, not a plain y/N -- (e)dit still walks through the branch/patch/
-# commit questions below (pre-filled from the chosen profile instead of
-# .last-prs/.last-patches/blank, so any single field can be changed before
-# a rebuild, then optionally re-saved under a new description at the end),
-# while (y) skips them entirely and uses the profile exactly as saved.
+# Offer a saved profile as a shortcut for the questions below. List is
+# always shown in full up front (any profile must be reachable, not just
+# the most recent) -- what follows is a plain number entry, not a y/N
+# confirm() gate, so typing a number is exactly what's expected rather
+# than the branch/PR-prompt-style mismatch of typing free text into a
+# y/N gate (see project_freedv_rade_update_branch_prompt_trap in memory).
+# Choosing a profile then asks (U)se-as-is or (E)dit -- (E)dit still
+# walks through the branch/patch/commit questions below, pre-filled from
+# the chosen profile instead of .last-prs/.last-patches/blank, so any
+# single field can be changed before a rebuild and optionally re-saved
+# under a new description; (U)se skips them entirely, exactly as saved.
 if (( fastupdt == 1 )) && ! $_profile_loaded && [[ -f "$_profiles_file" ]] && [[ -s "$_profiles_file" ]]; then
     _profile_lines=()
     while IFS= read -r _line; do
         _profile_lines+=("$_line")
     done < "$_profiles_file"
-    # Newest-saved first, so the inline preview below ("the top one") and
-    # entry #1 in the picker are always the same profile.
+    # Newest-saved first in the display, so a returning user's most
+    # recent profile is always entry #1.
     _profile_lines_display=()
     for (( _i=${#_profile_lines[@]}-1; _i>=0; _i-- )); do
         _profile_lines_display+=("${_profile_lines[_i]}")
     done
-    _top_desc="$(echo "${_profile_lines_display[0]%%|*}" | xargs)"
 
-    confirm "\nReuse previous build ('$_top_desc')?" "[N/e/y]" "Nn" "Ee" "Yy"
-    if (( rval == 1 || rval == 2 )); then
-        echo -e "\nSaved profiles:"
-        for _i in "${!_profile_lines_display[@]}"; do
-            printf "  %2d) %s\n" "$((_i+1))" "$(echo "${_profile_lines_display[$_i]%%|*}" | xargs)"
-        done
-        read -rp "Profile number: " _pnum
-        if [[ "$_pnum" =~ ^[0-9]+$ ]] && (( _pnum >= 1 && _pnum <= ${#_profile_lines_display[@]} )); then
-            IFS='|' read -r _p_desc _p_prbranches _p_patches _p_cname <<< "${_profile_lines_display[$((_pnum-1))]}"
-            if (( rval == 2 )); then
-                # y: use as-is, skip the questions below entirely.
-                read -ra prbranches <<< "$_p_prbranches"
-                read -ra patches <<< "$_p_patches"
-                cname="$(echo "$_p_cname" | xargs)"
-                echo -e "\nLoaded profile '$(echo "$_p_desc" | xargs)'."
-                _profile_loaded=true
-            else
-                # e: seed the questions below with this profile's values,
-                # but still ask each one so they can be changed.
-                _edit_prbranches="$(echo "$_p_prbranches" | xargs)"
-                _edit_patches="$(echo "$_p_patches" | xargs)"
-                _edit_cname="$(echo "$_p_cname" | xargs)"
-                echo -e "\nEditing from profile '$(echo "$_p_desc" | xargs)' -- each question below is pre-filled, change or accept as needed."
-                _profile_edit_mode=true
-            fi
+    echo -e "\nSaved profiles:"
+    for _i in "${!_profile_lines_display[@]}"; do
+        printf "  %2d) %s\n" "$((_i+1))" "$(echo "${_profile_lines_display[$_i]%%|*}" | xargs)"
+    done
+    read -rp "Profile number to use, or blank/N for none: " _pnum
+    if [[ "$_pnum" =~ ^[0-9]+$ ]] && (( _pnum >= 1 && _pnum <= ${#_profile_lines_display[@]} )); then
+        IFS='|' read -r _p_desc _p_prbranches _p_patches _p_cname <<< "${_profile_lines_display[$((_pnum-1))]}"
+        confirm "(U)se '$(echo "$_p_desc" | xargs)' as-is, or (E)dit it first?" "[U/e]" "Uu" "Ee"
+        if (( rval == 1 )); then
+            # e: seed the questions below with this profile's values,
+            # but still ask each one so they can be changed.
+            _edit_prbranches="$(echo "$_p_prbranches" | xargs)"
+            _edit_patches="$(echo "$_p_patches" | xargs)"
+            _edit_cname="$(echo "$_p_cname" | xargs)"
+            echo -e "\nEditing from profile '$(echo "$_p_desc" | xargs)' -- each question below is pre-filled, change or accept as needed."
+            _profile_edit_mode=true
         else
-            echo "Invalid selection - continuing with manual entry."
+            # u: use as-is, skip the questions below entirely.
+            read -ra prbranches <<< "$_p_prbranches"
+            read -ra patches <<< "$_p_patches"
+            cname="$(echo "$_p_cname" | xargs)"
+            echo -e "\nLoaded profile '$(echo "$_p_desc" | xargs)'."
+            _profile_loaded=true
         fi
+    elif [[ -n "$_pnum" ]] && [[ ! "$_pnum" =~ ^[Nn]$ ]]; then
+        echo "Invalid selection - continuing with manual entry."
     fi
 fi
 
