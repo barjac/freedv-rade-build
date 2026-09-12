@@ -695,17 +695,17 @@ fi
 # saved right after a successful build already has whatever those would
 # have produced (including any patch-sidecar commit pin).
 if (( fastupdt == 1 )) && ! $_profile_loaded && [[ -f "$_profiles_file" ]] && [[ -s "$_profiles_file" ]]; then
-    _profile_lines=()
-    while IFS= read -r _line; do
-        _profile_lines+=("$_line")
-    done < "$_profiles_file"
+    if confirm "\nLoad a saved build profile?" "[N/y]" "yY" "nN"; then
+        _profile_lines=()
+        while IFS= read -r _line; do
+            _profile_lines+=("$_line")
+        done < "$_profiles_file"
 
-    echo -e "\nSaved profiles:"
-    for _i in "${!_profile_lines[@]}"; do
-        printf "  %2d) %s\n" "$((_i+1))" "$(echo "${_profile_lines[$_i]%%|*}" | xargs)"
-    done
+        echo -e "\nSaved profiles:"
+        for _i in "${!_profile_lines[@]}"; do
+            printf "  %2d) %s\n" "$((_i+1))" "$(echo "${_profile_lines[$_i]%%|*}" | xargs)"
+        done
 
-    if confirm "\nLoad one of these saved profiles?" "[N/y]" "yY" "nN"; then
         read -rp "Profile number: " _pnum
         if [[ "$_pnum" =~ ^[0-9]+$ ]] && (( _pnum >= 1 && _pnum <= ${#_profile_lines[@]} )); then
             IFS='|' read -r _p_desc _p_prbranches _p_patches _p_cname <<< "${_profile_lines[$((_pnum-1))]}"
