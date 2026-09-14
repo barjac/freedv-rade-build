@@ -432,6 +432,16 @@ fi
 if [[ -f CMakeCache.txt ]]; then
     cmake -U WX_BUILT_FOR_GTK3 . >/dev/null 2>&1
 fi
+# Fast updates never re-run cmake with fresh -D flags (only build_linux.sh's
+# own from-scratch configure does), so an exported ENABLE_AUDIO_DIAG_LOGGING=1
+# would otherwise silently have no effect on a normal Update -- only on a
+# Full rebuild. Re-apply it explicitly to the existing cache whenever set,
+# so a fast Update can toggle it too (needed repeatedly for live A/B tuning
+# of the leveler/compressor-limiter work, see freedv-backend's own
+# ENABLE_AUDIO_DIAG_LOGGING CMake option).
+if [[ -n "$ENABLE_AUDIO_DIAG_LOGGING" && -f CMakeCache.txt ]]; then
+    cmake -DENABLE_AUDIO_DIAG_LOGGING="$ENABLE_AUDIO_DIAG_LOGGING" . >/dev/null 2>&1
+fi
 if [[ $DEBUG == true ]]; then
     make VERBOSE=1
 else
