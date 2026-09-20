@@ -500,6 +500,21 @@ exec >&- 2>&-
 exit 0
 }
 
+# Every other "exit 1" in this script runs on a failure path and used to
+# skip straight past the final "Press any key to exit..." prompt below --
+# fine in an interactive terminal (the shell itself stays open after the
+# script exits), but under the desktop launcher (Terminal=true, no
+# --noclose) the whole terminal window closes the instant the script
+# process exits, so a fast failure (e.g. a compile error) could close the
+# window before there was any real chance to read it. Route every failure
+# exit through this instead so the same pause applies regardless of
+# success or failure.
+pause_and_exit() {
+    read -r -s -n 1 -p $'\nPress any key to exit...'
+    echo
+    exit "${1:-1}"
+}
+
 clearvars () {
 fastupdt=
 update=
@@ -1114,7 +1129,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
                 fi
             else
                 echo "Update failed"
-                exit 1
+                pause_and_exit 1
             fi
         fi
 
@@ -1125,7 +1140,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
                 echo "Restore complete."
             else
                 echo "Restore failed."
-                exit 1
+                pause_and_exit 1
             fi
         fi
 
@@ -1134,14 +1149,14 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
 			echo -e "\nSwitching backup with current..."
 			[[ -d ${basedir}/freedv-rade_tmp ]] && rm -fr ${basedir}/freedv-rade_tmp
 
-			mv ${basedir}/freedv-rade ${basedir}/freedv-rade_tmp || { echo "Failed to move freedv-rade to freedv-rade_tmp"; exit 1; }
-			mv ${basedir}/freedv-rade_bak ${basedir}/freedv-rade || { echo "Failed to move freedv-rade_bak to freedv-rade"; exit 1; }
-			mv ${basedir}/freedv-rade_tmp ${basedir}/freedv-rade_bak ||{ echo "Failed to move freedv-rade_tmp to freedv-rade_bak"; exit 1; }
+			mv ${basedir}/freedv-rade ${basedir}/freedv-rade_tmp || { echo "Failed to move freedv-rade to freedv-rade_tmp"; pause_and_exit 1; }
+			mv ${basedir}/freedv-rade_bak ${basedir}/freedv-rade || { echo "Failed to move freedv-rade_bak to freedv-rade"; pause_and_exit 1; }
+			mv ${basedir}/freedv-rade_tmp ${basedir}/freedv-rade_bak ||{ echo "Failed to move freedv-rade_tmp to freedv-rade_bak"; pause_and_exit 1; }
 			echo -e "\nDone :)\n"
 		fi
 
 # Full re-build
-        if (( update == 1 )); then 
+        if (( update == 1 )); then
             echo -e "\nStarting full rebuild in 3 seconds. Please be patient this will take some time ..."
             sleep 3
             if freedv-rade-build/freedv-rade-build; then
@@ -1150,7 +1165,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
                 write_build_index "${default} @ ${_commit}"
             else
                 echo "Full rebuild failed"
-                exit 1
+                pause_and_exit 1
             fi
         fi
 # Desktop file
