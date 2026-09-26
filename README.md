@@ -22,7 +22,7 @@ It is currently tested in **Mageia, MX Linux, LinuxMint, LMDE, Fedora, Ubuntu, X
   |Xubuntu 24.04     |OK    |Thanks to DL7AIS for testing!|
   |Kubuntu Oracular (Dev)|OK |Thanks to sblandford for testing!|
   |Arch              |??    |Supported - not tetsed|
-  |Omarchy           |OK    |Tested on 4.0.4. Arch package list via `pacman -S --needed`; does not run `pacman -Syu`.|
+  |Omarchy           |??    |Partial tested on 4.0.4 - KD3DUK|
   |Garuda            |OK    |Thanks to Dave Baxter NB4S for testing! |
   |EndeavourOS       |OK    |Thanks to Dave Baxter NB4S for testing! |
   |Arco Linux        |??    |Supported - not tetsed       |
@@ -104,7 +104,7 @@ Also added support for several Arch Linux based distros.
 - May 2026 Added support for RPi4 but only with some changes to the system default sample rate
 see **~/freedv-rade-build/rpi4-audio-howto.md** the results are excellent.
 
-- September 2026 Added Omarchy. The Omarchy case installs missing Arch packages with `pacman -S --needed` and does not run `pacman -Syu`, because Omarchy has its own updater.
+- September 2026 KD3DUK Added Omarchy. The Omarchy case installs missing Arch packages with `pacman -S --needed` and does not run `pacman -Syu`, because Omarchy has its own updater.
 
 ## Using the script
 
