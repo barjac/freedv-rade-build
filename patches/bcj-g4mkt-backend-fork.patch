@@ -1,0 +1,15 @@
+diff --git a/cmake/BuildFreeDVBackend.cmake b/cmake/BuildFreeDVBackend.cmake
+index e6de22ca..d507f848 100644
+--- a/cmake/BuildFreeDVBackend.cmake
++++ b/cmake/BuildFreeDVBackend.cmake
+@@ -2,8 +2,8 @@ include(FetchContent)
+ 
+ FetchContent_Declare(
+     freedv_backend
+-    GIT_REPOSITORY https://github.com/tmiw/freedv-backend
+-    GIT_TAG radev2-dev
++    GIT_REPOSITORY https://github.com/barjac/freedv-backend
++    GIT_TAG bcj-g4mkt-backend
+ )
+ 
+ FetchContent_MakeAvailable(freedv_backend)
