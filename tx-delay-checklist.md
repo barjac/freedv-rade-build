@@ -49,8 +49,9 @@ with BPF unconnected. Your plan to strip the four FDV_* sinks from the links fil
 
 Patch files: `~/freedv_make/patch-A-freedv-pipewire-role.patch`, `patch-B-bpf-pipewire-role.patch`
 
-## Fix for null sink creation (not yet applied)
-In `freedv-main-sinks`, change:
+## Fix for null sink creation (applied 2026-10-01)
+In `create-main-sinks()` (now folded into `~/freedv-start-pan`/`~/freedv-start-v2` on both the
+RPi4 and the desktop), changed:
 ```bash
 pactl load-module module-null-sink sink_name="$sink" \
     sink_properties=session.suspend-timeout-seconds=0
@@ -61,7 +62,17 @@ pactl load-module module-null-sink sink_name="$sink" \
     sink_properties="media.role=phone session.suspend-timeout-seconds=9999"
 ```
 `media.role=phone` tells WirePlumber the sink is a communication stream (exempt from suspension).
-`9999` replaces the ambiguous `0` with a large explicit timeout as belt-and-braces.
+`9999` replaces the ambiguous `0` with a large explicit timeout as belt-and-braces. Old line kept
+commented directly above the new one in each script.
+
+Takes effect on a normal restart with no extra step needed -- `restart_snd_serv` (which tears down
+and restarts PipeWire/WirePlumber, destroying these runtime-loaded null sinks) already runs before
+`create-main-sinks` in every launcher's startup sequence, so the sinks get recreated fresh with the
+new properties each time.
+
+**Status**: applied on the RPi4 (where the delay was reproduced) and mirrored on the desktop
+(never reproduced there) at Barry's request. Not yet re-confirmed fixed on-air -- next recurrence
+on the RPi4 should be checked against a launcher restart with this fix in place.
 
 ## Diagnostic steps (if/when issue reappears)
 1. **Confirm null sink state during RX** (first boot, before any PTT):
