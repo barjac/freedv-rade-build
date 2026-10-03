@@ -751,11 +751,13 @@ if (( fastupdt == 1 )) && ! $_profile_loaded && [[ -f "$_profiles_file" ]] && [[
         _profile_lines_display+=("${_profile_lines[_i]}")
     done
 
+    # Listed highest number first so #1 (the newest) sits right above the
+    # prompt, which defaults to it.
     echo -e "\nSaved profiles:"
-    for _i in "${!_profile_lines_display[@]}"; do
+    for (( _i=${#_profile_lines_display[@]}-1; _i>=0; _i-- )); do
         printf "  %2d) %s\n" "$((_i+1))" "$(echo "${_profile_lines_display[$_i]%%|*}" | xargs)"
     done
-    read -rp "Profile number to use, or blank/N for none: " _pnum
+    read -r -e -i 1 -p "Profile number to use (Enter for 1, N or blank for none): " _pnum
     if [[ "$_pnum" =~ ^[0-9]+$ ]] && (( _pnum >= 1 && _pnum <= ${#_profile_lines_display[@]} )); then
         IFS='|' read -r _p_desc _p_prbranches _p_patches _p_cname <<< "${_profile_lines_display[$((_pnum-1))]}"
         confirm "(U)se '$(echo "$_p_desc" | xargs)' as-is, or (E)dit it first?" "[U/e]" "Uu" "Ee"
@@ -848,7 +850,7 @@ if (( fastupdt == 1 )) && ! $_profile_loaded && { $_profile_edit_mode || confirm
     fi
     if (( ${#_last_patches[@]} > 0 )); then
         echo -e "\nRecent patches:"
-        for _i in "${!_last_patches[@]}"; do
+        for (( _i=${#_last_patches[@]}-1; _i>=0; _i-- )); do
             printf "  %2d) %s\n" "$((_i+1))" "${_last_patches[$_i]#patches/}"
         done
         confirm "(U)se these as-is, (E)dit the list, or start (F)resh?" "[U/E/F]" "Uu" "Ee" "Ff"
@@ -876,11 +878,11 @@ if (( fastupdt == 1 )) && ! $_profile_loaded && { $_profile_edit_mode || confirm
 
                 if $_want_add && (( ${#_available[@]} > 0 )); then
                     echo -e "\nAvailable patches:"
-                    for _i in "${!_available[@]}"; do
+                    for (( _i=${#_available[@]}-1; _i>=0; _i-- )); do
                         printf "  %2d) %s\n" "$((_i+1))" "${_available[$_i]}"
                     done
                     echo -e "Numbers to add (space-separated, blank for none):"
-                    read -r _add
+                    read -r -e -i 1 _add
                     for _num in $_add; do
                         if [[ "$_num" =~ ^[0-9]+$ ]] && (( _num >= 1 && _num <= ${#_available[@]} )); then
                             _new="patches/${_available[$((_num-1))]}"
@@ -899,11 +901,11 @@ if (( fastupdt == 1 )) && ! $_profile_loaded && { $_profile_edit_mode || confirm
     if (( ${#patches[@]} == 0 )); then
         if (( ${#_available[@]} > 0 )); then
             echo -e "\nAvailable patches:"
-            for _i in "${!_available[@]}"; do
+            for (( _i=${#_available[@]}-1; _i>=0; _i-- )); do
                 printf "  %2d) %s\n" "$((_i+1))" "${_available[$_i]}"
             done
-            echo -e "Enter numbers (space-separated), or 0 for manual entry:"
-            read -r _sel
+            echo -e "Enter numbers (space-separated, Enter for 1), or 0 for manual entry:"
+            read -r -e -i 1 _sel
             echo "Patch numbers entered: $_sel"
             if [[ "$_sel" != "0" ]]; then
                 for _num in $_sel; do
