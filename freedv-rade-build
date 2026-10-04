@@ -101,6 +101,20 @@ echo "****************Welcome to freedv-rade--build *****************"
 echo -e "\nHello ${user}, you seem to be using ${PRETTY_NAME}\n"
 echo -e "Installation will be made into ${basedir}/${builddir}\n"
 
+# Slot mode: ${basedir}/${builddir} is a symlink to a build slot (see
+# freedv-slot and mk-slot). This build replaces the selected slot's
+# contents, so make sure that's intended.
+slotmode=0
+if [[ -L "${basedir}/${builddir}" ]]; then
+    slotmode=1
+    _slot=$(basename "$(readlink "${basedir}/${builddir}")")
+    echo "This will overwrite slot '${_slot}' with master."
+    echo "Its config (freedv-${_slot}.conf) and slot.conf are kept, so its launcher will run"
+    echo "this master build until you Update it with the slot's usual profile."
+    read -r -p "Continue? [y/N] " _ans
+    [[ "$_ans" =~ ^[Yy]$ ]] || { echo "Aborted - slot '${_slot}' not changed."; exit 1; }
+fi
+
 run_as_root() {
     if [ $# -eq 0 ]; then
         echo "run_as_root: No command provided." >&2
@@ -371,6 +385,9 @@ cd "${basedir}/${builddir}" || { echo "ERROR: cd to ${basedir}/${builddir} faile
 
 # Delete freedv-gui directory
 rm -rf "${basedir}/${builddir}/freedv-gui" || { echo "ERROR: removing old freedv-gui dir"; exit 1; }
+# In slot mode, drop the slot's old build record so it isn't shown against
+# this new build; freedv-rade-update writes a fresh one after a Full re-build.
+(( slotmode == 1 )) && rm -f "${basedir}/${builddir}/.build"
 
 # Check we have space in base directory
 (( $(df -m --output=avail "${basedir}/${builddir}/" | tail -1) > 2500 )) || { echo -e "ERROR: You need more than 2.5GB free disk space in $basedir.\nYou only have $(df -m --output=avail "${basedir}/${builddir}" | tail -1)MB"; exit 1; }
