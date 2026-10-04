@@ -34,7 +34,7 @@ done
 [[ ! -e "$SLOTS_DIR/$new" ]] || die "'$new' already exists in $SLOTS_DIR"
 
 # Don't copy a slot while something is building in it.
-if pgrep -af '(^|/)freedv-rade-(update|build)( |$)' | command grep -v pgrep; then
+if pgrep -af '^[^ ]*bash [^ ]*freedv-rade-(update|build)( |$)' | command grep -v pgrep; then
     die "an update/build is running (above); wait for it to finish"
 fi
 

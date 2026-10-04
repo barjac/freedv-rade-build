@@ -9,12 +9,22 @@
 #   freedv-slot list         same
 #   freedv-slot current      print the selected slot's name
 #   freedv-slot select NAME  point ~/freedv-rade at slot NAME
+#   freedv-slot off          leave slot mode: remove the ~/freedv-rade link
+#                            (remembering the slot), and move a parked
+#                            ~/freedv-rade.normal back to ~/freedv-rade if
+#                            there is one, for testing as a normal user
+#   freedv-slot on [NAME]    return to slot mode: park a real ~/freedv-rade
+#                            as ~/freedv-rade.normal, then link slot NAME
+#                            (default: the slot remembered by 'off')
 #
 # Slots are created with mk-slot.
 
 SLOTS_DIR=${FREEDV_SLOTS_DIR:-/rade-slots}
 LINK="$HOME/freedv-rade"
 INDEX="$HOME/freedv-rade-build/.build_index"
+NORMAL="$HOME/freedv-rade.normal"
+LAST="$HOME/.freedv-slot"
+OFF="$HOME/.freedv-slot-off"   # present while slot mode is switched off
 
 die() { echo "freedv-slot: $*" >&2; exit 1; }
 
@@ -22,7 +32,7 @@ die() { echo "freedv-slot: $*" >&2; exit 1; }
 # through the link, so repointing it underneath them would mix two slots.
 busy() {
     local p
-    p=$(pgrep -af '(^|/)src/freedv( |$)|(^|/)freedv-rade-(update|build)( |$)' | command grep -v pgrep)
+    p=$(pgrep -af '^([^ ]*/)?src/freedv( |$)|^[^ ]*bash [^ ]*freedv-rade-(update|build)( |$)' | command grep -v pgrep)
     if [[ -n "$p" ]]; then
         echo "$p"
         return 0
@@ -54,7 +64,9 @@ list() {
         [[ "$name" == "$cur" ]] && n="*" || n=" "
         printf "%s %-12s build #%-4s %s\n" "$n" "$name" "${b:-?}" "$line"
     done
-    if [[ -L "$LINK" ]]; then
+    if [[ -e "$OFF" ]]; then
+        echo "Slot mode is OFF (freedv-slot on [NAME] to return)."
+    elif [[ -L "$LINK" ]]; then
         [[ -n "$cur" ]] || echo "Note: $LINK -> $(readlink "$LINK") is not a slot in $SLOTS_DIR"
     elif [[ -e "$LINK" ]]; then
         echo "Note: $LINK is a real directory, not a slot link"
@@ -65,6 +77,7 @@ select_slot() {
     local name=$1
     [[ -n "$name" ]] || die "usage: freedv-slot select NAME"
     is_slot "$name" || die "no slot '$name' in $SLOTS_DIR"
+    [[ -e "$OFF" ]] && die "slot mode is off (freedv-slot off); use 'freedv-slot on $name' to return to slots"
     if [[ -e "$LINK" && ! -L "$LINK" ]]; then
         die "$LINK is a real directory; move it aside before using slots"
     fi
@@ -81,10 +94,52 @@ select_slot() {
     echo "Selected slot '$name': $LINK -> $SLOTS_DIR/$name"
 }
 
+slots_off() {
+    [[ -L "$LINK" ]] || die "slot mode is already off ($LINK is not a slot link)"
+    if busy; then
+        die "FreeDV or an update is running (above); close it first"
+    fi
+    local cur
+    cur=$(current)
+    [[ -n "$cur" ]] && echo "$cur" > "$LAST"
+    rm -f "$LINK" || die "could not remove $LINK"
+    touch "$OFF"
+    echo "Slot mode off: removed $LINK${cur:+ (was slot '$cur', remembered for 'on')}."
+    if [[ -d "$NORMAL" && ! -L "$NORMAL" ]]; then
+        mv -T "$NORMAL" "$LINK" || die "could not move $NORMAL back to $LINK"
+        echo "Moved $NORMAL back to $LINK."
+    else
+        echo "There is now no $LINK: freedv-rade-build will make a fresh normal install."
+    fi
+}
+
+slots_on() {
+    local name=${1:-}
+    if [[ -z "$name" ]]; then
+        [[ -f "$LAST" ]] && name=$(cat "$LAST")
+        [[ -n "$name" ]] || die "usage: freedv-slot on NAME (no remembered slot)"
+    fi
+    is_slot "$name" || die "no slot '$name' in $SLOTS_DIR"
+    [[ -L "$LINK" ]] && die "slot mode is already on ($LINK -> $(readlink "$LINK")); use 'select'"
+    if busy; then
+        die "FreeDV or an update is running (above); close it first"
+    fi
+    if [[ -e "$LINK" ]]; then
+        [[ -e "$NORMAL" ]] && die "$NORMAL already exists; move or remove one of $LINK / $NORMAL first"
+        mv -T "$LINK" "$NORMAL" || die "could not park $LINK as $NORMAL"
+        echo "Parked the normal tree $LINK as $NORMAL."
+    fi
+    ln -s "$SLOTS_DIR/$name" "$LINK" || die "could not create $LINK"
+    rm -f "$OFF"
+    echo "Slot mode on: $LINK -> $SLOTS_DIR/$name"
+}
+
 case "${1:-list}" in
     list)    list ;;
     current) current || die "no slot selected" ;;
     select)  select_slot "$2" ;;
-    -h|--help|help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' ;;
+    off)     slots_off ;;
+    on)      slots_on "$2" ;;
+    -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
     *)       die "unknown command '$1' (try --help)" ;;
 esac
