@@ -641,8 +641,10 @@ echo ""
 if (( slotmode == 1 )); then
     echo "Slot mode: ${basedir}/freedv-rade -> $(readlink ${basedir}/freedv-rade)"
     echo "Backup/Restore/Switch are disabled; use freedv-slot and mk-slot instead."
+    show_dir_build "Current [$(basename "$(readlink "${basedir}/freedv-rade")")]" "${basedir}/freedv-rade"
+else
+    show_dir_build "Current" "${basedir}/freedv-rade"
 fi
-show_dir_build "Current" "${basedir}/freedv-rade"
 (( slotmode != 1 )) && [[ -d ${basedir}/freedv-rade_bak ]] && show_dir_build "Backup " "${basedir}/freedv-rade_bak"
 echo ""
 

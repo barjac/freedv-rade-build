@@ -1,0 +1,82 @@
+#!/bin/bash
+# mk-slot: create a new FreeDV build slot by copying an existing one.
+#
+#   mk-slot FROM NEW
+#
+# Copies $SLOTS_DIR/FROM to $SLOTS_DIR/NEW, then rewrites references to
+# FROM's real path ($SLOTS_DIR/FROM) in NEW's text files to point at NEW.
+#
+# Why the rewrite: builds made through the ~/freedv-rade symlink mostly
+# record the symlink path, which is correct for whichever slot is selected,
+# but some files (the backend FetchContent sub-build, compiler dependency
+# files) record the slot's real path. Left as they are, NEW would fetch
+# into and track dependencies in FROM. Binary files are left alone; their
+# copies of the path are only debug/assert labels.
+#
+# Also gives NEW its own config, ~/.config/freedv/freedv-NEW.conf, copied
+# from FROM's config (freedv.conf if FROM's slot.conf has CONFIG=default).
+# The new slot is not selected; use freedv-slot select NEW, or start it with
+# ~/freedv-start-slot NEW.
+
+SLOTS_DIR=${FREEDV_SLOTS_DIR:-/rade-slots}
+CONF_DIR="$HOME/.config/freedv"
+
+die() { echo "mk-slot: $*" >&2; exit 1; }
+
+from=$1
+new=$2
+[[ -n "$from" && -n "$new" ]] || die "usage: mk-slot FROM NEW"
+for n in "$from" "$new"; do
+    [[ "$n" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || die "slot names may only use letters, digits, '-' and '_': '$n'"
+done
+[[ "$from" != "$new" ]] || die "FROM and NEW are the same"
+[[ -d "$SLOTS_DIR/$from/freedv-gui" ]] || die "no slot '$from' in $SLOTS_DIR"
+[[ ! -e "$SLOTS_DIR/$new" ]] || die "'$new' already exists in $SLOTS_DIR"
+
+# Don't copy a slot while something is building in it.
+if pgrep -af '(^|/)freedv-rade-(update|build)( |$)' | command grep -v pgrep; then
+    die "an update/build is running (above); wait for it to finish"
+fi
+
+need=$(du -sk "$SLOTS_DIR/$from" | cut -f1)
+avail=$(df -k --output=avail "$SLOTS_DIR" | tail -1)
+(( avail > need + 512000 )) || die "not enough space in $SLOTS_DIR (need $((need/1024))MB + 500MB margin, have $((avail/1024))MB)"
+
+echo "Copying $from -> $new ..."
+cp -a "$SLOTS_DIR/$from" "$SLOTS_DIR/$new" || die "copy failed"
+
+# Rewrite FROM's real path in text files: "$SLOTS_DIR/FROM" followed by '/'
+# or a non-name character or end of line, so slot 'v2' never matches 'v2x'.
+old="$SLOTS_DIR/$from"
+new_path="$SLOTS_DIR/$new"
+esc_old=$(printf '%s' "$old" | sed 's/[.[\*^$/]/\\&/g')
+esc_new=$(printf '%s' "$new_path" | sed 's/[&/\]/\\&/g')
+count=0
+while IFS= read -r -d '' f; do
+    sed -i -E "s/${esc_old}([^A-Za-z0-9_-]|$)/${esc_new}\1/g" "$f" && count=$((count+1))
+done < <(command grep -rIlZF "$old" "$SLOTS_DIR/$new" 2>/dev/null)
+echo "Rewrote $old -> $new_path in $count text files."
+
+# Verify nothing in a text file still points at FROM.
+left=$(command grep -rIlE "${esc_old}([^A-Za-z0-9_-]|$)" "$SLOTS_DIR/$new" 2>/dev/null | wc -l)
+(( left == 0 )) || die "$left text files still reference $old; check before using '$new'"
+
+# Config: the new slot always gets its own freedv-NEW.conf. A source slot
+# with CONFIG=default in slot.conf (e.g. a 'master' slot) uses the normal
+# freedv.conf, so seed from that; otherwise from freedv-FROM.conf. The new
+# slot's slot.conf is set to CONFIG=slot so it never shares freedv.conf.
+src_conf="$CONF_DIR/freedv-$from.conf"
+slotconf="$SLOTS_DIR/$new/slot.conf"
+if [[ -f "$slotconf" ]] && command grep -qE '^CONFIG=[[:space:]]*default' "$slotconf"; then
+    src_conf="$CONF_DIR/freedv.conf"
+    sed -i -E 's/^CONFIG=[[:space:]]*default.*/CONFIG=slot/' "$slotconf"
+fi
+if [[ -e "$CONF_DIR/freedv-$new.conf" ]]; then
+    echo "Config $CONF_DIR/freedv-$new.conf already exists; left as it is."
+elif [[ -f "$src_conf" ]]; then
+    cp -a "$src_conf" "$CONF_DIR/freedv-$new.conf" && echo "Copied config $(basename "$src_conf") -> freedv-$new.conf"
+else
+    echo "No $(basename "$src_conf") to copy; freedv-start-slot will create freedv-$new.conf from freedv.conf on first start."
+fi
+
+echo "Slot '$new' created. Select it with: freedv-slot select $new"

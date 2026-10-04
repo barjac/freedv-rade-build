@@ -1,0 +1,90 @@
+#!/bin/bash
+# freedv-slot: list and select FreeDV build slots.
+#
+# A slot is a complete freedv-rade tree in $SLOTS_DIR/<name>. The selected
+# slot is reached through the symlink ~/freedv-rade, so freedv-rade-update,
+# freedv-rade-build and the freedv-start-* launchers all act on it unchanged.
+#
+#   freedv-slot              list slots, marking the selected one
+#   freedv-slot list         same
+#   freedv-slot current      print the selected slot's name
+#   freedv-slot select NAME  point ~/freedv-rade at slot NAME
+#
+# Slots are created with mk-slot.
+
+SLOTS_DIR=${FREEDV_SLOTS_DIR:-/rade-slots}
+LINK="$HOME/freedv-rade"
+INDEX="$HOME/freedv-rade-build/.build_index"
+
+die() { echo "freedv-slot: $*" >&2; exit 1; }
+
+# Refuse while FreeDV or a build/update is running: their files are reached
+# through the link, so repointing it underneath them would mix two slots.
+busy() {
+    local p
+    p=$(pgrep -af '(^|/)src/freedv( |$)|(^|/)freedv-rade-(update|build)( |$)' | command grep -v pgrep)
+    if [[ -n "$p" ]]; then
+        echo "$p"
+        return 0
+    fi
+    return 1
+}
+
+current() {
+    [[ -L "$LINK" ]] || return 1
+    local t
+    t=$(readlink "$LINK")
+    t=${t%/}
+    [[ "$t" == "$SLOTS_DIR"/* ]] || return 1
+    echo "${t#$SLOTS_DIR/}"
+}
+
+is_slot() { [[ -d "$SLOTS_DIR/$1/freedv-gui" ]]; }
+
+list() {
+    [[ -d "$SLOTS_DIR" ]] || die "$SLOTS_DIR not found (partition not mounted?)"
+    local cur name n b line
+    cur=$(current)
+    for d in "$SLOTS_DIR"/*/; do
+        name=$(basename "$d")
+        is_slot "$name" || continue
+        b=$(cat "$d/.build" 2>/dev/null)
+        line=""
+        [[ -n "$b" && -f "$INDEX" ]] && line=$(command grep -m1 "^$b |" "$INDEX" | cut -d'|' -f2- | xargs)
+        [[ "$name" == "$cur" ]] && n="*" || n=" "
+        printf "%s %-12s build #%-4s %s\n" "$n" "$name" "${b:-?}" "$line"
+    done
+    if [[ -L "$LINK" ]]; then
+        [[ -n "$cur" ]] || echo "Note: $LINK -> $(readlink "$LINK") is not a slot in $SLOTS_DIR"
+    elif [[ -e "$LINK" ]]; then
+        echo "Note: $LINK is a real directory, not a slot link"
+    fi
+}
+
+select_slot() {
+    local name=$1
+    [[ -n "$name" ]] || die "usage: freedv-slot select NAME"
+    is_slot "$name" || die "no slot '$name' in $SLOTS_DIR"
+    if [[ -e "$LINK" && ! -L "$LINK" ]]; then
+        die "$LINK is a real directory; move it aside before using slots"
+    fi
+    if busy; then
+        die "FreeDV or an update is running (above); close it first"
+    fi
+    if [[ "$(current)" == "$name" ]]; then
+        echo "Slot '$name' is already selected."
+        return 0
+    fi
+    # Replace the link atomically: make the new link, then rename over the old.
+    ln -sfn "$SLOTS_DIR/$name" "$LINK.new.$$" || die "could not create link"
+    mv -Tf "$LINK.new.$$" "$LINK" || { rm -f "$LINK.new.$$"; die "could not replace $LINK"; }
+    echo "Selected slot '$name': $LINK -> $SLOTS_DIR/$name"
+}
+
+case "${1:-list}" in
+    list)    list ;;
+    current) current || die "no slot selected" ;;
+    select)  select_slot "$2" ;;
+    -h|--help|help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' ;;
+    *)       die "unknown command '$1' (try --help)" ;;
+esac
