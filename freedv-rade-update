@@ -628,9 +628,22 @@ TIP: Hitting ENTER without typing will automatically select the first option to 
 # Check if there is already a backup and flag it
 [[ -d ${basedir}/freedv-rade_bak ]] && bak=1
 
+# Slot mode: freedv-rade is a symlink to a build slot (see freedv-slot and
+# mk-slot). Backup, Restore and Switch copy and rename freedv-rade itself,
+# which would break the slot layout, so they are disabled in slot mode.
+slotmode=0
+if [[ -L ${basedir}/freedv-rade ]]; then
+    slotmode=1
+    bak=0
+fi
+
 echo ""
+if (( slotmode == 1 )); then
+    echo "Slot mode: ${basedir}/freedv-rade -> $(readlink ${basedir}/freedv-rade)"
+    echo "Backup/Restore/Switch are disabled; use freedv-slot and mk-slot instead."
+fi
 show_dir_build "Current" "${basedir}/freedv-rade"
-[[ -d ${basedir}/freedv-rade_bak ]] && show_dir_build "Backup " "${basedir}/freedv-rade_bak"
+(( slotmode != 1 )) && [[ -d ${basedir}/freedv-rade_bak ]] && show_dir_build "Backup " "${basedir}/freedv-rade_bak"
 echo ""
 
 if grep -q venv < ~/freedv-start; then
@@ -638,7 +651,23 @@ if grep -q venv < ~/freedv-start; then
     echo "*************************** You MUST use the 'Full rebuild' (f) option NOW to update to the new C build."
 fi
 
-if (( bak == 1 )); then
+if (( slotmode == 1 )); then
+        confirm "\nDo you want to (U)pdate, (F)ull re-build, create (D)esktop launcher or (Q)uit?" "[U/F/D/Q]" "Uu" "Ff" "Dd" "qQ"
+        case $rval in
+            0)
+            fastupdt=1
+            ;;
+            1)
+            update=1
+            ;;
+            2)
+            desktop=1
+            ;;
+            3)
+            bye
+            ;;
+        esac
+elif (( bak == 1 )); then
 
     confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup, (R)estore from backup, (S)witch backup/current, Create (D)esktop launcher or (Q)uit?" "[U/F/B/R/S/D/Q]" "Uu" "Ff" "Bb" "Rr" "Ss" "Dd" "Qq"
         case $rval in
@@ -969,7 +998,7 @@ if (( fastupdt == 1 )) && ! $_profile_loaded && [[ -z "$cname" ]]; then
     fi
 fi
 
-if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )) && (( switch != 1 )); then
+if ( (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) ) && (( desktop != 1 )) && (( bak != 1 )) && (( restore != 1 )) && (( switch != 1 )) && (( slotmode != 1 )); then
 # Ask to backup with the current version
     echo -e "\nYou currently have no backup of FreeDV-RADE."
     if confirm "\nCreate a backup of the current version?" "[N/y]" "Yy" "Nn"; then
