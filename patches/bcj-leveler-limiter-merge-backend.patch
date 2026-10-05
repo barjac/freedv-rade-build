@@ -1,0 +1,13 @@
+diff --git a/cmake/BuildFreeDVBackend.cmake b/cmake/BuildFreeDVBackend.cmake
+index 22302b46..1e84239b 100644
+--- a/cmake/BuildFreeDVBackend.cmake
++++ b/cmake/BuildFreeDVBackend.cmake
+@@ -5,7 +5,7 @@ FetchContent_Declare(
+     # TEMPORARY: points at the matching freedv-backend PR branch for review
+     # and testing. Revert to tmiw/freedv-backend main once that PR merges.
+     GIT_REPOSITORY https://github.com/barjac/freedv-backend
+-    GIT_TAG bcj-leveler-limiter
++    GIT_TAG bcj-leveler-limiter-merge
+ )
+ 
+ FetchContent_MakeAvailable(freedv_backend)
