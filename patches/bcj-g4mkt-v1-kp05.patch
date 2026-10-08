@@ -1,0 +1,84 @@
+diff --git a/cmake/BuildFreeDVBackend.cmake b/cmake/BuildFreeDVBackend.cmake
+index e6de22ca..2d818854 100644
+--- a/cmake/BuildFreeDVBackend.cmake
++++ b/cmake/BuildFreeDVBackend.cmake
+@@ -2,8 +2,8 @@ include(FetchContent)
+ 
+ FetchContent_Declare(
+     freedv_backend
+-    GIT_REPOSITORY https://github.com/tmiw/freedv-backend
+-    GIT_TAG radev2-dev
++    GIT_REPOSITORY https://github.com/barjac/freedv-backend
++    GIT_TAG bcj-g4mkt-backend-v1-kp05
+ )
+ 
+ FetchContent_MakeAvailable(freedv_backend)
+diff --git a/src/freedv_interface.cpp b/src/freedv_interface.cpp
+index 0124c65f..44a46c47 100644
+--- a/src/freedv_interface.cpp
++++ b/src/freedv_interface.cpp
+@@ -48,7 +48,7 @@ extern std::atomic<bool> g_bwExpandEnabled;
+ 
+ static const char* GetCurrentModeStrImpl_()
+ {
+-    return "RADEV2";
++    return "RADEV1";
+ }
+ 
+ FreeDVInterface::FreeDVInterface() :
+@@ -124,7 +124,7 @@ void FreeDVInterface::start(int, bool usingReliableText)
+     // TBD - modelFile may be used by RADE in the future!
+     char modelFile[1];
+     modelFile[0] = 0;
+-    rade_ = rade_open(modelFile, RADE_USE_C_ENCODER | RADE_USE_C_DECODER | RADE_MODE_V2 | (wxGetApp().appConfiguration.debugVerbose ? 0 : RADE_VERBOSE_0));
++    rade_ = rade_open(modelFile, RADE_USE_C_ENCODER | RADE_USE_C_DECODER | (wxGetApp().appConfiguration.debugVerbose ? 0 : RADE_VERBOSE_0));
+     assert(rade_ != nullptr);
+ 
+     // rade_tx()/rade_rx() are the first code paths to actually read every byte of
+@@ -143,7 +143,7 @@ void FreeDVInterface::start(int, bool usingReliableText)
+     // memory the real rade_ instance reads, so paging them in this way still avoids
+     // the first-frame stall without perturbing any state rade_ will actually use.
+     {
+-        struct rade* warmupRade = rade_open(modelFile, RADE_USE_C_ENCODER | RADE_USE_C_DECODER | RADE_MODE_V2 | RADE_VERBOSE_0);
++        struct rade* warmupRade = rade_open(modelFile, RADE_USE_C_ENCODER | RADE_USE_C_DECODER | RADE_VERBOSE_0);
+         if (warmupRade != nullptr)
+         {
+             std::vector<float> warmupFeatures(rade_n_features_in_out(warmupRade), 0.0f);
+@@ -292,7 +292,14 @@ void FreeDVInterface::setReliableText(const char* callsign)
+     if (rade_ != nullptr && radeTextPtr_ != nullptr)
+     {
+         log_info("generating RADE text string");
+-        rade_text_generate_tx_string(radeTextPtr_, callsign, strlen(callsign));
++        int nsyms = rade_n_eoo_bits(rade_);
++        float* eooSyms = new float[nsyms];
++        assert(eooSyms);
++
++        rade_text_generate_tx_string(radeTextPtr_, callsign, strlen(callsign), eooSyms, nsyms);
++        rade_tx_set_eoo_bits(rade_, eooSyms);
++
++        delete[] eooSyms;
+     }
+ }
+ 
+@@ -313,7 +320,7 @@ IPipelineStep* FreeDVInterface::createTransmitPipeline(
+     // Special handling for RADE. Note that ParallelStep is not being used
+     // as it has known issues with Bluetooth and macOS (but only with RADE;
+     // analog and legacy modes appear to function properly).
+-    radeTxStep_ = new RADETransmitStep(rade_, lpcnetEncState_, radeTextPtr_);
++    radeTxStep_ = new RADETransmitStep(rade_, lpcnetEncState_);
+         
+     auto pipeline = new AudioPipeline(inputSampleRate, outputSampleRate);
+     pipeline->appendPipelineStep(radeTxStep_);
+diff --git a/src/main.cpp b/src/main.cpp
+index c66e78d3..a60a3fec 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -4060,7 +4060,7 @@ void MainFrame::initializeFreeDVReporter_()
+     auto oldReporterObject = wxGetApp().m_sharedReporterObject;
+     wxGetApp().m_sharedReporterObject =
+         std::make_shared<FreeDVReporter>(
+-            /*wxGetApp().appConfiguration.reportingConfiguration.freedvReporterHostname->ToStdString()*/ "reporter-radev2.k6aq.net",
++            wxGetApp().appConfiguration.reportingConfiguration.freedvReporterHostname->ToStdString(),
+             wxGetApp().appConfiguration.reportingConfiguration.reportingCallsign->ToStdString(),
+             wxGetApp().appConfiguration.reportingConfiguration.reportingGridSquare->ToStdString(),
+             std::string("FreeDV ") + GetFreeDVVersion(),
