@@ -2045,6 +2045,9 @@ test_sound() {
     say "qpwgraph so you can see them. FreeDV itself won't be shown: its links only"
     say "appear when FreeDV is running and you press Start Modem."
     yesno "Run the test now?" y || return
+    # Refresh the start script from this radio's settings, so the test is the
+    # current one (nothing else - cards, links, FreeDV settings - is changed)
+    write_start_script
     log "\n\$ $RADIO_DIR/start --test"
     "$RADIO_DIR/start" --test 2>&1 | tee -a "$LOGFILE" >&3
 }
