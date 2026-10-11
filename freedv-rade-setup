@@ -1569,7 +1569,7 @@ settings_block() {
 radio_label() {
     local l
     l=$(unset RADIO_LABEL; source <(grep '^RADIO_LABEL=' "$SETUP_ROOT/$1/start" 2>/dev/null); echo "${RADIO_LABEL-}")
-    echo "${l:-$1}"
+    echo "${l:-${1^^}}"   # radios made before labels existed: upper case
 }
 
 load_settings() {
@@ -2076,7 +2076,7 @@ else
     # Keep the paths found by this run's checks
     _rigctl=$RIGCTL_BIN; _rigctld=$RIGCTLD_BIN; _fdv=$FREEDV_DIR; _qpw=$QPWGRAPH_CMD
     load_settings "$RADIO_DIR/start"
-    RADIO_LABEL=${RADIO_LABEL:-$RADIO}   # radios made before labels existed
+    RADIO_LABEL=${RADIO_LABEL:-${RADIO^^}}   # radios made before labels existed
     RIGCTL_BIN=${_rigctl:-$RIGCTL_BIN}; RIGCTLD_BIN=${_rigctld:-$RIGCTLD_BIN}; FREEDV_DIR=$_fdv
     QPWGRAPH_CMD=${_qpw:-$QPWGRAPH_CMD}
     while true; do
