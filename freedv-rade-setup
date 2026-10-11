@@ -1768,6 +1768,25 @@ fix_bpf_ports() {
     ((stereo)) && echo "(Band-pass filter has stereo ports here - linking them)"
 }
 
+# Save the links in place now between this radio's nodes and FreeDV's sinks
+# (not FreeDV's own links, which it makes itself) as this radio's links
+save_links() {
+    local f="$RADIO_DIR/links" a b nodes
+    nodes=" ${SINKS[*]} $BPF_NODE $RADIO_RX_NODE $RADIO_TX_NODE $MIC_NODE $PHONES_NODE $SPEAKER_NODE "
+    while read -r a b; do
+        [[ -z $b || ${a%%:*} == FreeDV || ${b%%:*} == FreeDV ]] && continue
+        [[ $nodes == *" ${a%%:*} "* || $nodes == *" ${b%%:*} "* ]] && echo "$a $b"
+    done < <(current_links) | sed "s/^$BPF_NODE:/Fdv-bpf:/; s/ $BPF_NODE:/ Fdv-bpf:/" > "$f.new"
+    if ! grep -q . "$f.new"; then
+        echo "No links found - nothing saved."
+        rm -f "$f.new"
+        return
+    fi
+    cp "$f" "$f.bak" 2>/dev/null
+    mv "$f.new" "$f"
+    echo "Saved $(wc -l < "$f") links to $f (old file kept as links.bak)."
+}
+
 current_links() {
     pw-link -l 2>/dev/null | awk '
         $0 !~ /\|/ { prev = $0; next }
@@ -1914,7 +1933,11 @@ if ((TEST)); then
     echo "FreeDV itself isn't shown yet: its links to the FDV_ boxes only appear"
     echo "when FreeDV is running and you press Start Modem."
     echo "Please don't save a patchbay in qpwgraph."
-    read -r -p "Press Enter when you have finished looking... "
+    echo
+    echo "If you change the routing in qpwgraph, save it now: the test removes"
+    echo "the filter's links when it ends."
+    read -r -p "Press Enter when you have finished looking, or S then Enter to save the links as they are now... " REPLY
+    [[ $REPLY == [Ss]* ]] && save_links
     exit 0
 fi
 
@@ -1988,12 +2011,13 @@ save_current_links() {
         [[ ${a%%:*} == FreeDV || ${b%%:*} == FreeDV ]] && continue
         [[ $nodes == *" ${a%%:*} "* || $nodes == *" ${b%%:*} "* ]] && echo "$a $b"
     done | sed 's/Fdv-bpf-1k:/Fdv-bpf:/g' > "$f.new"
-    # The transmit path only exists while the start script's sound setup is
-    # in place (e.g. the filter), so check it wasn't saved at the wrong time
+    # The transmit path (FreeDV -> filter -> radio) only exists while FreeDV
+    # for this radio is running; the sound test removes it again when it ends.
+    # If it isn't there now, keep the saved transmit links.
     if grep -q 'FDV_TX_out' "$f" 2>/dev/null && ! grep -q 'FDV_TX_out' "$f.new"; then
-        warn "There are no transmit links in place now. Start FreeDV for this radio"
-        say "  (or use 'Test the sound setup') before saving, or they will be lost."
-        yesno "Save anyway?" n || { rm -f "$f.new"; return; }
+        grep -E "^(FDV_TX_out|Fdv-bpf):" "$f" >> "$f.new"
+        say "The transmit links aren't in place now (FreeDV for this radio isn't"
+        say "running), so the saved transmit links are kept as they are."
     fi
     cp "$f" "$f.bak" 2>/dev/null
     mv "$f.new" "$f"

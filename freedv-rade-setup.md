@@ -50,6 +50,8 @@ At the end it offers a test: it links your radio, headset and filter to
 FreeDV's FDV_ boxes and shows them in **qpwgraph**, then tidies up again.
 FreeDV itself isn't shown in the test. Its own links to the FDV_ boxes
 appear only when FreeDV is running and you press **Start Modem**.
+If you change the routing in qpwgraph during the test, press **S** at the end
+of the test to save it.
 
 Running it again later lets you test or change a radio (sound card, headset,
 rig control, filter), or set up another radio.
