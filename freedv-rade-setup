@@ -1640,6 +1640,7 @@ write_start_script() {
 #
 # Usage:  start [FreeDV options]
 #         start --test    set up the sound only, check it, then tidy up
+#         start --links   the same, then save the links fixed in qpwgraph
 #
 # Extras: executable scripts hooks/before-freedv and hooks/after-freedv in
 # this folder are run before FreeDV starts and after it closes.
@@ -1663,8 +1664,9 @@ CONF="$RADIO_DIR/freedv.conf"
 VOLS="$RADIO_DIR/volumes.db"
 SINKS=(FDV_RX_in FDV_RX_out FDV_TX_in FDV_TX_out)
 
-TEST=0
+TEST=0 EDIT_LINKS=0
 [[ $1 == --test ]] && { TEST=1; shift; }
+[[ $1 == --links ]] && { TEST=1; EDIT_LINKS=1; shift; }
 
 [[ -f $LINKS ]] || { echo "Missing $LINKS - run freedv-rade-setup"; exit 1; }
 
@@ -1934,10 +1936,15 @@ if ((TEST)); then
     echo "when FreeDV is running and you press Start Modem."
     echo "Please don't save a patchbay in qpwgraph."
     echo
-    echo "If you change the routing in qpwgraph, save it now: the test removes"
-    echo "the filter's links when it ends."
-    read -r -p "Press Enter when you have finished looking, or S then Enter to save the links as they are now... " REPLY
-    [[ $REPLY == [Ss]* ]] && save_links
+    if ((EDIT_LINKS)); then
+        read -r -p "Fix the routing in qpwgraph, then press Enter to save it (or N then Enter to keep the saved links)... " REPLY
+        [[ $REPLY == [Nn]* ]] && echo "Links not changed." || save_links
+    else
+        echo "If you change the routing in qpwgraph, save it now: the test removes"
+        echo "the filter's links when it ends."
+        read -r -p "Press Enter when you have finished looking, or S then Enter to save the links as they are now... " REPLY
+        [[ $REPLY == [Ss]* ]] && save_links
+    fi
     exit 0
 fi
 
@@ -1999,31 +2006,6 @@ EOF
     fi
 }
 
-# Save the links that are in place now (after fixing them in qpwgraph)
-save_current_links() {
-    local f="$RADIO_DIR/links" nodes
-    local -a keep=(FDV_RX_in FDV_RX_out FDV_TX_in FDV_TX_out Fdv-bpf Fdv-bpf-1k
-                   "$RADIO_RX_NODE" "$RADIO_TX_NODE" "$MIC_NODE" "$PHONES_NODE" "$SPEAKER_NODE")
-    nodes=" ${keep[*]} "
-    say "Fix the routing in qpwgraph first (FreeDV can be running)."
-    yesno "Save the links that are in place now as this radio's links?" y || return
-    "$SCRIPT_DIR/pw-link-ls" | while read -r a b; do
-        [[ ${a%%:*} == FreeDV || ${b%%:*} == FreeDV ]] && continue
-        [[ $nodes == *" ${a%%:*} "* || $nodes == *" ${b%%:*} "* ]] && echo "$a $b"
-    done | sed 's/Fdv-bpf-1k:/Fdv-bpf:/g' > "$f.new"
-    # The transmit path (FreeDV -> filter -> radio) only exists while FreeDV
-    # for this radio is running; the sound test removes it again when it ends.
-    # If it isn't there now, keep the saved transmit links.
-    if grep -q 'FDV_TX_out' "$f" 2>/dev/null && ! grep -q 'FDV_TX_out' "$f.new"; then
-        grep -E "^(FDV_TX_out|Fdv-bpf):" "$f" >> "$f.new"
-        say "The transmit links aren't in place now (FreeDV for this radio isn't"
-        say "running), so the saved transmit links are kept as they are."
-    fi
-    cp "$f" "$f.bak" 2>/dev/null
-    mv "$f.new" "$f"
-    say "Saved $(wc -l < "$f") links to $f (old file kept as links.bak)."
-}
-
 finish() {
     heading "Writing files for radio $RADIO_LABEL"
     write_links
@@ -2045,11 +2027,34 @@ test_sound() {
     say "qpwgraph so you can see them. FreeDV itself won't be shown: its links only"
     say "appear when FreeDV is running and you press Start Modem."
     yesno "Run the test now?" y || return
+    run_start --test
+}
+
+# Set up the sound, let the user fix the routing in qpwgraph, then save it
+edit_links() {
+    heading "Fixing the sound links in qpwgraph"
+    if [[ -n $TEST_ROOT ]]; then
+        say "(test mode: not running the sound setup)"
+        return
+    fi
+    say "This restarts the sound system briefly and sets up this radio's links, without"
+    say "starting FreeDV, then opens qpwgraph. Fix the routing there, then come back"
+    say "here to save it."
+    run_start --links
+}
+
+# run_start --test|--links: runs the radio's start script for the sound only
+run_start() {
+    # The sound system restarts, which would cut off a running FreeDV
+    while pgrep -x freedv >/dev/null; do
+        warn "FreeDV is running. The sound system can't be restarted while it runs."
+        pause "Please close FreeDV, then press Enter... "
+    done
     # Refresh the start script from this radio's settings, so the test is the
     # current one (nothing else - cards, links, FreeDV settings - is changed)
     write_start_script
-    log "\n\$ $RADIO_DIR/start --test"
-    "$RADIO_DIR/start" --test 2>&1 | tee -a "$LOGFILE" >&3
+    log "\n\$ $RADIO_DIR/start $1"
+    "$RADIO_DIR/start" "$1" 2>&1 | tee -a "$LOGFILE" >&3
 }
 
 # System details at the top of the log, for bug reports
@@ -2161,7 +2166,7 @@ else
         say "  Redo the (M)icrophone, headphones and speakers"
         say "  Redo rig (C)ontrol"
         say "  Change the band-pass (F)ilter"
-        say "  (S)ave the current links (after fixing them in qpwgraph)"
+        say "  Fix the sound links in qpwgraph and (S)ave them"
         say "  Re(W)rite the start script and desktop icon only"
         say "  (Q)uit"
         confirm "What would you like to do?" "[T/r/m/c/f/s/w/q]" "Tt" "Rr" "Mm" "Cc" "Ff" "Ss" "Ww" "Qq"
@@ -2172,7 +2177,7 @@ else
             3) headset_step; finish ;;
             4) rig_step; finish ;;
             5) bpf_step; finish ;;
-            6) save_current_links ;;
+            6) edit_links ;;
             7) write_start_script; write_launchers ;;
             8) break ;;
         esac
