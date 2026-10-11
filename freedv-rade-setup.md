@@ -46,8 +46,10 @@ Or in a terminal:
 When it asks you to plug a USB sound card in, plug it into the socket it
 will **always** stay in: its fixed name belongs to that socket.
 
-At the end it offers a test: it sets up the sound, shows the connections in
-**qpwgraph**, and tidies up again.
+At the end it offers a test: it links your radio, headset and filter to
+FreeDV's FDV_ boxes and shows them in **qpwgraph**, then tidies up again.
+FreeDV itself isn't shown in the test. Its own links to the FDV_ boxes
+appear only when FreeDV is running and you press **Start Modem**.
 
 Running it again later lets you test or change a radio (sound card, headset,
 rig control, filter), or set up another radio.

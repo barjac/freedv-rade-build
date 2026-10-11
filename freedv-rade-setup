@@ -1753,7 +1753,7 @@ check_links() {
             bad=1
         fi
     done < "$LINKS"
-    ((bad)) && echo "Some links are missing." || echo "All links are in place."
+    ((bad)) && echo "Some links are missing." || echo "All the links made by the start script are in place."
     return $bad
 }
 
@@ -1860,6 +1860,8 @@ if ((TEST)); then
     [[ -n $QPWGRAPH_CMD ]] && { $QPWGRAPH_CMD &>/dev/null & disown; }
     echo
     echo "Check the routing in qpwgraph. Press F5 there if it shows nothing or looks wrong."
+    echo "FreeDV itself isn't shown yet: its links to the FDV_ boxes only appear"
+    echo "when FreeDV is running and you press Start Modem."
     echo "Please don't save a patchbay in qpwgraph."
     read -r -p "Press Enter when you have finished looking... "
     exit 0
@@ -1963,8 +1965,10 @@ test_sound() {
         say "(test mode: not running the sound test)"
         return
     fi
-    say "This restarts the sound system briefly and sets up FreeDV's sound routing"
-    say "without starting FreeDV, then opens qpwgraph so you can see it."
+    say "This restarts the sound system briefly and links your radio, headset and"
+    say "filter to FreeDV's FDV_ boxes, without starting FreeDV. Then it opens"
+    say "qpwgraph so you can see them. FreeDV itself won't be shown: its links only"
+    say "appear when FreeDV is running and you press Start Modem."
     yesno "Run the test now?" y || return
     log "\n\$ $RADIO_DIR/start --test"
     "$RADIO_DIR/start" --test 2>&1 | tee -a "$LOGFILE" >&3
