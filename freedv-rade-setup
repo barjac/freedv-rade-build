@@ -526,21 +526,57 @@ restart_wireplumber() {
         bash -c 'systemctl --user restart wireplumber && sleep 2'
 }
 
-# Files outside freedv-rade-setup's own that mention this bus path
-# card_owner BUSPATH THIS_ID -> who already has a freedv-rade-setup rule for
-# this USB port ("radio NAME" or "your headset"), other than THIS_ID
-card_owner() {
-    local f id
+# USB cards are named by socket, not by radio: the first radio socket is
+# "radio" (radio-rx, radio-tx), the next "radio2" and so on; headsets the same
+# (headset-mic, headset-phones, then headset2-...). Radios that share one
+# interface (cables moved between radios) share its names.
+
+# rule_files -> freedv-rade-setup's WirePlumber rule files
+rule_files() {
+    local f
     for f in "$WP_LUA_DIR"/60-freedv-rade-setup-*.lua "$WP_CONF_DIR"/60-freedv-rade-setup-*.conf; do
-        [[ -f $f ]] && grep -qF -- "\"$1\"" "$f" || continue
-        id=${f##*/60-freedv-rade-setup-}; id=${id%.*}
-        [[ $id == "$2" ]] && continue
-        if [[ $id == radio-* ]]; then echo "radio $(radio_label "${id#radio-}")"; else echo "your headset"; fi
-        return 0
+        [[ -f $f ]] && echo "$f"
     done
+}
+
+# socket_rule BUSPATH -> the rule file that names this USB socket
+socket_rule() {
+    local f
+    while read -r f; do
+        grep -qF -- "\"$1\"" "$f" && { echo "$f"; return 0; }
+    done < <(rule_files)
     return 1
 }
 
+rule_id() { local id=${1##*/60-freedv-rade-setup-}; echo "${id%.*}"; }
+
+# rule_nodes FILE -> "INPUT OUTPUT", the node names the rule gives
+rule_nodes() {
+    sed -n 's/.*node\.name"\{0,1\}\] = "\([^"]*\)".*/\1/p; s/^ *node\.name = "\([^~"][^"]*\)"$/\1/p' "$1" | head -2 | tr '\n' ' '
+}
+
+# free_rule_id ROLE -> radio, radio2, radio3 ... (the first one not in use)
+free_rule_id() {
+    local n=1 id=$1
+    while [[ -f $WP_LUA_DIR/60-freedv-rade-setup-$id.lua || -f $WP_CONF_DIR/60-freedv-rade-setup-$id.conf ]]; do
+        id="$1$((++n))"
+    done
+    echo "$id"
+}
+
+# node_users NODE... -> the radios whose links use any of these nodes
+node_users() {
+    local d n users=()
+    for d in "$SETUP_ROOT"/*/; do
+        d=${d%/}; [[ -f $d/links && ${d##*/} != "$RADIO" ]] || continue
+        for n in "$@"; do
+            grep -qF -- "$n:" "$d/links" && { users+=("$(radio_label "${d##*/}")"); break; }
+        done
+    done
+    local IFS=,; echo "${users[*]}" | sed "s/,/, /g"
+}
+
+# Files outside freedv-rade-setup's own that mention this bus path
 existing_rule_for() {
     grep -rlsF -- "$1" "$REAL_CFG/wireplumber" /etc/wireplumber 2>/dev/null \
         | grep -v 'freedv-rade-setup-'
@@ -915,37 +951,48 @@ pick_card() {
 
 # name_card ROLE CARD -> sets ROLE_IN and ROLE_OUT node names
 # ROLE is "radio" or "headset". USB cards get fixed names from a WirePlumber
-# rule matched by USB port, unless something else already names that port.
+# rule matched by USB port (see socket_rule), unless something else already
+# names that port.
 name_card() {
-    local role=$1 card=$2 bp bus stem old_stem="" other id desc pref_in pref_out
+    local role=$1 card=$2 bp bus stem old_stem="" other id desc pref_in="" pref_out="" f n users
     # PipeWire's device.bus-path; pactl shows it as device.bus_path
     bp=$(card_prop "$card" device.bus-path)
     [[ -z $bp ]] && bp=$(card_prop "$card" device.bus_path)
     bus=$(card_prop "$card" device.bus)
     stem=${card#alsa_card.}
 
-    if [[ $role == radio ]]; then
-        id="radio-$RADIO"; desc="$RADIO_LABEL radio"
-        pref_in="$RADIO-rx"; pref_out="$RADIO-tx"
-    else
-        id="headset"; desc="Headset"
-        pref_in="headset-mic"; pref_out="headset-phones"
-    fi
-
-    if [[ $bus == usb && -n $bp ]] && other=$(card_owner "$bp" "$id"); then
-        say "This card is already set up as $other."
-        # the headset steps carry on with the card's current names
-        ROLE_IN=$(resolve_node "" "$stem" input)
-        ROLE_OUT=$(resolve_node "" "$stem" output)
-        return 2
-    fi
-    if [[ $bus != usb || -z $bp ]]; then
+    if [[ $bus == usb && -n $bp ]] && f=$(socket_rule "$bp"); then
+        id=$(rule_id "$f")
+        read -r pref_in pref_out <<<"$(rule_nodes "$f")"
+        if [[ $id != "$role" && ! $id =~ ^$role[0-9]+$ && ! ( $role == radio && $id == radio-* ) ]]; then
+            if [[ $id == radio* ]]; then say "This card is already set up as a radio sound card."
+            else say "This card is already set up as a headset."; fi
+            # the headset steps carry on with the card's current names
+            ROLE_IN=$(resolve_node "$pref_in" "$stem" input)
+            ROLE_OUT=$(resolve_node "$pref_out" "$stem" output)
+            return 2
+        fi
+        # This socket already has a name: use it (shared with other radios)
+        say "This card already has fixed names: $pref_in, $pref_out"
+        users=$(node_users "$pref_in" "$pref_out")
+        if [[ -n $users ]]; then
+            [[ $role == radio ]] && say "Radio $users uses it too (you move the audio cables between the radios)." \
+                                 || say "Radio $users uses it too."
+        fi
+    elif [[ $bus != usb || -z $bp ]]; then
         pref_in=""; pref_out=""
     elif other=$(existing_rule_for "$bp") && [[ -n $other ]]; then
         say "This card already has a name from: $other"
         say "Keeping that name."
         pref_in=""; pref_out=""
     else
+        id=$(free_rule_id "$role")
+        n=${id#"$role"}
+        if [[ $role == radio ]]; then
+            desc="Radio${n:+ $n}"; pref_in="$id-rx"; pref_out="$id-tx"
+        else
+            desc="Headset${n:+ $n}"; pref_in="$id-mic"; pref_out="$id-phones"
+        fi
         old_stem=$stem
         stem="frs-$id"
         write_wp_rule "$id" "$bp" "$stem" "$desc" "$pref_in" "$pref_out"
@@ -1030,9 +1077,13 @@ radio_audio_step() {
     say "  (D)etect a USB sound card, or a radio with built-in USB sound, by plugging it in (recommended)"
     say "  (C)hoose from the sound cards that are already connected"
     say "  (S)oftware radio program on this computer (quisk, piHPSDR ...)"
-    confirm "Detect, Choose or Software?" "[D/c/s]" "Dd" "Cc" "Ss"
+    ((NEW_RADIO)) && say "  (B)ack - stop setting up this radio" \
+                  || say "  (B)ack - keep the radio's sound card as it is"
+    confirm "Detect, Choose, Software or Back?" "[D/c/s/b]" "Dd" "Cc" "Ss" "Bb"
     CHOICE=$(($? + 1))
     case $CHOICE in
+        4)
+            return 1 ;;
         1)
             detect_plugin "the radio's USB cable (or its USB sound interface)" || continue
             RADIO_KIND=usb; RADIO_CARD=$NEW_CARD; RADIO_SERIAL=$NEW_SERIAL ;;
@@ -1052,7 +1103,7 @@ radio_audio_step() {
     esac
     name_card radio "$RADIO_CARD"
     if (( $? == 2 )); then
-        say "Choose another card, or test/edit that radio from the start menu.\n"
+        say "Choose another card, or go (B)ack.\n"
         continue
     fi
     break
@@ -1077,7 +1128,7 @@ set_radio_volume() {
 }
 
 # A USB headset picked from the list gets the same fixed names as a
-# detected one: headset-mic, headset-phones
+# detected one: headset-mic, headset-phones (headset2-... in another socket)
 name_chosen_headset() {
     local stem card
     [[ $MIC_NODE == alsa_input.* ]] || return
@@ -2059,11 +2110,8 @@ if [[ -z $RADIO ]]; then
     BPF=none; MONITOR=none; RIG_MODE=none
     NEW_RADIO=1
     if ! radio_audio_step; then
+        # (card names belong to the USB socket and may be shared, so they stay)
         rm -rf "$RADIO_DIR"
-        if [[ -z $TEST_ROOT ]] && ls "$WP_LUA_DIR/60-freedv-rade-setup-radio-$RADIO.lua" "$WP_CONF_DIR/60-freedv-rade-setup-radio-$RADIO.conf" &>/dev/null; then
-            rm -f "$WP_LUA_DIR/60-freedv-rade-setup-radio-$RADIO.lua" "$WP_CONF_DIR/60-freedv-rade-setup-radio-$RADIO.conf"
-            restart_wireplumber
-        fi
         die "No radio sound card - nothing written. Run freedv-rade-setup again to retry."
     fi
     headset_step
