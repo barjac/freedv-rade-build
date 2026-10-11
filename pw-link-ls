@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# List all current links (not unlinked nodes)
+
+pw-link -l |
+awk '
+    $0 !~ /\|/ { prev = $0; next }
+
+    /->/ {
+        sub(/\|/, "", $0)            # remove pipe
+        gsub(/[ ]+->[ ]+/, " ", $0)  # remove arrow, leave one space
+        print prev $0                # concatenate, don’t add OFS
+    }
+'

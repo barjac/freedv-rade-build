@@ -1,0 +1,2104 @@
+#!/bin/bash
+#set -x
+
+# freedv-rade-setup
+#
+# Interactive sound and rig-control setup for FreeDV RADE installed with
+# freedv-rade-build. For one radio it:
+#   - finds the radio's USB sound card (and CAT serial port) by asking you to
+#     plug it in, and gives it a fixed name with a WirePlumber rule
+#   - does the same for a USB headset, or lets you pick a microphone/speakers
+#   - sets up hamlib rigctld (or uses one that is already running)
+#   - optionally builds the transmit band-pass filter (bpf)
+#   - writes a start script, links file and FreeDV config for that radio
+#
+# Everything for a radio lives in ~/.config/freedv-rade-setup/<radio>/.
+# It never changes ~/freedv-start, ~/.freedv or any other existing script.
+#
+# Options:
+#   --check            only run the system checks (any fix they offer, such as
+#                      the PipeWire switch, still asks first), then stop
+#   --test-root DIR    write all files under DIR instead of your home folder,
+#                      and don't restart sound services or run anything as root
+#   --verbose          show the output of every command as it runs
+#
+# The screen only shows the script's own messages and questions. Everything,
+# including the full output of each command, goes to freedv-rade-setup.log
+# in the freedv-rade-build folder (the previous run's log is kept as .log.1).
+
+FRS_VERSION="0.3 (test version)"
+
+# Check we are not root
+((UID)) || { echo "ERROR: You must NOT run $0 as root - aborting!"; exit 1; }
+
+user="$(id -un)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+RUN_DIR="$HOME/freedv-rade-build"
+
+usage() {
+    echo "Usage: $(basename "$0") [--check] [--test-root DIR] [--verbose]"
+}
+
+FRS_ARGS="$*"
+TEST_ROOT=""
+CHECK_ONLY=0
+APT_LISTS_FRESH=0
+NEW_RADIO=0
+VERBOSE=0
+while (($#)); do
+    case $1 in
+        --check) CHECK_ONLY=1 ;;
+        --verbose) VERBOSE=1 ;;
+        --test-root)
+            [[ -n $2 ]] || { usage; exit 1; }
+            TEST_ROOT=$(readlink -m "$2"); shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Unknown option: $1"; usage; exit 1 ;;
+    esac
+    shift
+done
+
+# Real config dir, always used for reading existing WirePlumber rules
+REAL_CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+if [[ -n $TEST_ROOT ]]; then
+    CFG_HOME="$TEST_ROOT/.config"
+    LOCAL_BIN="$TEST_ROOT/.local/bin"
+    APPS_DIR="$TEST_ROOT/.local/share/applications"
+    DESKTOP_DIR="$TEST_ROOT/Desktop"
+    LINK_DIR="$TEST_ROOT"
+else
+    CFG_HOME="$REAL_CFG"
+    LOCAL_BIN="$HOME/.local/bin"
+    APPS_DIR="$HOME/.local/share/applications"
+    DESKTOP_DIR="$(xdg-user-dir DESKTOP 2>/dev/null)"
+    [[ -n $DESKTOP_DIR ]] || DESKTOP_DIR="$HOME/Desktop"
+    LINK_DIR="$HOME"
+fi
+SETUP_ROOT="$CFG_HOME/freedv-rade-setup"
+WP_CONF_DIR="$CFG_HOME/wireplumber/wireplumber.conf.d"
+WP_LUA_DIR="$CFG_HOME/wireplumber/main.lua.d"
+
+# The 4 null sinks the start script creates (fixed names, used in freedv.conf)
+FDV_SINKS=(FDV_RX_in FDV_RX_out FDV_TX_in FDV_TX_out)
+
+# Settings saved at the top of each radio's start script
+SETTINGS_VARS=(RADIO RADIO_LABEL FREEDV_DIR RADIO_KIND RADIO_CARD RADIO_RX_NODE RADIO_TX_NODE
+               MIC_NODE PHONES_NODE SPEAKER_NODE MONITOR
+               RIG_MODE RIG_MODEL RIG_MODEL_NAME RIG_PORT RIG_SETCONF RIG_LISTEN RIG_HOST
+               RIGCTL_BIN RIGCTLD_BIN BPF BPF_BIN QPWGRAPH_CMD)
+
+##################### log #####################
+
+# The log sits next to the script, like freedv-rade-build's and
+# freedv-rade-update's. The previous run's log is kept as .log.1.
+if [[ -n $TEST_ROOT ]]; then
+    mkdir -p "$TEST_ROOT"
+    LOGFILE="$TEST_ROOT/freedv-rade-setup.log"
+elif [[ -d $RUN_DIR ]]; then
+    LOGFILE="$RUN_DIR/freedv-rade-setup.log"
+else
+    LOGFILE="$HOME/freedv-rade-setup.log"
+fi
+[[ -f $LOGFILE ]] && mv -f "$LOGFILE" "$LOGFILE.1"
+: > "$LOGFILE" || { echo "ERROR: Can't write the log file $LOGFILE"; exit 1; }
+
+# fd 3 is the terminal. Normal output (any command's stdout/stderr) goes to
+# the log only, or to both with --verbose. The script's own messages and
+# questions are written to the terminal and the log separately (say, ask ...).
+exec 3>&1
+if ((VERBOSE)); then
+    exec > >(tee -a "$LOGFILE" >&3) 2>&1
+else
+    exec >>"$LOGFILE" 2>&1
+fi
+
+##################### user interface helpers #####################
+
+log()    { printf '%b\n' "$*" >> "$LOGFILE"; }
+screen() { printf '%b\n' "$*" >&3; }
+# GAP=1 when the last line on screen was blank, so headings don't add another
+say() {
+    local m="$*"
+    # don't stack a second blank line on one already there
+    ((GAP)) && [[ $m == '\n'* ]] && m=${m#'\n'}
+    screen "$m"; log "$m"
+    [[ -z $m || $m == *'\n' ]] && GAP=1 || GAP=0
+}
+ok()   { say "  OK    $*"; }
+warn() { say "WARNING: $*"; }
+die()  { say "\nERROR: $*"; screen "\nFull details are in $LOGFILE"; exit 1; }
+heading() { ((GAP)) || say ""; say "==================== $* ====================\n"; }
+
+# Why 'pactl info' failed, and what to do about it
+sound_server_help() {
+    local p stuck=""
+    for p in $(pgrep -u "$USER" -x 'pipewire|pipewire-pulse|wireplumber|pulseaudio'); do
+        [[ $(awk '{print $3}' "/proc/$p/stat" 2>/dev/null) == D ]] && stuck+=" $(cat "/proc/$p/comm")"
+    done
+    log "sound server processes: $(pgrep -u "$USER" -a 'pipewire|wireplumber|pulseaudio' | tr '\n' ';') stuck:${stuck:-none}"
+    say ""
+    if [[ -n $stuck ]]; then
+        say "The sound server is stuck ($stuck ), waiting for a USB sound device that"
+        say "was removed while it was in use - for example unplugged, or taken over by"
+        say "another program or a virtual machine. It can't be restarted like this."
+        say "Please REBOOT, then run freedv-rade-setup again."
+    elif ! systemctl --user is-active --quiet pipewire pipewire-pulse 2>/dev/null \
+         && ! systemctl --user is-active --quiet pulseaudio 2>/dev/null; then
+        say "The sound server isn't running. Start it with:"
+        say "    systemctl --user restart pipewire pipewire-pulse wireplumber"
+        say "(or log out and in again), then run freedv-rade-setup again."
+    else
+        say "The sound server is running but not answering. Try restarting it:"
+        say "    systemctl --user restart pipewire pipewire-pulse wireplumber"
+        say "If that hangs or doesn't help, reboot, then run freedv-rade-setup again."
+    fi
+}
+
+# Keyboard input ended (Ctrl+D, or not run from a terminal)
+no_input() { screen ""; die "No more keyboard input - stopping."; }
+
+# pause [PROMPT] -> waits for Enter
+pause() {
+    local prompt=${1:-"Press Enter to continue... "}
+    read -e -r -p "$prompt" 2>&3 || no_input
+    log "$prompt<Enter>"
+    say ""
+}
+
+# ask PROMPT DEFAULT -> REPLY (Enter gives DEFAULT)
+ask() {
+    local prompt=$1 def=$2
+    if [[ -n $def ]]; then
+        read -e -r -p "$prompt [$def]: " REPLY 2>&3 || no_input
+    else
+        read -e -r -p "$prompt: " REPLY 2>&3 || no_input
+    fi
+    [[ -z $REPLY ]] && REPLY=$def
+    log "$prompt -> '$REPLY'"
+    say ""
+}
+
+# confirm PROMPT HINT CHARS... -> returns 0 for the first CHARS, 1 for the
+# second and so on. Enter gives the first letter of HINT. Same as
+# freedv-rade-update's confirm(), but takes any number of choices, and logs
+# the answer instead of echoing it.
+#   e.g.  confirm "(U)pdate, (F)ull re-build or (Q)uit?" "[U/F/Q]" "Uu" "Ff" "Qq"
+confirm() {
+    local -a params=( "$@" )
+    local ans i
+    while true; do
+        ans=
+        read -e -r -p "${params[0]} ${params[1]} " ans 2>&3 || no_input
+        # Get first option if ans is empty
+        ans=${ans:-$(echo "${params[1]}" | cut -b 2)}
+        log "${params[0]} ${params[1]} -> $ans"
+        for ((i=2; i<${#params[@]}; i++)); do
+            [[ -n $ans && $ans == [${params[i]}] ]] && { say ""; return $((i-2)); }
+        done
+    done
+}
+
+# yesno PROMPT DEFAULT(y|n) -> returns 0 for yes
+yesno() {
+    if [[ ${2:-y} == n ]]; then
+        confirm "$1" "[N/y]" "yY" "nN"
+    else
+        confirm "$1" "[Y/n]" "Yy" "Nn"
+    fi
+}
+
+# choose PROMPT DEFAULT ITEM... -> CHOICE (number), CHOICE_TEXT
+# For lists that vary in length (sound cards, ports...). Fixed menus use
+# confirm. The recommended item is listed first and is the default.
+choose() {
+    local prompt=$1 def=$2 i n
+    shift 2
+    n=$#
+    for ((i=1; i<=n; i++)); do
+        say "$(printf '  %2d) %s' "$i" "${!i}")"
+    done
+    while true; do
+        read -e -r -p "$prompt [$def] " CHOICE 2>&3 || no_input
+        CHOICE=${CHOICE:-$def}
+        log "$prompt [$def] -> $CHOICE"
+        if [[ $CHOICE =~ ^[0-9]+$ ]] && ((CHOICE >= 1 && CHOICE <= n)); then
+            CHOICE_TEXT=${!CHOICE}
+            say ""
+            return 0
+        fi
+        screen "Please enter a number from 1 to $n."
+    done
+}
+
+##################### running commands #####################
+
+# spin PID DESC -> waits for PID, showing "DESC ... |/-\" meanwhile
+spin() {
+    local pid=$1 desc=$2 i=0 s='|/-\'
+    if [[ -t 3 ]]; then
+        while kill -0 "$pid" 2>/dev/null; do
+            printf '\r%s ... %s' "$desc" "${s:i++%4:1}" >&3
+            sleep 0.2
+        done
+        printf '\r\033[K' >&3
+    fi
+    wait "$pid"
+}
+
+# show_failure DESC FILE -> the end of a failed command's output
+show_failure() {
+    say "FAILED: $1"
+    [[ -s $2 ]] && tail -n 10 "$2" | sed 's/^/    /' >&3
+    screen "  Full details are in $LOGFILE"
+}
+
+# run_quiet DESC COMMAND... -> runs COMMAND with its output in the log only,
+# showing a spinner meanwhile, then "OK DESC" or the end of the output.
+run_quiet() {
+    local desc=$1 rc tmp
+    shift
+    log "\n\$ $*"
+    if ((VERBOSE)); then
+        "$@"
+        rc=$?
+        ((rc)) && show_failure "$desc" "" || ok "$desc"
+        return $rc
+    fi
+    tmp=$(mktemp)
+    "$@" > "$tmp" 2>&1 < /dev/null &
+    spin $! "$desc"
+    rc=$?
+    cat "$tmp" >> "$LOGFILE"
+    ((rc)) && show_failure "$desc" "$tmp" || ok "$desc"
+    rm -f "$tmp"
+    return $rc
+}
+
+# get_root -> sets ROOT_VIA (sudo or su), asking for the password now (in
+# the open, before any spinner or progress bar) if sudo needs one
+get_root() {
+    [[ -n $ROOT_VIA ]] && { [[ $ROOT_VIA == su ]] || sudo -n true 2>/dev/null || sudo -v 2>&3; return; }
+    if command -v sudo >/dev/null 2>&1; then
+        if sudo -n true 2>/dev/null || sudo -v 2>&3; then
+            ROOT_VIA=sudo
+            log "Running as root via sudo"
+            return 0
+        fi
+    fi
+    if command -v su >/dev/null 2>&1; then
+        ROOT_VIA=su
+        log "Running as root via su"
+        return 0
+    fi
+    say "Unable to gain root access via sudo or su."
+    return 1
+}
+
+# run_as_root COMMAND -> runs COMMAND (a string) as root, output to the log
+run_as_root() {
+    if [ $# -eq 0 ]; then
+        echo "run_as_root: No command provided." >&2
+        return 1
+    fi
+
+    local CMD="$*"
+
+    if [[ -n $TEST_ROOT ]]; then
+        say "(test mode: would run as root: $CMD)"
+        return 0
+    fi
+
+    get_root || return 1
+    log "\n# as root: $CMD"
+    if [[ $ROOT_VIA == sudo ]]; then
+        sudo bash -c "$CMD"
+    else
+        screen "The root password is needed:"
+        su -c "$CMD" 2>&3
+    fi
+}
+
+# root_quiet DESC COMMAND -> run_as_root with a spinner, like run_quiet
+root_quiet() {
+    local desc=$1 cmd=$2
+    if [[ -n $TEST_ROOT ]]; then
+        say "(test mode: would run as root: $cmd)"
+        return 0
+    fi
+    get_root || return 1
+    if [[ $ROOT_VIA == sudo ]]; then
+        run_quiet "$desc" sudo -n bash -c "$cmd"
+    else
+        say "$desc ..."
+        run_as_root "$cmd" && ok "$desc" || { show_failure "$desc" ""; return 1; }
+    fi
+}
+
+# apt_quiet DESC APT-GET-ARGS -> apt-get as root with a progress bar
+# Never stops to ask about changed config files (keeps the user's version),
+# and waits for another apt (e.g. the update manager) to finish first.
+apt_quiet() {
+    local desc=$1 args=$2 cmd rc
+    if [[ -n $TEST_ROOT ]]; then
+        say "(test mode: would run as root: apt-get $args)"
+        return 0
+    fi
+    get_root || return 1
+    # refresh the package lists once per run before the first install, so an
+    # old list doesn't ask for package versions the mirror no longer has
+    if [[ $args == install* ]] && ! ((APT_LISTS_FRESH)); then
+        root_quiet "Refreshing the package lists" \
+            "apt-get -o DPkg::Lock::Timeout=300 update" \
+            || warn "Couldn't refresh the package lists - trying the install anyway."
+        APT_LISTS_FRESH=1
+    fi
+    cmd="DEBIAN_FRONTEND=noninteractive apt-get -y -o DPkg::Lock::Timeout=300"
+    cmd+=" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+    if ((VERBOSE)); then
+        log "\n# as root: apt-get $args"
+        run_as_root "$cmd $args"
+        rc=$?
+        ((rc)) && show_failure "$desc" "" || ok "$desc"
+        return $rc
+    fi
+    # apt reports its progress on fd 3, its normal output goes to the log
+    cmd+=" -o APT::Status-Fd=3 $args 3>&1 >>'$LOGFILE' 2>&1"
+    log "\n# as root: apt-get $args"
+    screen "$desc ..."
+    if [[ $ROOT_VIA == sudo ]]; then
+        sudo -n bash -c "$cmd" | apt_bar "$desc"
+    else
+        screen "The root password is needed:"
+        su -c "$cmd" 2>&3 | apt_bar "$desc"
+    fi
+    rc=${PIPESTATUS[0]}
+    # Replace the "DESC ..." line (after su's password prompt it isn't the line above)
+    [[ -t 3 && $ROOT_VIA == sudo ]] && printf '\033[1A\r\033[K' >&3
+    if ((rc)); then
+        show_failure "$desc" ""
+        tail -n 10 "$LOGFILE" | sed 's/^/    /' >&3
+    else
+        ok "$desc"
+    fi
+    return $rc
+}
+
+# apt_bar DESC -> draws a progress bar from apt's status lines on stdin
+apt_bar() {
+    local desc=$1 line phase p f i bar
+    local -a fld
+    while IFS= read -r line; do
+        IFS=: read -r -a fld <<<"$line"
+        case ${fld[0]} in
+            dlstatus) phase="downloading" ;;
+            pmstatus) phase="installing" ;;
+            *) continue ;;
+        esac
+        # The percentage is the first number after the package name
+        p=""
+        for ((i=2; i<${#fld[@]}; i++)); do
+            [[ ${fld[i]} =~ ^[0-9]+(\.[0-9]+)?$ ]] && { p=${fld[i]%%.*}; break; }
+        done
+        [[ -n $p ]] || continue
+        ((p > 100)) && p=100
+        f=$((p / 5))
+        printf -v bar '%*s' "$f" ''
+        bar=${bar// /#}
+        printf -v bar '%-20s' "$bar"
+        [[ -t 3 ]] && printf '\r\033[K  %s: %-11s [%s] %3d%%' "$desc" "$phase" "${bar// /-}" "$p" >&3
+    done
+    [[ -t 3 ]] && printf '\r\033[K' >&3
+}
+
+# Print the install command for this distro, or nothing if unknown
+pkg_install_cmd() {
+    case " $ID $ID_LIKE " in
+        *" mageia "*)                 echo "urpmi --auto $*" ;;
+        *" fedora "*)                 echo "dnf install -y $*" ;;
+        *" opensuse"*|*" suse "*)     echo "zypper --non-interactive in $*" ;;
+        *" arch "*)                   echo "pacman -S --needed --noconfirm $*" ;;
+        *" pclinuxos "*)              echo "apt-get install -y $*" ;;
+        *" debian "*|*" ubuntu "*)    echo "apt-get install -y $*" ;;
+        *)                            echo "" ;;
+    esac
+}
+
+is_apt_distro() { [[ " $ID $ID_LIKE " == *" debian "* || " $ID $ID_LIKE " == *" ubuntu "* || " $ID $ID_LIKE " == *" pclinuxos "* ]]; }
+
+# pkg_available PACKAGE -> 0 if the distro's repos have it (only checked
+# where apt can tell us; elsewhere assumed yes)
+pkg_available() {
+    local cand
+    is_apt_distro || return 0
+    cand=$(LC_ALL=C apt-cache policy "$1" 2>/dev/null | sed -n 's/^ *Candidate: //p')
+    [[ -n $cand && $cand != "(none)" ]]
+}
+
+# offer_install PACKAGE WHY -> 0 if installed
+offer_install() {
+    local pkg=$1 why=$2 cmd
+    cmd=$(pkg_install_cmd "$pkg")
+    if [[ -z $cmd ]]; then
+        say "Please install the '$pkg' package with your package manager ($why)."
+        return 1
+    fi
+    yesno "Install $pkg now ($why)?" y || return 1
+    if is_apt_distro; then
+        apt_quiet "Installing $pkg" "install $pkg"
+    else
+        root_quiet "Installing $pkg" "$cmd"
+    fi
+}
+
+# The package with PipeWire's ALSA plugin. Ubuntu 22.04 (and Mint 21) has
+# no pipewire-alsa: the plugin is in pipewire-audio-client-libraries there.
+alsa_plugin_pkg() {
+    if is_apt_distro && ! pkg_available pipewire-alsa && pkg_available pipewire-audio-client-libraries; then
+        echo pipewire-audio-client-libraries
+    else
+        echo pipewire-alsa
+    fi
+}
+
+##################### PipeWire helpers #####################
+
+list_cards()  { LC_ALL=C pactl list cards short 2>/dev/null | awk '{print $2}' | sort; }
+list_serial() { ls -1 /dev/serial/by-id/ 2>/dev/null | sort; }
+
+# card_prop CARD PROP -> property value from 'pactl list cards'
+card_prop() {
+    LC_ALL=C pactl list cards 2>/dev/null | awk -v card="$1" -v prop="$2" '
+        /^Card #/ { incard = 0 }
+        $1 == "Name:" { incard = ($2 == card) }
+        incard && $1 == prop && $2 == "=" {
+            sub(/^[^=]*= *"/, ""); sub(/"$/, ""); print; exit
+        }'
+}
+
+card_desc() {
+    local d
+    d=$(card_prop "$1" device.description)
+    echo "${d:-$1}"
+}
+
+# All node names that have ports
+all_nodes() { { pw-link -i; pw-link -o; } 2>/dev/null | cut -d: -f1 | sort -u; }
+
+node_exists() { all_nodes | grep -qxF -- "$1"; }
+
+# node_ports NODE in|out -> one "node:port" per line
+node_ports() {
+    local flag=-i
+    [[ $2 == out ]] && flag=-o
+    pw-link $flag 2>/dev/null | awk -v p="$1:" 'index($0, p) == 1'
+}
+
+# resolve_node PREFERRED STEM input|output -> the node to use
+# PREFERRED is the fixed name a freedv-rade-setup rule gives the node. If that
+# doesn't exist (rule not active, or not ours), fall back to the node made
+# from the card name: alsa_input.<stem>.<profile>
+resolve_node() {
+    local pref=$1 stem=$2 kind=$3
+    if [[ -n $pref ]] && node_exists "$pref"; then
+        echo "$pref"
+        return
+    fi
+    all_nodes | awk -v p="alsa_${kind}.${stem}." 'index($0, p) == 1 { print; exit }'
+}
+
+# wait_node NAME SECONDS
+wait_node() {
+    local i
+    for ((i=0; i < $2 * 5; i++)); do
+        node_exists "$1" && return 0
+        sleep 0.2
+    done
+    return 1
+}
+
+restart_wireplumber() {
+    if [[ -n $TEST_ROOT ]]; then
+        say "(test mode: not restarting WirePlumber)"
+        return
+    fi
+    run_quiet "Restarting WirePlumber so the new names take effect" \
+        bash -c 'systemctl --user restart wireplumber && sleep 2'
+}
+
+# Files outside freedv-rade-setup's own that mention this bus path
+# card_owner BUSPATH THIS_ID -> who already has a freedv-rade-setup rule for
+# this USB port ("radio NAME" or "your headset"), other than THIS_ID
+card_owner() {
+    local f id
+    for f in "$WP_LUA_DIR"/60-freedv-rade-setup-*.lua "$WP_CONF_DIR"/60-freedv-rade-setup-*.conf; do
+        [[ -f $f ]] && grep -qF -- "\"$1\"" "$f" || continue
+        id=${f##*/60-freedv-rade-setup-}; id=${id%.*}
+        [[ $id == "$2" ]] && continue
+        if [[ $id == radio-* ]]; then echo "radio $(radio_label "${id#radio-}")"; else echo "your headset"; fi
+        return 0
+    done
+    return 1
+}
+
+existing_rule_for() {
+    grep -rlsF -- "$1" "$REAL_CFG/wireplumber" /etc/wireplumber 2>/dev/null \
+        | grep -v 'freedv-rade-setup-'
+}
+
+# write_wp_rule FILEID BUSPATH STEM DESC IN_NODE OUT_NODE
+# Names the card alsa_card.STEM and its input/output nodes IN_NODE/OUT_NODE.
+write_wp_rule() {
+    local id=$1 bp=$2 stem=$3 desc=$4 in_node=$5 out_node=$6 f
+    if ((WP_LUA)); then
+        mkdir -p "$WP_LUA_DIR"
+        f="$WP_LUA_DIR/60-freedv-rade-setup-$id.lua"
+        cat > "$f" <<EOF
+-- Written by freedv-rade-setup. Re-run freedv-rade-setup to change it.
+table.insert(alsa_monitor.rules, {
+  matches = { { { "device.bus-path", "equals", "$bp" } } },
+  apply_properties = {
+    ["device.name"] = "alsa_card.$stem",
+    ["device.description"] = "$desc",
+  },
+})
+table.insert(alsa_monitor.rules, {
+  matches = { { { "node.name", "matches", "alsa_input.$stem.*" } } },
+  apply_properties = { ["node.name"] = "$in_node", ["node.description"] = "$desc input" },
+})
+table.insert(alsa_monitor.rules, {
+  matches = { { { "node.name", "matches", "alsa_output.$stem.*" } } },
+  apply_properties = { ["node.name"] = "$out_node", ["node.description"] = "$desc output" },
+})
+EOF
+    else
+        mkdir -p "$WP_CONF_DIR"
+        f="$WP_CONF_DIR/60-freedv-rade-setup-$id.conf"
+        cat > "$f" <<EOF
+# Written by freedv-rade-setup. Re-run freedv-rade-setup to change it.
+monitor.alsa.rules = [
+  {
+    matches = [ { device.bus-path = "$bp" } ]
+    actions = {
+      update-props = {
+        device.name = "alsa_card.$stem"
+        device.description = "$desc"
+      }
+    }
+  }
+  {
+    matches = [ { node.name = "~alsa_input.$stem.*" } ]
+    actions = {
+      update-props = {
+        node.name = "$in_node"
+        node.description = "$desc input"
+      }
+    }
+  }
+  {
+    matches = [ { node.name = "~alsa_output.$stem.*" } ]
+    actions = {
+      update-props = {
+        node.name = "$out_node"
+        node.description = "$desc output"
+      }
+    }
+  }
+]
+EOF
+    fi
+    say "Wrote $f"
+}
+
+##################### system checks #####################
+
+preflight() {
+    heading "Checking your system"
+
+    # freedv-rade-build and a FreeDV build
+    [[ -d $RUN_DIR/.git ]] || die "freedv-rade-build was not found in $RUN_DIR.\nPlease install FreeDV with freedv-rade-build first."
+    local basedir=$HOME
+    if [[ -f $HOME/.freedv-rade-build.cfg ]] && grep -v '^#' "$HOME/.freedv-rade-build.cfg" | grep -q 'basedir='; then
+        basedir=$(grep -v '^#' "$HOME/.freedv-rade-build.cfg" | grep 'basedir=' | cut -d= -f2)
+    fi
+    FREEDV_DIR="$basedir/freedv-rade"
+    [[ -x $FREEDV_DIR/freedv-gui/build_linux/src/freedv ]] \
+        || die "No FreeDV build was found in $FREEDV_DIR.\nPlease run freedv-rade-build first."
+    ok "FreeDV build found in $FREEDV_DIR"
+
+    # systemd
+    if [[ ! -d /run/systemd/system ]] || ! systemctl --user show-environment &>/dev/null; then
+        die "This system does not use systemd (or has no systemd user session).\nfreedv-rade-setup only supports systemd systems for now, sorry."
+    fi
+    ok "systemd"
+
+    # Sound tools
+    command -v pactl &>/dev/null || die "'pactl' was not found. Please install your distro's pulseaudio-utils package (or libpulse on Arch)."
+    # PipeWire with its PulseAudio layer
+    local server
+    server=$(LC_ALL=C timeout 10 pactl info 2>/dev/null | sed -n 's/^Server Name: //p')
+    if [[ $server == *PipeWire* ]]; then
+        ok "PipeWire with PulseAudio compatibility ($server)"
+    elif [[ -n $server ]]; then
+        offer_pipewire_switch "$server"
+        exit 0
+    else
+        sound_server_help
+        die "Could not contact the sound server ('pactl info' failed)."
+    fi
+    local c
+    for c in pw-link wpctl; do
+        command -v $c &>/dev/null || die "'$c' was not found. Please install your distro's pipewire tools package."
+    done
+
+    # WirePlumber and its config format
+    systemctl --user is-active --quiet wireplumber \
+        || die "WirePlumber is not running. It is needed to manage PipeWire."
+    # 0.4.x before 0.4.10 or so has no --version, so fall back to the package
+    # version, then to which kind of system config is installed
+    WP_VER=$(wireplumber --version 2>/dev/null | sed -n 's/.*libwireplumber \([0-9.]*\).*/\1/p' | tail -1)
+    [[ -z $WP_VER ]] && WP_VER=$(dpkg-query -W -f='${Version}' wireplumber 2>/dev/null \
+        || rpm -q --qf '%{VERSION}' wireplumber 2>/dev/null \
+        || pacman -Q wireplumber 2>/dev/null | cut -d' ' -f2)
+    WP_VER=$(sed -n 's/^\([0-9][0-9.]*[0-9]\).*/\1/p' <<<"$WP_VER")
+    log "WirePlumber version: '${WP_VER}'"
+    if [[ -z $WP_VER && -d /usr/share/wireplumber/main.lua.d ]]; then
+        WP_LUA=1
+        ok "WirePlumber 0.4 (older Lua configuration; exact version not found)"
+    elif [[ $WP_VER == 0.4* ]]; then
+        WP_LUA=1
+        ok "WirePlumber $WP_VER (older Lua configuration)"
+    else
+        WP_LUA=0
+        ok "WirePlumber ${WP_VER:-unknown version}"
+    fi
+
+    # qpwgraph is required: it's how routing is checked and fixed
+    QPWGRAPH_CMD=""
+    if command -v qpwgraph &>/dev/null; then
+        QPWGRAPH_CMD=qpwgraph
+    elif command -v flatpak &>/dev/null && flatpak info org.rncbc.qpwgraph &>/dev/null; then
+        QPWGRAPH_CMD="flatpak run org.rncbc.qpwgraph"
+    else
+        say "qpwgraph is needed. It shows how the sound is connected, and is what"
+        say "you (and anyone helping you) will use to check or fix the routing."
+        if pkg_available qpwgraph; then
+            offer_install qpwgraph "needed to view the sound routing" \
+                && command -v qpwgraph &>/dev/null && QPWGRAPH_CMD=qpwgraph
+        elif have_flathub; then
+            # e.g. Ubuntu 22.04 / Mint 21, which don't package it
+            install_qpwgraph_flatpak && QPWGRAPH_CMD="flatpak run org.rncbc.qpwgraph"
+        fi
+        if [[ -z $QPWGRAPH_CMD && -n $TEST_ROOT ]]; then
+            QPWGRAPH_CMD=qpwgraph
+        elif [[ -z $QPWGRAPH_CMD ]]; then
+            die "qpwgraph is not installed. If your distro doesn't package it, it can be\ninstalled from Flathub:  flatpak install flathub org.rncbc.qpwgraph"
+        fi
+    fi
+    ok "qpwgraph ($QPWGRAPH_CMD)"
+
+    # hamlib: system package, or the copy built with FreeDV
+    local ext="$FREEDV_DIR/freedv-gui/build_linux/external/dist/bin"
+    RIGCTL_BIN=$(command -v rigctl 2>/dev/null)
+    RIGCTLD_BIN=$(command -v rigctld 2>/dev/null)
+    [[ -z $RIGCTL_BIN && -x $ext/rigctl ]] && RIGCTL_BIN="$ext/rigctl"
+    [[ -z $RIGCTLD_BIN && -x $ext/rigctld ]] && RIGCTLD_BIN="$ext/rigctld"
+    if [[ -n $RIGCTL_BIN && -n $RIGCTLD_BIN ]]; then
+        ok "hamlib rigctl/rigctld ($RIGCTLD_BIN)"
+    else
+        warn "hamlib's rigctl/rigctld were not found (on Mageia they are in hamlib-utils)."
+        say "  Rig control can then only use a rigctld running on another computer."
+    fi
+    say ""
+}
+
+have_flathub() {
+    command -v flatpak &>/dev/null && flatpak remotes --columns=name 2>/dev/null | grep -qx flathub
+}
+
+# Flatpak shows its own progress and asks for a password itself if needed
+install_qpwgraph_flatpak() {
+    say "Your distro doesn't package qpwgraph, but it can be installed from Flathub."
+    say "The first Flathub install of a KDE program also downloads the KDE runtime"
+    say "it needs (a few hundred MB)."
+    yesno "Install qpwgraph from Flathub now?" y || return 1
+    if [[ -n $TEST_ROOT ]]; then
+        say "(test mode: would run: flatpak install -y flathub org.rncbc.qpwgraph)"
+        return 1
+    fi
+    log "\n\$ flatpak install -y flathub org.rncbc.qpwgraph"
+    if flatpak install -y flathub org.rncbc.qpwgraph >&3 2>&3; then
+        log "flatpak install OK"
+        ok "Installed qpwgraph from Flathub"
+    else
+        log "flatpak install FAILED"
+        say "FAILED: Installing qpwgraph from Flathub"
+        return 1
+    fi
+}
+
+# Ubuntu 22.04 / Mint 21 use PulseAudio by default (PipeWire is installed,
+# but only used for video there). NOT YET TESTED - needs a 22.04 tester.
+offer_pipewire_switch() {
+    say "Your sound server is: $1"
+    say "FreeDV setup here needs PipeWire (with its PulseAudio layer) instead."
+    say ""
+    case " $ID $ID_LIKE " in
+        *" mageia "*)
+            say "On Mageia, switch to PipeWire with draksound (Mageia Control Centre ->"
+            say "Hardware -> Sound), reboot, then run freedv-rade-setup again."
+            return ;;
+        *" debian "*|*" ubuntu "*) ;;
+        *)
+            say "Please switch your system to PipeWire, reboot, then run freedv-rade-setup again."
+            return ;;
+    esac
+
+    local p undo had_pms=0
+    local -a pkgs=(pipewire-pulse wireplumber "$(alsa_plugin_pkg)") new=()
+    for p in "${pkgs[@]}"; do
+        pkg_installed "$p" || new+=("$p")
+    done
+    pkg_installed pipewire-media-session && had_pms=1
+
+    # How to put PulseAudio back. pulseaudio is enabled for all users on
+    # Ubuntu, so it's masked here (a user-level disable alone doesn't stick).
+    undo="To put PulseAudio back, run these, then reboot:\n"
+    # before the packages go, or systemctl can't find the units to disable
+    undo+="  systemctl --user disable pipewire-pulse.socket wireplumber.service\n"
+    # purge, not remove: removing masks these units for all users, and a
+    # later reinstall leaves them masked
+    ((${#new[@]})) && undo+="  sudo apt-get purge ${new[*]}\n"
+    ((had_pms)) && undo+="  sudo apt-get install pipewire-media-session\n"
+    undo+="  systemctl --user unmask pulseaudio.service pulseaudio.socket"
+
+    say "This can be switched for you. It installs: ${new[*]:-(nothing new needed)}"
+    say "and makes PipeWire handle the sound instead of PulseAudio."
+    say "\n$undo\n"
+    yesno "Switch this system to PipeWire now?" n || { say "Nothing changed."; return; }
+
+    if ((${#new[@]})); then
+        apt_quiet "Installing PipeWire's sound packages" "install ${new[*]}" \
+            || { say "Package install failed - nothing else changed."; return; }
+    fi
+    if pkg_installed pipewire-media-session; then
+        apt_quiet "Removing pipewire-media-session (WirePlumber replaces it)" "remove pipewire-media-session"
+    fi
+    # 'apt-get remove' of these packages masks their units for all users,
+    # and reinstalling doesn't undo that
+    local u masked=()
+    for u in pipewire-pulse.socket pipewire-pulse.service wireplumber.service; do
+        [[ $(readlink "/etc/systemd/user/$u") == /dev/null ]] && masked+=("$u")
+    done
+    if ((${#masked[@]})); then
+        root_quiet "Unblocking PipeWire's sound services (left blocked by an earlier removal)" \
+            "systemctl --global unmask ${masked[*]}" || die "Couldn't unblock ${masked[*]} - nothing else changed."
+    fi
+    if [[ -z $TEST_ROOT ]]; then
+        if ! run_quiet "Switching the sound server to PipeWire" switch_to_pipewire; then
+            say "\nThe switch didn't work, so PulseAudio has been put back as it was."
+            if ((${#new[@]})); then
+                say "The PipeWire packages it installed are still there; to remove them:"
+                say "  sudo apt-get purge ${new[*]}"
+            fi
+            die "Switching to PipeWire failed."
+        fi
+    else
+        say "(test mode: not switching the sound services)"
+    fi
+
+    mkdir -p "$SETUP_ROOT"
+    printf '%b\n' "Written by freedv-rade-setup on $(date +%F) when it switched this system\nfrom PulseAudio to PipeWire.\n\n$undo" > "$SETUP_ROOT/undo-pipewire-switch.txt"
+    say "(These undo commands are saved in $SETUP_ROOT/undo-pipewire-switch.txt)"
+    say "\nDone. Please REBOOT, then run $0 again."
+}
+
+# pkg_installed PKG -> true only if fully installed. 'dpkg -s' is also true
+# for a removed package whose config files are left (state "rc").
+pkg_installed() {
+    [[ $(dpkg-query -W -f='${Status}' "$1" 2>/dev/null) == "install ok installed" ]]
+}
+
+switch_to_pipewire() {
+    systemctl --user --now disable pulseaudio.service pulseaudio.socket
+    systemctl --user mask pulseaudio.service pulseaudio.socket || { pulseaudio_back; return 1; }
+    if ! systemctl --user --now enable pipewire.socket pipewire-pulse.socket wireplumber.service; then
+        pulseaudio_back
+        return 1
+    fi
+    systemctl --user --no-pager status pipewire-pulse.socket wireplumber.service
+    return 0
+}
+
+# Undo a half-done switch, so the user isn't left with no sound server
+pulseaudio_back() {
+    echo "Switch failed - putting PulseAudio back"
+    systemctl --user disable --now pipewire-pulse.socket wireplumber.service 2>/dev/null
+    systemctl --user unmask pulseaudio.service pulseaudio.socket
+    systemctl --user start pulseaudio.socket pulseaudio.service
+}
+
+##################### device detection #####################
+
+# detect_plugin WHAT -> NEW_CARD and NEW_SERIAL (NEW_SERIAL may be empty)
+# Same idea as sdcbr: unplug, snapshot, plug in, look for what's new.
+detect_plugin() {
+    local what=$1 before_c before_s after_c after_s key
+    local -a new_cards new_serial
+    NEW_CARD=""
+    NEW_SERIAL=""
+    while true; do
+        say ""
+        say "Make sure $what is UNPLUGGED from the computer."
+        yesno "Is it unplugged now?" y || return 1
+        before_c=$(list_cards)
+        before_s=$(list_serial)
+        say "\nNow PLUG IN $what, into the USB socket it will ALWAYS stay in."
+        say "Its new name belongs to that socket. (Press ESC to go back)"
+        echo -n "Waiting." >&3
+        while true; do
+            key=""
+            read -r -s -n1 -t1 key
+            [[ $key == $'\e' ]] && { screen ""; log "(ESC - back to the previous question)"; return 1; }
+            after_c=$(list_cards)
+            [[ $after_c != "$before_c" ]] && break
+            echo -n "." >&3
+        done
+        screen " found."
+        # A serial (CAT) port on the same cable can take a moment longer
+        screen "Checking for a CAT (serial) port on the same cable..."
+        sleep 3
+        after_c=$(list_cards)
+        after_s=$(list_serial)
+        mapfile -t new_cards < <(comm -13 <(echo "$before_c") <(echo "$after_c") | sed '/^$/d')
+        mapfile -t new_serial < <(comm -13 <(echo "$before_s") <(echo "$after_s") | sed '/^$/d')
+        ((${#new_cards[@]})) && break
+        say "No new sound card was found (something may have been unplugged instead). Let's try again."
+    done
+
+    if ((${#new_cards[@]} == 1)); then
+        NEW_CARD=${new_cards[0]}
+    else
+        local -a items=()
+        local c
+        for c in "${new_cards[@]}"; do items+=("$(card_desc "$c")  ($c)"); done
+        say "More than one new sound card appeared:"
+        choose "Which one is it?" 1 "${items[@]}"
+        NEW_CARD=${new_cards[CHOICE-1]}
+    fi
+    say "Found sound card: $(card_desc "$NEW_CARD")  ($NEW_CARD)"
+
+    if ((${#new_serial[@]} == 1)); then
+        NEW_SERIAL="/dev/serial/by-id/${new_serial[0]}"
+    elif ((${#new_serial[@]} > 1)); then
+        local -a items=()
+        local s
+        for s in "${new_serial[@]}"; do items+=("$s"); done
+        say "More than one new serial port appeared:"
+        choose "Which one is the CAT (rig control) port?" 1 "${items[@]}"
+        NEW_SERIAL="/dev/serial/by-id/${new_serial[CHOICE-1]}"
+    fi
+    [[ -n $NEW_SERIAL ]] && say "Found serial port: $NEW_SERIAL"
+    return 0
+}
+
+# pick_card PROMPT -> PICKED_CARD
+pick_card() {
+    local -a cards items=()
+    local c
+    mapfile -t cards < <(list_cards)
+    ((${#cards[@]})) || { warn "No sound cards found."; return 1; }
+    for c in "${cards[@]}"; do items+=("$(card_desc "$c")  ($c)"); done
+    choose "$1" 1 "${items[@]}"
+    PICKED_CARD=${cards[CHOICE-1]}
+}
+
+# name_card ROLE CARD -> sets ROLE_IN and ROLE_OUT node names
+# ROLE is "radio" or "headset". USB cards get fixed names from a WirePlumber
+# rule matched by USB port, unless something else already names that port.
+name_card() {
+    local role=$1 card=$2 bp bus stem old_stem="" other id desc pref_in pref_out
+    # PipeWire's device.bus-path; pactl shows it as device.bus_path
+    bp=$(card_prop "$card" device.bus-path)
+    [[ -z $bp ]] && bp=$(card_prop "$card" device.bus_path)
+    bus=$(card_prop "$card" device.bus)
+    stem=${card#alsa_card.}
+
+    if [[ $role == radio ]]; then
+        id="radio-$RADIO"; desc="$RADIO_LABEL radio"
+        pref_in="$RADIO-rx"; pref_out="$RADIO-tx"
+    else
+        id="headset"; desc="Headset"
+        pref_in="headset-mic"; pref_out="headset-phones"
+    fi
+
+    if [[ $bus == usb && -n $bp ]] && other=$(card_owner "$bp" "$id"); then
+        say "This card is already set up as $other."
+        # the headset steps carry on with the card's current names
+        ROLE_IN=$(resolve_node "" "$stem" input)
+        ROLE_OUT=$(resolve_node "" "$stem" output)
+        return 2
+    fi
+    if [[ $bus != usb || -z $bp ]]; then
+        pref_in=""; pref_out=""
+    elif other=$(existing_rule_for "$bp") && [[ -n $other ]]; then
+        say "This card already has a name from: $other"
+        say "Keeping that name."
+        pref_in=""; pref_out=""
+    else
+        old_stem=$stem
+        stem="frs-$id"
+        write_wp_rule "$id" "$bp" "$stem" "$desc" "$pref_in" "$pref_out"
+        say "IMPORTANT: always plug this card into the SAME USB socket. If you move it,"
+        say "run freedv-rade-setup again and redo this step.\n"
+        if [[ $card != "alsa_card.$stem" ]]; then
+            restart_wireplumber
+            wait_node "$pref_in" 10 || wait_node "$pref_out" 5
+        fi
+    fi
+
+    ROLE_IN=$(resolve_node "$pref_in" "$stem" input)
+    ROLE_OUT=$(resolve_node "$pref_out" "$stem" output)
+    # If the new rule isn't active (yet), use the card's current node names
+    if [[ -n $old_stem ]]; then
+        [[ -n $ROLE_IN ]]  || ROLE_IN=$(resolve_node "" "$old_stem" input)
+        [[ -n $ROLE_OUT ]] || ROLE_OUT=$(resolve_node "" "$old_stem" output)
+        [[ -z $TEST_ROOT && $ROLE_IN != "$pref_in" ]] \
+            && warn "The new name was not applied - using the card's current names for now."
+    fi
+    [[ -n $ROLE_IN ]]  && say "  Input (capture):   $ROLE_IN"  || warn "No input found on this card."
+    [[ -n $ROLE_OUT ]] && say "  Output (playback): $ROLE_OUT" || warn "No output found on this card."
+    if [[ -z $ROLE_IN || -z $ROLE_OUT ]]; then
+        say "  If the card's profile is 'Off' or output-only, set it to an analog duplex"
+        say "  profile (e.g. with pavucontrol), then re-run this step."
+    fi
+}
+
+# Lists for choosing nodes: "name<TAB>description"
+list_sinks_desc() {
+    LC_ALL=C pactl list sinks 2>/dev/null | awk '
+        /^\tName: / { n = $2 }
+        /^\tDescription: / { sub(/^\tDescription: /, ""); print n "\t" $0 }'
+}
+list_sources_desc() {
+    LC_ALL=C pactl list sources 2>/dev/null | awk '
+        /^\tName: / { n = $2 }
+        /^\tDescription: / { sub(/^\tDescription: /, ""); if (n !~ /\.monitor$/) print n "\t" $0 }'
+}
+
+# pick_node PROMPT sinks|sources|apps-out|apps-in [none] -> PICKED_NODE ("" for none)
+pick_node() {
+    local prompt=$1 kind=$2 allow_none=$3 prefer_usb=$4 line def=1
+    local -a names items=()
+    case $kind in
+        sinks)    mapfile -t lines < <(list_sinks_desc) ;;
+        sources)  mapfile -t lines < <(list_sources_desc) ;;
+        apps-out) mapfile -t lines < <(pw-link -o 2>/dev/null | cut -d: -f1 | sort -u | sed 's/$/\t/') ;;
+        apps-in)  mapfile -t lines < <(pw-link -i 2>/dev/null | cut -d: -f1 | sort -u | sed 's/$/\t/') ;;
+    esac
+    for line in "${lines[@]}"; do
+        local n=${line%%$'\t'*} d=${line#*$'\t'}
+        [[ " ${FDV_SINKS[*]} " == *" $n "* || $n == Fdv-bpf* ]] && continue
+        # the radio's own sound card is never the headset or speakers
+        if [[ $kind == sinks || $kind == sources ]]; then
+            [[ -n $RADIO_RX_NODE && $n == "$RADIO_RX_NODE" ]] && continue
+            [[ -n $RADIO_TX_NODE && $n == "$RADIO_TX_NODE" ]] && continue
+        fi
+        names+=("$n")
+        items+=("${d:+$d  }($n)")
+        # offer the first USB device as the default when asked to
+        [[ -n $prefer_usb && $def == 1 && ( $n == alsa_*.usb-* || $n == headset-* ) ]] \
+            && def=${#names[@]}
+    done
+    if [[ -n $allow_none ]]; then
+        names+=("")
+        items+=("None")
+    fi
+    ((${#names[@]})) || { warn "Nothing to choose from."; PICKED_NODE=""; return 1; }
+    choose "$prompt" "$def" "${items[@]}"
+    PICKED_NODE=${names[CHOICE-1]}
+}
+
+##################### setup steps #####################
+
+radio_audio_step() {
+    heading "Radio sound card"
+    RADIO_SERIAL=""
+    # ESC (or "not unplugged") while detecting comes back to this question
+    while true; do
+    say "How is the radio's audio connected to this computer?"
+    say "  (D)etect a USB sound card, or a radio with built-in USB sound, by plugging it in (recommended)"
+    say "  (C)hoose from the sound cards that are already connected"
+    say "  (S)oftware radio program on this computer (quisk, piHPSDR ...)"
+    confirm "Detect, Choose or Software?" "[D/c/s]" "Dd" "Cc" "Ss"
+    CHOICE=$(($? + 1))
+    case $CHOICE in
+        1)
+            detect_plugin "the radio's USB cable (or its USB sound interface)" || continue
+            RADIO_KIND=usb; RADIO_CARD=$NEW_CARD; RADIO_SERIAL=$NEW_SERIAL ;;
+        2)
+            pick_card "Which card is connected to the radio?" || return 1
+            RADIO_KIND=card; RADIO_CARD=$PICKED_CARD ;;
+        3)
+            # NOT YET TESTED - needs a quisk/piHPSDR user
+            RADIO_KIND=software; RADIO_CARD=""
+            say "Start the radio program now, with its audio running."
+            pause "Press Enter when it is running... "
+            pick_node "Which node carries the RECEIVED audio from the radio program?" apps-out || return 1
+            RADIO_RX_NODE=$PICKED_NODE
+            pick_node "Which node should the TRANSMIT audio go to?" apps-in || return 1
+            RADIO_TX_NODE=$PICKED_NODE
+            return 0 ;;
+    esac
+    name_card radio "$RADIO_CARD"
+    if (( $? == 2 )); then
+        say "Choose another card, or test/edit that radio from the start menu.\n"
+        continue
+    fi
+    break
+    done
+    RADIO_RX_NODE=$ROLE_IN
+    RADIO_TX_NODE=$ROLE_OUT
+    set_radio_volume
+}
+
+# A radio's sound card comes up at whatever volume it had (e.g. 74%, too quiet
+# for a TS-450S). When setting up a NEW radio, start its output at 100%; the
+# transmit level is then set with FreeDV's TX attenuation. Redoing the card
+# later leaves the user's volume alone.
+set_radio_volume() {
+    ((NEW_RADIO)) && [[ -n $RADIO_TX_NODE && -z $TEST_ROOT ]] || return
+    if timeout 5 pactl set-sink-volume "$RADIO_TX_NODE" 100% 2>/dev/null \
+       && timeout 5 pactl set-sink-mute "$RADIO_TX_NODE" 0 2>/dev/null; then
+        say "The radio's sound output is set to 100%."
+    else
+        log "Couldn't set the volume of $RADIO_TX_NODE"
+    fi
+}
+
+# A USB headset picked from the list gets the same fixed names as a
+# detected one: headset-mic, headset-phones
+name_chosen_headset() {
+    local stem card
+    [[ $MIC_NODE == alsa_input.* ]] || return
+    stem=${MIC_NODE#alsa_input.}
+    stem=${stem%.*}
+    card="alsa_card.$stem"
+    list_cards | grep -qxF -- "$card" || return
+    [[ $(card_prop "$card" device.bus) == usb ]] || return
+    local phones_same=0
+    [[ $PHONES_NODE == "alsa_output.$stem."* ]] && phones_same=1
+    say "Giving this USB headset fixed names:"
+    name_card headset "$card"
+    MIC_NODE=$ROLE_IN
+    ((phones_same)) && PHONES_NODE=$ROLE_OUT
+}
+
+headset_step() {
+    heading "Microphone, headphones and speakers"
+    MIC_NODE=""; PHONES_NODE=""; SPEAKER_NODE=""
+    # ESC (or "not unplugged") while detecting comes back to this question
+    while true; do
+    say "Which microphone will you use for transmitting?"
+    say "  (D)etect a USB headset by plugging it in (recommended)"
+    say "  (C)hoose from the sound cards that are already connected"
+    say "  (N)o microphone (receive only)"
+    confirm "Detect, Choose or No microphone?" "[D/c/n]" "Dd" "Cc" "Nn"
+    CHOICE=$(($? + 1))
+    case $CHOICE in
+        1)
+            detect_plugin "your USB headset" || continue
+            name_card headset "$NEW_CARD"
+            MIC_NODE=$ROLE_IN
+            PHONES_NODE=$ROLE_OUT ;;
+        2)
+            pick_node "Which microphone?" sources "" usb || true
+            MIC_NODE=$PICKED_NODE
+            pick_node "Which headphones (if any)?" sinks none usb || true
+            PHONES_NODE=$PICKED_NODE
+            name_chosen_headset ;;
+    esac
+    break
+    done
+
+    ((GAP)) || say ""
+    say "Received audio can also play on speakers (handy when you take the headset off)."
+    pick_node "Which speakers?" sinks none || true
+    SPEAKER_NODE=$PICKED_NODE
+    [[ -n $PHONES_NODE && $SPEAKER_NODE == "$PHONES_NODE" ]] && SPEAKER_NODE=""
+
+    MONITOR=none
+    if [[ -n $PHONES_NODE && -n $SPEAKER_NODE ]]; then
+        say "Where should received audio play?"
+        say "  (B)oth headphones and speakers - turn the speaker volume up or down as needed (recommended)"
+        say "  (H)eadphones only"
+        say "  (S)peakers only"
+        confirm "Both, Headphones or Speakers?" "[B/h/s]" "Bb" "Hh" "Ss"
+        CHOICE=$(($? + 1))
+        MONITOR=$(echo both headphones speakers | cut -d' ' -f"$CHOICE")
+    elif [[ -n $PHONES_NODE ]]; then
+        MONITOR=headphones
+    elif [[ -n $SPEAKER_NODE ]]; then
+        MONITOR=speakers
+    else
+        warn "No headphones or speakers chosen - you won't hear received audio."
+    fi
+}
+
+# rig_test HOST|PORT MODEL [SETCONF] -> 0 if the radio answered
+rig_test() {
+    local port=$1 model=$2 setconf=$3 out
+    say "Asking the radio for its frequency..."
+    out=$(timeout 15 "$RIGCTL_BIN" -m "$model" -r "$port" ${setconf:+--set-conf="$setconf"} f 2>&1)
+    if [[ $? -eq 0 && $out =~ ^[0-9]+$ ]]; then
+        say "  The radio answered: $out Hz"
+        return 0
+    fi
+    say "  No answer. rigctl said:\n${out:-  (nothing)}"
+    return 1
+}
+
+rig_step() {
+    heading "Rig control (CAT and PTT)"
+    RIG_MODE=none; RIG_MODEL=""; RIG_MODEL_NAME=""; RIG_PORT=""; RIG_SETCONF=""
+    RIG_LISTEN=127.0.0.1; RIG_HOST=localhost:4532
+
+    if [[ -z $RIGCTL_BIN ]]; then
+        warn "hamlib rigctl is not installed, so rig control can't be set up."
+        say "FreeDV can still be used with VOX or the radio's own PTT."
+        return
+    fi
+
+    # 1. rigctld on another computer
+    if yesno "Is rigctld already running on ANOTHER computer on your network?" n; then
+        ask "Its address (host or host:port)" ""
+        local host=$REPLY
+        [[ $host == *:* ]] || host="$host:4532"
+        rig_test "$host" 2 || yesno "Use it anyway?" n || return
+        RIG_MODE=remote; RIG_HOST=$host
+        return
+    fi
+
+    # 2. rigctld already running here (e.g. started at boot)
+    local running tport
+    running=$(ps -o args= -C rigctld 2>/dev/null | head -1)
+    if [[ -n $running ]]; then
+        say "rigctld is already running on this computer:\n  $running"
+        tport=$(sed -n 's/.*-t *\([0-9]\+\).*/\1/p; s/.*--port[= ]\([0-9]\+\).*/\1/p' <<<"$running" | head -1)
+        tport=${tport:-4532}
+        if yesno "Use this rigctld for FreeDV?" y; then
+            rig_test "localhost:$tport" 2 || yesno "Use it anyway?" y || return
+            RIG_MODE=existing; RIG_HOST="localhost:$tport"
+            return
+        fi
+        say "Only one program can use the radio's serial port, so stop that rigctld"
+        say "first, then run this step again."
+        return
+    fi
+
+    if [[ -z $RIGCTLD_BIN ]]; then
+        warn "rigctld is not installed, so it can't be set up here."
+        return
+    fi
+
+    say "FreeDV can control your radio (frequency and PTT) through hamlib's rigctld."
+    say "Answer No if you use VOX or the radio's own PTT."
+    yesno "Set up rigctld for your radio?" y || return
+
+    # Model
+    local word
+    local -a matches
+    while true; do
+        ask "Type part of your radio's model name (e.g. 7300, FT-991, TS-590)" ""
+        word=$REPLY
+        [[ -n $word ]] || continue
+        mapfile -t matches < <("$RIGCTL_BIN" -l 2>/dev/null | awk 'NR > 1' | grep -i -- "$word" | tr -s ' ' | sed 's/^ //')
+        if ((${#matches[@]} == 0)); then
+            say "No radio matches '$word'. Try a shorter part of the name."
+        elif ((${#matches[@]} > 30)); then
+            say "${#matches[@]} radios match '$word'. Please type more of the name."
+        else
+            break
+        fi
+    done
+    local -a items=()
+    local m
+    for m in "${matches[@]}"; do
+        items+=("$(awk '{ printf "%-6s", $1; for (i = 2; i <= NF - 3; i++) printf " %s", $i }' <<<"$m")")
+    done
+    choose "Which is your radio?" 1 "${items[@]}"
+    RIG_MODEL=$(awk '{print $1}' <<<"${matches[CHOICE-1]}")
+    RIG_MODEL_NAME=$(sed 's/^ *[0-9]* *//' <<<"${items[CHOICE-1]}")
+
+    # Port
+    if [[ -n $RADIO_SERIAL ]]; then
+        say "The serial port found with the radio's USB cable is:\n  $RADIO_SERIAL"
+    fi
+    local -a ports
+    mapfile -t ports < <(ls -1 /dev/serial/by-id/* 2>/dev/null)
+    if [[ -n $RADIO_SERIAL ]] && yesno "Use it for rig control?" y; then
+        RIG_PORT=$RADIO_SERIAL
+    elif ((${#ports[@]})); then
+        choose "Which serial port is the radio's CAT port?" 1 "${ports[@]}" "Type a different port"
+        if ((CHOICE <= ${#ports[@]})); then
+            RIG_PORT=${ports[CHOICE-1]}
+        else
+            ask "Port (e.g. /dev/ttyUSB0)" ""
+            RIG_PORT=$REPLY
+        fi
+    else
+        ask "No USB serial ports were found. Port (e.g. /dev/ttyUSB0)" "/dev/ttyUSB0"
+        RIG_PORT=$REPLY
+    fi
+
+    say "\nMost radios need nothing more. Some older ones need extra hamlib options,"
+    say "for example the TS-450S needs:  serial_handshake=None"
+    ask "Extra --set-conf options (press Enter for none)" ""
+    RIG_SETCONF=$REPLY
+
+    say ""
+    say "Make sure the radio is switched ON."
+    pause "Press Enter to test the connection... "
+    until rig_test "$RIG_PORT" "$RIG_MODEL" "$RIG_SETCONF"; do
+        confirm "(T)ry again, (K)eep these settings anyway, or (N)o rig control?" "[T/k/n]" "Tt" "Kk" "Nn"
+        CHOICE=$(($? + 1))
+        case $CHOICE in
+            2) break ;;
+            3) RIG_MODE=none; return ;;
+        esac
+    done
+
+    say "When should rigctld run?"
+    say "  (W)hile FreeDV is running only (recommended)"
+    say "  (A)ll the time, started when the computer boots (for logging programs etc.)"
+    confirm "While FreeDV runs, or All the time?" "[W/a]" "Ww" "Aa"
+    CHOICE=$(($? + 1))
+    ((CHOICE == 1)) && RIG_MODE=ondemand || RIG_MODE=boot
+
+    if yesno "Allow other computers on your network to use this rigctld?" n; then
+        RIG_LISTEN=0.0.0.0
+        say "Note: if a firewall is active, TCP port 4532 must be opened for this."
+    fi
+    RIG_HOST=localhost:4532
+
+    [[ $RIG_MODE == boot ]] && install_rig_service
+}
+
+install_rig_service() {
+    local unit tmp
+    unit=/etc/systemd/system/freedv-rigctld.service
+    tmp=$(mktemp)
+    cat > "$tmp" <<EOF
+# Written by freedv-rade-setup for radio "$RADIO_LABEL"
+[Unit]
+Description=hamlib rigctld for FreeDV ($RADIO_LABEL)
+After=network.target
+
+[Service]
+User=$user
+ExecStart=$RIGCTLD_BIN -m $RIG_MODEL -r $RIG_PORT -T $RIG_LISTEN -t 4532${RIG_SETCONF:+ --set-conf=$RIG_SETCONF}
+# Keep retrying, e.g. if the radio is switched on after the computer
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    say ""
+    if root_quiet "Installing the rigctld service ($unit)" "install -m 644 '$tmp' '$unit' && systemctl daemon-reload && systemctl enable --now freedv-rigctld.service"; then
+        say "rigctld will now start at boot."
+    else
+        warn "Could not install the service - using 'only while FreeDV is running' instead."
+        RIG_MODE=ondemand
+    fi
+    rm -f "$tmp"
+}
+
+bpf_step() {
+    heading "Transmit band-pass filter"
+    say "The band-pass filter cleans up FreeDV's transmit audio before it goes to the radio."
+    say "The start script picks the right one for the FreeDV build it starts:"
+    say "the wide filter (675-2275 Hz) for RADE V1, the 1k filter (981-1956 Hz) for RADE V2."
+    BPF_BIN=""
+    if ! yesno "Use the band-pass filter?" y; then
+        BPF=none
+        return
+    fi
+    BPF=on
+    build_bpf wide && build_bpf 1k \
+        || { warn "The filter could not be built - continuing without it."; BPF=none; BPF_BIN=""; return; }
+    BPF_BIN="$LOCAL_BIN/Fdv-bpf"
+    if freedv_is_v2 "$FREEDV_DIR/freedv-gui/build_linux/src/freedv"; then
+        say "The current FreeDV build is RADE V2, so the 1k filter will be used."
+    else
+        say "The current FreeDV build is RADE V1, so the wide filter will be used."
+    fi
+}
+
+# PipeWire's ALSA plugin is set up (it defines the "pipewire" ALSA device
+# that the filter opens; 50-pipewire.conf on both Mageia and Ubuntu)
+pipewire_alsa_ok() {
+    local f
+    for f in /etc/alsa/conf.d/*pipewire* /usr/share/alsa/alsa.conf.d/*pipewire*; do
+        [[ -e $f ]] && return 0
+    done
+    return 1
+}
+
+# build_bpf wide|1k -> BPF_BIN
+build_bpf() {
+    local src="$SCRIPT_DIR/bpf/bpf.c" bin
+    local -a flags=()
+    [[ -f $src ]] || { warn "$src is missing."; return 1; }
+    command -v gcc &>/dev/null || { warn "gcc is not installed."; return 1; }
+    [[ -f /usr/include/alsa/asoundlib.h ]] || { warn "The ALSA development headers are not installed."; return 1; }
+    if ! pipewire_alsa_ok; then
+        local apkg
+        apkg=$(alsa_plugin_pkg)
+        say "The filter needs the $apkg package (it connects ALSA programs to PipeWire)."
+        offer_install "$apkg" "needed by the band-pass filter" && pipewire_alsa_ok || return 1
+    fi
+    bin="$LOCAL_BIN/Fdv-bpf"
+    if [[ $1 == 1k ]]; then
+        bin="$LOCAL_BIN/Fdv-bpf-1k"
+        flags=(-DCUTOFF_LOW=981.0 -DCUTOFF_HIGH=1956.0)
+    fi
+    if [[ ! -x $bin || $src -nt $bin ]]; then
+        mkdir -p "$LOCAL_BIN"
+        run_quiet "Building the filter ($bin)" gcc -O3 "${flags[@]}" -o "$bin" "$src" -lm -lasound || return 1
+    fi
+    ok "Band-pass filter: $bin"
+    remove_old_bpf
+}
+
+# freedv_is_v2 FREEDV_PROGRAM -> true for a RADE V2 build (it has the RADEV2 mode)
+freedv_is_v2() { grep -qa RADEV2 "$1" 2>/dev/null; }
+
+# Draft versions named the filter programs freedv-bpf and freedv-bpf-1k.
+# Remove them, unless another radio's start script still uses one, or one
+# is running.
+remove_old_bpf() {
+    local old users
+    for old in "$LOCAL_BIN/freedv-bpf" "$LOCAL_BIN/freedv-bpf-1k"; do
+        [[ -e $old ]] || continue
+        users=$(grep -lsx "BPF_BIN=$(printf '%q' "$old")" "$SETUP_ROOT"/*/start | grep -vxF "$RADIO_DIR/start")
+        if [[ -n $users ]] || pgrep -x "${old##*/}" >/dev/null; then
+            log "Keeping $old (still used: ${users:-running})"
+            continue
+        fi
+        rm -f "$old" && log "Removed old filter program $old"
+    done
+}
+
+##################### generated files #####################
+
+# make_links "SRC PORTS" "DST PORTS" -> link lines (one "src dst" per line)
+# Mono to stereo feeds both channels, stereo to mono uses the first channel
+# only, stereo to stereo pairs the channels by name (FL->FL, FR->FR).
+make_links() {
+    local -a S D
+    local s d i
+    mapfile -t S < <(sed '/^$/d' <<<"$1")
+    mapfile -t D < <(sed '/^$/d' <<<"$2")
+    ((${#S[@]} && ${#D[@]})) || return 1
+    if ((${#S[@]} == 1)); then
+        for d in "${D[@]}"; do echo "${S[0]} $d"; done
+    elif ((${#D[@]} == 1)); then
+        echo "${S[0]} ${D[0]}"
+    else
+        local found=0
+        for s in "${S[@]}"; do
+            for d in "${D[@]}"; do
+                [[ ${s##*_} == "${d##*_}" ]] && { echo "$s $d"; found=1; }
+            done
+        done
+        if ((!found)); then
+            for ((i=0; i < ${#S[@]} && i < ${#D[@]}; i++)); do echo "${S[i]} ${D[i]}"; done
+        fi
+    fi
+}
+
+sink_in()  { printf '%s:playback_FL\n%s:playback_FR\n' "$1" "$1"; }
+sink_mon() { printf '%s:monitor_FL\n%s:monitor_FR\n' "$1" "$1"; }
+
+write_links() {
+    local f="$RADIO_DIR/links" tx_src
+    {
+        # From radio -> FreeDV
+        [[ -n $RADIO_RX_NODE ]] && make_links "$(node_ports "$RADIO_RX_NODE" out)" "$(sink_in FDV_RX_in)"
+        # Microphone -> FreeDV
+        [[ -n $MIC_NODE ]] && make_links "$(node_ports "$MIC_NODE" out)" "$(sink_in FDV_TX_in)"
+        # FreeDV -> (filter) -> radio
+        if [[ -n $RADIO_TX_NODE ]]; then
+            tx_src=$(sink_mon FDV_TX_out)
+            if [[ $BPF != none && -n $BPF_BIN ]]; then
+                # Fdv-bpf in the links means whichever filter the start
+                # script runs (Fdv-bpf or Fdv-bpf-1k)
+                make_links "$tx_src" "Fdv-bpf:input_MONO"
+                tx_src="Fdv-bpf:output_MONO"
+            fi
+            make_links "$tx_src" "$(node_ports "$RADIO_TX_NODE" in)"
+        fi
+        # FreeDV -> headphones / speakers
+        [[ $MONITOR == both || $MONITOR == headphones ]] && make_links "$(sink_mon FDV_RX_out)" "$(node_ports "$PHONES_NODE" in)"
+        [[ $MONITOR == both || $MONITOR == speakers ]] && make_links "$(sink_mon FDV_RX_out)" "$(node_ports "$SPEAKER_NODE" in)"
+    } > "$f.new"
+    [[ -f $f ]] && cp "$f" "$f.bak"
+    mv "$f.new" "$f"
+    log "Wrote $f:"
+    log "$(sed 's/^/  /' "$f")"
+}
+
+# set_ini FILE SECTION KEY VALUE (sets the key in every copy of the section)
+set_ini() {
+    local f=$1 s=$2 k=$3 v=$4 tmp
+    tmp=$(mktemp)
+    awk -v s="[$s]" -v k="$k" -v v="$v" '
+        function flush() { if (insec && !setk) { print k "=" v; setk = 1 } }
+        /^\[/ { flush(); insec = ($0 == s); if (insec) { found = 1; setk = 0 }; print; next }
+        insec && index($0, k "=") == 1 { if (!setk) { print k "=" v; setk = 1 }; next }
+        { print }
+        END { flush(); if (!found) { print s; print k "=" v } }' "$f" > "$tmp" \
+        && cat "$tmp" > "$f"
+    rm -f "$tmp"
+}
+
+get_ini() {
+    awk -v s="[$2]" -v k="$3" '
+        /^\[/ { insec = ($0 == s); next }
+        insec && index($0, k "=") == 1 { print substr($0, length(k) + 2); exit }' "$1"
+}
+
+# Callsign and locator are all FreeDV needs before reporting etc. can be set
+# up from inside FreeDV, so ask for them if the config doesn't have them yet
+ask_station() {
+    local conf=$1 call loc
+    call=$(get_ini "$conf" Reporting Callsign)
+    loc=$(get_ini "$conf" Reporting GridSquare)
+    [[ -n $call && -n $loc ]] && return
+    say "\nFreeDV needs your callsign and locator before you can turn on"
+    say "reporting (FreeDV Reporter, PSK Reporter) from inside FreeDV."
+    say "Press Enter to leave one blank and set it later in FreeDV's Tools > Options."
+    while true; do
+    while true; do
+        ask "Your callsign" "$call"
+        call=$(tr 'a-z' 'A-Z' <<<"$REPLY" | tr -d ' ')
+        [[ -z $call || $call =~ ^[A-Z0-9/]{3,}$ ]] && break
+        say "That doesn't look like a callsign (letters, digits and / only)."
+    done
+    while true; do
+        ask "Your locator, 6 characters (e.g. IO91wm)" "$loc"
+        loc=$(tr -d ' ' <<<"$REPLY")
+        [[ -z $loc ]] && break
+        if [[ $loc =~ ^[A-Ra-r]{2}[0-9]{2}[A-Xa-x]{2}$ ]]; then
+            loc="$(tr 'a-z' 'A-Z' <<<"${loc:0:4}")$(tr 'A-Z' 'a-z' <<<"${loc:4}")"
+            break
+        fi
+        say "A locator is 6 characters: two letters A-R, two digits, two letters A-X (e.g. IO91wm)."
+    done
+    # show them as they'll be saved (case corrected) and check
+    [[ -z $call && -z $loc ]] && break
+    yesno "Callsign ${call:-(none)}, locator ${loc:-(none)} - is that right?" y && break
+    done
+    [[ -n $call ]] && set_ini "$conf" Reporting Callsign "$call"
+    [[ -n $loc ]] && set_ini "$conf" Reporting GridSquare "$loc"
+}
+
+write_freedv_conf() {
+    local conf="$RADIO_DIR/freedv.conf"
+    # Only a FreeDV using this radio's config matters (it saves over it on exit)
+    while pgrep -f -- "freedv -f $conf" >/dev/null; do
+        warn "FreeDV is running for this radio. Its settings can't be changed while it runs."
+        pause "Please close FreeDV, then press Enter... "
+    done
+    if [[ ! -f $conf ]]; then
+        if [[ -f $HOME/.freedv ]] && yesno "Start from your existing FreeDV settings (callsign, reporting etc. in ~/.freedv)?" y; then
+            cp "$HOME/.freedv" "$conf"
+        else
+            : > "$conf"
+            # A clean first setup starts with FreeDV's TX attenuation at -20 dB
+            # (stored in tenths of a dB), so the first transmission can't
+            # overdrive the radio. A copy of the user's own settings is left as is.
+            set_ini "$conf" Audio transmitLevel -200
+            say "FreeDV's TX attenuation starts at -20 dB. Raise it in FreeDV until the"
+            say "radio's ALC just moves, or any lower level you require."
+        fi
+    fi
+    ask_station "$conf"
+
+    if [[ -n $MIC_NODE ]]; then
+        set_ini "$conf" Audio soundCard1InDeviceName FDV_RX_in.monitor
+        set_ini "$conf" Audio soundCard1OutDeviceName FDV_TX_out
+        set_ini "$conf" Audio soundCard2InDeviceName FDV_TX_in.monitor
+        set_ini "$conf" Audio soundCard2OutDeviceName FDV_RX_out
+    else
+        # Receive only: one "card", radio in and speaker out
+        set_ini "$conf" Audio soundCard1InDeviceName FDV_RX_in.monitor
+        set_ini "$conf" Audio soundCard1OutDeviceName FDV_RX_out
+        set_ini "$conf" Audio soundCard2InDeviceName none
+        set_ini "$conf" Audio soundCard2OutDeviceName none
+    fi
+    local k
+    for k in soundCard1InSampleRate soundCard1OutSampleRate soundCard2InSampleRate soundCard2OutSampleRate; do
+        set_ini "$conf" Audio $k 48000
+    done
+
+    if [[ $RIG_MODE != none ]]; then
+        set_ini "$conf" Hamlib UseForPTT 1
+        set_ini "$conf" Hamlib RigNameStr "Hamlib NET rigctl"
+        set_ini "$conf" Hamlib RigName 0
+        set_ini "$conf" Hamlib SerialPort "$RIG_HOST"
+        set_ini "$conf" Hamlib PttType 0
+        set_ini "$conf" Rig UseSerialPTT 0
+    else
+        set_ini "$conf" Hamlib UseForPTT 0
+    fi
+    log "Updated $conf (FreeDV's own settings for this radio)"
+}
+
+settings_block() {
+    local v
+    echo "# ==== freedv-rade-setup settings ===="
+    for v in "${SETTINGS_VARS[@]}"; do
+        printf '%s=%q\n' "$v" "${!v}"
+    done
+    echo "# ==== end of settings ===="
+}
+
+# radio_label ID -> the radio's name as typed, from its start script
+radio_label() {
+    local l
+    l=$(unset RADIO_LABEL; source <(grep '^RADIO_LABEL=' "$SETUP_ROOT/$1/start" 2>/dev/null); echo "${RADIO_LABEL-}")
+    echo "${l:-$1}"
+}
+
+load_settings() {
+    # shellcheck disable=SC1090
+    source <(sed -n '/^# ==== freedv-rade-setup settings ====/,/^# ==== end of settings ====/p' "$1")
+}
+
+write_start_script() {
+    local f="$RADIO_DIR/start"
+    {
+        cat <<EOF
+#!/bin/bash
+# FreeDV start script for radio "$RADIO_LABEL", written by freedv-rade-setup $(date +%F).
+#
+# To change it, run freedv-rade-setup again. It reads the settings below, so
+# small edits there are kept. Anything changed below the settings is replaced.
+#
+# Usage:  start [FreeDV options]
+#         start --test    set up the sound only, check it, then tidy up
+#
+# Extras: executable scripts hooks/before-freedv and hooks/after-freedv in
+# this folder are run before FreeDV starts and after it closes.
+
+EOF
+        settings_block
+        cat <<'EOF'
+
+RADIO_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+LINKS="$RADIO_DIR/links"
+# The filter follows the FreeDV build: Fdv-bpf-1k for a RADE V2 build (it has
+# the RADEV2 mode), Fdv-bpf otherwise. Its PipeWire node is named after the
+# program; the links file calls it Fdv-bpf either way.
+FREEDV_BIN="$FREEDV_DIR/freedv-gui/build_linux/src/freedv"
+if [[ $BPF != none && -n $BPF_BIN ]]; then
+    BPF_BIN=${BPF_BIN%-1k}
+    grep -qa RADEV2 "$FREEDV_BIN" 2>/dev/null && BPF_BIN="$BPF_BIN-1k"
+fi
+BPF_NODE=${BPF_BIN##*/}
+CONF="$RADIO_DIR/freedv.conf"
+VOLS="$RADIO_DIR/volumes.db"
+SINKS=(FDV_RX_in FDV_RX_out FDV_TX_in FDV_TX_out)
+
+TEST=0
+[[ $1 == --test ]] && { TEST=1; shift; }
+
+[[ -f $LINKS ]] || { echo "Missing $LINKS - run freedv-rade-setup"; exit 1; }
+
+restart_sound() {
+    # A restart normally takes a second or two. If it hangs, the sound server
+    # is usually stuck waiting for a USB sound device that went away while in
+    # use, which only a reboot clears, so say so rather than wait for ever.
+    if ! timeout 20 systemctl --user restart pipewire wireplumber; then
+        echo
+        echo "ERROR: the sound server didn't restart within 20 seconds."
+        local p stuck=""
+        for p in $(pgrep -u "$USER" -x 'pipewire|pipewire-pulse|wireplumber'); do
+            [[ $(awk '{print $3}' "/proc/$p/stat" 2>/dev/null) == D ]] && stuck+=" $(cat "/proc/$p/comm")"
+        done
+        if [[ -n $stuck ]]; then
+            echo "It is stuck ($stuck ), usually waiting for a USB sound device that was"
+            echo "unplugged or dropped out while in use. Please REBOOT, then try again."
+        else
+            echo "Try again; if it keeps happening, reboot."
+        fi
+        exit 1
+    fi
+    local i
+    for ((i=0; i<50; i++)); do
+        timeout 2 pactl info &>/dev/null && break
+        sleep 0.2
+    done
+    sleep 1
+}
+
+create_sinks() {
+    local sink
+    for sink in "${SINKS[@]}"; do
+        if pactl list sinks short | grep -qw "$sink"; then
+            echo "$sink already exists"
+        else
+            echo "Creating $sink"
+            pactl load-module module-null-sink sink_name="$sink" \
+                sink_properties="media.role=phone session.suspend-timeout-seconds=9999" >/dev/null
+        fi
+    done
+}
+
+node_exists() { { pw-link -i; pw-link -o; } 2>/dev/null | cut -d: -f1 | grep -qxF -- "$1"; }
+
+# Nodes named in the links file, apart from FreeDV's own streams
+link_nodes() { tr ' ' '\n' < "$LINKS" | cut -d: -f1 | sed '/^$/d' | sort -u; }
+
+wait_for_nodes() {
+    local n i missing
+    for ((i=0; i<50; i++)); do
+        missing=""
+        for n in $(link_nodes); do
+            node_exists "$n" || missing+=" $n"
+        done
+        [[ -z $missing ]] && return 0
+        sleep 0.2
+    done
+    echo "WARNING: not found (unplugged?):$missing"
+}
+
+start_bpf() {
+    [[ $BPF == none || -z $BPF_BIN ]] && return
+    if [[ ! -x $BPF_BIN ]]; then
+        echo "WARNING: $BPF_BIN is missing - re-run freedv-rade-setup"
+        return
+    fi
+    pkill -x "$(basename "$BPF_BIN")" && sleep 0.2
+    nohup "$BPF_BIN" >/dev/null 2>&1 </dev/null &
+    BPF_PID=$!
+    local i
+    for ((i=0; i<25; i++)); do
+        node_exists "$BPF_NODE" && { echo "Band-pass filter running ($BPF_NODE)"; return; }
+        sleep 0.2
+    done
+    echo "WARNING: the band-pass filter did not start"
+}
+
+# The filter is mono in and out (input_MONO, output_MONO). If PipeWire
+# gives it stereo ports instead (it adapts them to a card it got linked to,
+# e.g. an older filter build whose no-autoconnect setting was lost), use
+# those, from a run-time copy of the links.
+fix_bpf_ports() {
+    local ports b=$BPF_NODE stereo=0
+    local -a sed_args=()
+    [[ -n $b ]] && grep -q "Fdv-bpf:" "$LINKS" || return
+    [[ $b != Fdv-bpf ]] && sed_args+=(-e "s/Fdv-bpf:/$b:/g")
+    ports=$({ pw-link -i; pw-link -o; } 2>/dev/null | grep "^$b:")
+    if ! grep -qx "$b:input_MONO" <<<"$ports" && grep -qx "$b:input_FR" <<<"$ports"; then
+        sed_args+=(-e "s/^\\(.*\\):monitor_FL $b:input_MONO\$/\\1:monitor_FL $b:input_FL\\n\\1:monitor_FR $b:input_FR/")
+        stereo=1
+    fi
+    if ! grep -qx "$b:output_MONO" <<<"$ports" && grep -qx "$b:output_FR" <<<"$ports"; then
+        sed_args+=(-e "s/^$b:output_MONO \\(.*\\):playback_\\(F[LR]\\)\$/$b:output_\\2 \\1:playback_\\2/")
+        stereo=1
+    fi
+    ((${#sed_args[@]})) || return
+    RUN_LINKS=$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/freedv-links.XXXXXX") || return
+    sed "${sed_args[@]}" "$LINKS" > "$RUN_LINKS"
+    LINKS=$RUN_LINKS
+    ((stereo)) && echo "(Band-pass filter has stereo ports here - linking them)"
+}
+
+current_links() {
+    pw-link -l 2>/dev/null | awk '
+        $0 !~ /\|/ { prev = $0; next }
+        /->/ { sub(/\|/, "", $0); gsub(/[ ]+->[ ]+/, " ", $0); print prev $0 }'
+}
+
+# Remove links to or from our nodes that are not in the links file
+remove_other_links() {
+    local nodes line a b
+    nodes=" $(link_nodes | tr '\n' ' ') "
+    while read -r a b; do
+        [[ -z $b ]] && continue
+        [[ $nodes == *" ${a%%:*} "* || $nodes == *" ${b%%:*} "* ]] || continue
+        grep -qxF "$a $b" "$LINKS" && continue
+        pw-link -d "$a" "$b" 2>/dev/null && echo "Removed link $a -> $b"
+    done < <(current_links)
+}
+
+restore_links() {
+    local a b
+    while read -r a b; do
+        [[ -z $b ]] && continue
+        pw-link "$a" "$b" 2>/dev/null
+    done < "$LINKS"
+}
+
+check_links() {
+    local a b bad=0 now
+    now=$(current_links)
+    while read -r a b; do
+        [[ -z $b ]] && continue
+        if ! grep -qxF "$a $b" <<<"$now"; then
+            echo "  MISSING: $a -> $b"
+            bad=1
+        fi
+    done < "$LINKS"
+    ((bad)) && echo "Some links are missing." || echo "All links are in place."
+    return $bad
+}
+
+save_vols() {
+    : > "$VOLS"
+    wpctl status | grep '\[vol:' | while read -r line; do
+        clean_line=$(echo "$line" | tr -d '│*' | sed 's/^[ \t]*//;s/[ \t]*$//')
+        id=$(echo "$clean_line" | cut -d'.' -f1 | tr -d ' ')
+        vol=$(echo "$clean_line" | grep -o '\[vol: [0-9.]*\]' | cut -d' ' -f2 | tr -d ']')
+        [[ -z "$id" || -z "$vol" ]] && continue
+        node_info=$(wpctl inspect "$id")
+        name=$(echo "$node_info" | grep 'node.name' | cut -d'"' -f2)
+        class=$(echo "$node_info" | grep 'media.class' | cut -d'"' -f2)
+        [[ -n "$name" && -n "$class" ]] && echo "$name|$class|$vol" >> "$VOLS"
+    done
+    echo "Volume settings saved"
+}
+
+restore_vols() {
+    [[ -f $VOLS ]] || return
+    local -A id_for_key
+    local line clean_line id node_info name class saved_name saved_class saved_vol
+    while read -r line; do
+        clean_line=$(echo "$line" | tr -d '│*' | sed 's/^[ \t]*//;s/[ \t]*$//')
+        id=$(echo "$clean_line" | cut -d'.' -f1 | tr -d ' ')
+        [[ "$id" =~ ^[0-9]+$ ]] || continue
+        node_info=$(wpctl inspect "$id")
+        name=$(echo "$node_info" | grep 'node.name' | cut -d'"' -f2)
+        class=$(echo "$node_info" | grep 'media.class' | cut -d'"' -f2)
+        [[ -n "$name" ]] && id_for_key["$name|$class"]="$id"
+    done < <(wpctl status | grep '\[vol:')
+
+    while IFS='|' read -r saved_name saved_class saved_vol; do
+        id="${id_for_key["$saved_name|$saved_class"]}"
+        [[ -n "$id" ]] && wpctl set-volume "$id" "$saved_vol"
+    done < "$VOLS"
+    echo "Volume settings restored"
+}
+
+STARTED_RIGCTLD=0
+start_rig() {
+    case $RIG_MODE in
+        ondemand)
+            if [[ ! -x $RIGCTLD_BIN ]]; then
+                echo "WARNING: $RIGCTLD_BIN is missing"
+                return
+            fi
+            if pgrep -x rigctld >/dev/null; then
+                echo "rigctld is already running, leaving it as-is"
+                return
+            fi
+            echo "Starting rigctld"
+            "$RIGCTLD_BIN" -m "$RIG_MODEL" -r "$RIG_PORT" -T "$RIG_LISTEN" -t 4532 \
+                ${RIG_SETCONF:+--set-conf="$RIG_SETCONF"} &
+            RIGCTLD_PID=$!
+            STARTED_RIGCTLD=1
+            sleep 1 ;;
+        boot|existing|remote)
+            if [[ -x $RIGCTL_BIN ]] && ! timeout 5 "$RIGCTL_BIN" -m 2 -r "$RIG_HOST" f &>/dev/null; then
+                echo "WARNING: rigctld at $RIG_HOST is not answering (radio off?)"
+            fi ;;
+    esac
+}
+
+cleanup() {
+    trap - INT TERM EXIT
+    ((TEST)) || save_vols
+    if [[ -n $BPF_PID ]] && kill "$BPF_PID" 2>/dev/null; then
+        # an older filter build can hang when no audio flows - make sure
+        local i
+        for ((i=0; i<10; i++)); do kill -0 "$BPF_PID" 2>/dev/null || break; sleep 0.1; done
+        kill -KILL "$BPF_PID" 2>/dev/null
+    fi
+    [[ -n $RUN_LINKS ]] && rm -f "$RUN_LINKS"
+    if ((STARTED_RIGCTLD)); then
+        kill "$RIGCTLD_PID" 2>/dev/null
+        echo "rigctld stopped"
+    fi
+}
+trap cleanup INT TERM EXIT
+
+run_hook() {
+    [[ -x $RADIO_DIR/hooks/$1 ]] && "$RADIO_DIR/hooks/$1"
+}
+
+echo "Restarting sound servers"
+restart_sound
+echo "Creating FreeDV sinks"
+create_sinks
+start_bpf
+fix_bpf_ports
+wait_for_nodes
+echo "Setting up links"
+remove_other_links
+restore_links
+sleep 1
+remove_other_links
+restore_links
+restore_vols
+
+if ((TEST)); then
+    check_links
+    # QPWGRAPH_CMD may be "flatpak run ..." - left unquoted on purpose
+    [[ -n $QPWGRAPH_CMD ]] && { $QPWGRAPH_CMD &>/dev/null & disown; }
+    echo
+    echo "Check the routing in qpwgraph. Press F5 there if it shows nothing or looks wrong."
+    echo "Please don't save a patchbay in qpwgraph."
+    read -r -p "Press Enter when you have finished looking... "
+    exit 0
+fi
+
+start_rig
+run_hook before-freedv
+
+cd "$FREEDV_DIR/freedv-gui/build_linux" || exit 1
+
+# Ensure model19_check3 symlink exists
+if ! [[ -h model19_check3 ]]; then
+    ln -s "$(pwd)/rade_src/model19_check3" model19_check3
+fi
+
+# Uncomment to force X11 under Wayland (keeps window positions)
+#export GDK_BACKEND=x11
+
+# Process substitution (not a pipe) so the script carries on as soon as FreeDV exits
+src/freedv -f "$CONF" "$@" > >(tee "$RADIO_DIR/freedv-debug.log") 2>&1
+
+run_hook after-freedv
+cd
+EOF
+    } > "$f"
+    chmod +x "$f"
+    mkdir -p "$RADIO_DIR/hooks"
+    log "Wrote $f"
+}
+
+write_launchers() {
+    local link="$LINK_DIR/freedv-radio-$RADIO" desk
+    ln -sfn "$RADIO_DIR/start" "$link"
+    log "Terminal command: $link"
+
+    mkdir -p "$DESKTOP_DIR" "$APPS_DIR"
+    desk="$DESKTOP_DIR/freedv-radio-$RADIO.desktop"
+    cat > "$desk" <<EOF
+[Desktop Entry]
+Version=1.0
+Name=FreeDV radio $RADIO_LABEL
+Exec=$RADIO_DIR/start
+Icon=$RUN_DIR/freedv.png
+Type=Application
+Terminal=true
+Categories=AudioVideo;Audio;HamRadio;
+Comment=FreeDV for radio $RADIO_LABEL (made by freedv-rade-setup)
+Keywords=Radio;HAM;HF;RF;codec2;voice;modem;
+StartupWMClass=freedv
+EOF
+    chmod +x "$desk"
+    gio set "$desk" metadata::trusted true 2>/dev/null || true
+    cp "$desk" "$APPS_DIR/"
+    command -v update-desktop-database &>/dev/null && update-desktop-database "$APPS_DIR" 2>/dev/null
+    log "Desktop icon: FreeDV radio $RADIO_LABEL"
+
+    # pw-link-ls: lists the current links, e.g. for checking by hand
+    if [[ -f $SCRIPT_DIR/pw-link-ls ]]; then
+        mkdir -p "$LOCAL_BIN"
+        install -m 755 "$SCRIPT_DIR/pw-link-ls" "$LOCAL_BIN/pw-link-ls"
+    fi
+}
+
+# Save the links that are in place now (after fixing them in qpwgraph)
+save_current_links() {
+    local f="$RADIO_DIR/links" nodes
+    local -a keep=(FDV_RX_in FDV_RX_out FDV_TX_in FDV_TX_out Fdv-bpf Fdv-bpf-1k
+                   "$RADIO_RX_NODE" "$RADIO_TX_NODE" "$MIC_NODE" "$PHONES_NODE" "$SPEAKER_NODE")
+    nodes=" ${keep[*]} "
+    say "Fix the routing in qpwgraph first (FreeDV can be running)."
+    yesno "Save the links that are in place now as this radio's links?" y || return
+    "$SCRIPT_DIR/pw-link-ls" | while read -r a b; do
+        [[ ${a%%:*} == FreeDV || ${b%%:*} == FreeDV ]] && continue
+        [[ $nodes == *" ${a%%:*} "* || $nodes == *" ${b%%:*} "* ]] && echo "$a $b"
+    done | sed 's/Fdv-bpf-1k:/Fdv-bpf:/g' > "$f.new"
+    # The transmit path only exists while the start script's sound setup is
+    # in place (e.g. the filter), so check it wasn't saved at the wrong time
+    if grep -q 'FDV_TX_out' "$f" 2>/dev/null && ! grep -q 'FDV_TX_out' "$f.new"; then
+        warn "There are no transmit links in place now. Start FreeDV for this radio"
+        say "  (or use 'Test the sound setup') before saving, or they will be lost."
+        yesno "Save anyway?" n || { rm -f "$f.new"; return; }
+    fi
+    cp "$f" "$f.bak" 2>/dev/null
+    mv "$f.new" "$f"
+    say "Saved $(wc -l < "$f") links to $f (old file kept as links.bak)."
+}
+
+finish() {
+    heading "Writing files for radio $RADIO_LABEL"
+    write_links
+    write_freedv_conf
+    write_start_script
+    write_launchers
+    say "Saved for $RADIO_LABEL: the sound links ($(grep -c . "$RADIO_DIR/links" 2>/dev/null)), FreeDV settings, start script and the"
+    say "'FreeDV radio $RADIO_LABEL' desktop icon. Details are in the log."
+}
+
+test_sound() {
+    heading "Testing the sound setup"
+    if [[ -n $TEST_ROOT ]]; then
+        say "(test mode: not running the sound test)"
+        return
+    fi
+    say "This restarts the sound system briefly and sets up FreeDV's sound routing"
+    say "without starting FreeDV, then opens qpwgraph so you can see it."
+    yesno "Run the test now?" y || return
+    log "\n\$ $RADIO_DIR/start --test"
+    "$RADIO_DIR/start" --test 2>&1 | tee -a "$LOGFILE" >&3
+}
+
+# System details at the top of the log, for bug reports
+log_header() {
+    {
+        echo "freedv-rade-setup $FRS_VERSION"
+        echo "Started: $(date)"
+        echo "Options: $FRS_ARGS"
+        echo "Script: $SCRIPT_DIR ($(git -C "$SCRIPT_DIR" log -1 --format='%h %cd' --date=short 2>/dev/null || echo 'not a git clone'))"
+        echo "freedv-rade-build: $(git -C "$RUN_DIR" log -1 --format='%h %cd %s' --date=short 2>/dev/null || echo 'not found')"
+        echo "Kernel: $(uname -r)"
+        echo
+        cat /etc/os-release
+        echo
+        locale
+        echo
+        LC_ALL=C timeout 5 pactl info 2>&1 | grep -E 'Server (Name|Version)|Default S'
+        pipewire --version 2>&1
+        wireplumber --version 2>&1
+        echo "=========================================================="
+    } >> "$LOGFILE" 2>&1
+}
+
+##################### main #####################
+
+. /etc/os-release
+log_header
+[[ -t 3 ]] && clear >&3 2>/dev/null
+say "**************** Welcome to freedv-rade-setup ****************"
+say "Version $FRS_VERSION"
+[[ -n $TEST_ROOT ]] && say "\nTEST MODE: files go under $TEST_ROOT"
+say "\nIf you're not sure about a question, press Enter for the recommended answer."
+screen "(Full details of each step go to $LOGFILE)"
+
+preflight
+((CHECK_ONLY)) && { say "System checks finished."; exit 0; }
+
+mkdir -p "$SETUP_ROOT"
+mapfile -t radios < <(find "$SETUP_ROOT" -mindepth 2 -maxdepth 2 -name start -printf '%h\n' 2>/dev/null | xargs -r -n1 basename | sort)
+
+RADIO=""
+if ((${#radios[@]})); then
+    if ((${#radios[@]} <= 8)); then
+        # single key, like the other menus. Enter picks the radio set up or
+        # changed most recently, as a re-run is usually for the same radio.
+        last=$(find "$SETUP_ROOT" -mindepth 2 -maxdepth 2 -name start -printf '%T@ %h\n' 2>/dev/null \
+            | sort -n | tail -1 | xargs -r basename)
+        def=2
+        say "  1) Set up a new radio"
+        for ((i=0; i<${#radios[@]}; i++)); do
+            say "  $((i+2))) Test or edit the $(radio_label "${radios[i]}") setup"
+            [[ ${radios[i]} == "$last" ]] && def=$((i+2))
+        done
+        hint="$def"; keys=("$def")
+        for ((i=1; i<=${#radios[@]}+1; i++)); do
+            ((i == def)) && continue
+            hint+="/$i"; keys+=("$i")
+        done
+        confirm "What would you like to do?" "[$hint]" "${keys[@]}"
+        CHOICE=${keys[$?]}
+    else
+        items=("Set up a new radio")
+        for r in "${radios[@]}"; do items+=("Test or edit the $(radio_label "$r") setup"); done
+        choose "What would you like to do?" 1 "${items[@]}"
+    fi
+    ((CHOICE > 1)) && RADIO=${radios[CHOICE-2]}
+fi
+
+if [[ -z $RADIO ]]; then
+    heading "New radio"
+    while true; do
+        ask "A short name for this radio (e.g. ic7300, ts450s)" ""
+        RADIO=$(tr 'A-Z' 'a-z' <<<"$REPLY" | tr -c 'a-z0-9-\n' '-' | sed 's/^-*//;s/-*$//')
+        [[ -n $RADIO ]] || continue
+        # shown as typed (e.g. TS450S); the id above names files and nodes
+        RADIO_LABEL=${REPLY#"${REPLY%%[![:space:]]*}"}
+        RADIO_LABEL=${RADIO_LABEL%"${RADIO_LABEL##*[![:space:]]}"}
+        [[ -e $SETUP_ROOT/$RADIO/start ]] && { say "There is already a radio called $RADIO."; continue; }
+        # a folder without a start script is left from a run that was stopped part way
+        [[ -d $SETUP_ROOT/$RADIO ]] && say "(Finishing the setup of $RADIO that was stopped before.)"
+        break
+    done
+    RADIO_DIR="$SETUP_ROOT/$RADIO"
+    mkdir -p "$RADIO_DIR"
+    BPF=none; MONITOR=none; RIG_MODE=none
+    NEW_RADIO=1
+    if ! radio_audio_step; then
+        rm -rf "$RADIO_DIR"
+        if [[ -z $TEST_ROOT ]] && ls "$WP_LUA_DIR/60-freedv-rade-setup-radio-$RADIO.lua" "$WP_CONF_DIR/60-freedv-rade-setup-radio-$RADIO.conf" &>/dev/null; then
+            rm -f "$WP_LUA_DIR/60-freedv-rade-setup-radio-$RADIO.lua" "$WP_CONF_DIR/60-freedv-rade-setup-radio-$RADIO.conf"
+            restart_wireplumber
+        fi
+        die "No radio sound card - nothing written. Run freedv-rade-setup again to retry."
+    fi
+    headset_step
+    rig_step
+    bpf_step
+    finish
+    test_sound
+else
+    RADIO_DIR="$SETUP_ROOT/$RADIO"
+    # Keep the paths found by this run's checks
+    _rigctl=$RIGCTL_BIN; _rigctld=$RIGCTLD_BIN; _fdv=$FREEDV_DIR; _qpw=$QPWGRAPH_CMD
+    load_settings "$RADIO_DIR/start"
+    RADIO_LABEL=${RADIO_LABEL:-$RADIO}   # radios made before labels existed
+    RIGCTL_BIN=${_rigctl:-$RIGCTL_BIN}; RIGCTLD_BIN=${_rigctld:-$RIGCTLD_BIN}; FREEDV_DIR=$_fdv
+    QPWGRAPH_CMD=${_qpw:-$QPWGRAPH_CMD}
+    while true; do
+        heading "Radio $RADIO_LABEL"
+        say "  (T)est the sound setup"
+        say "  Redo the (R)adio sound card"
+        say "  Redo the (M)icrophone, headphones and speakers"
+        say "  Redo rig (C)ontrol"
+        say "  Change the band-pass (F)ilter"
+        say "  (S)ave the current links (after fixing them in qpwgraph)"
+        say "  Re(W)rite the start script and desktop icon only"
+        say "  (Q)uit"
+        confirm "What would you like to do?" "[T/r/m/c/f/s/w/q]" "Tt" "Rr" "Mm" "Cc" "Ff" "Ss" "Ww" "Qq"
+        CHOICE=$(($? + 1))
+        case $CHOICE in
+            1) test_sound ;;
+            2) radio_audio_step && finish ;;
+            3) headset_step; finish ;;
+            4) rig_step; finish ;;
+            5) bpf_step; finish ;;
+            6) save_current_links ;;
+            7) write_start_script; write_launchers ;;
+            8) break ;;
+        esac
+    done
+fi
+
+say "\nAll done. Start FreeDV for this radio with the 'FreeDV radio $RADIO_LABEL' desktop"
+say "icon, or in a terminal with:  ~/freedv-radio-$RADIO"

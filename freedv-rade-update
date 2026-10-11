@@ -85,6 +85,17 @@ fi
 
 echo "Script is up to date"
 
+# (A)udio & radio setup: hand over to freedv-rade-setup, which was updated
+# along with this project just above.
+run_setup() {
+    [[ -x "$RUN_DIR/freedv-rade-setup" ]] || { echo "freedv-rade-setup is missing from $RUN_DIR"; exit 1; }
+    flock -u 8 2>/dev/null
+    # This script's output goes through tee into its own log; the setup keeps
+    # its own log, so give it the terminal directly.
+    [[ -c /dev/tty ]] && exec </dev/tty >/dev/tty 2>/dev/tty
+    exec "$RUN_DIR/freedv-rade-setup"
+}
+
 
 # Set default branch
 default="master"
@@ -99,43 +110,46 @@ else
     basedir=/home/$user
 fi
 
+# confirm [-l] PROMPT HINT CHARS... -> returns (and sets rval to) 0 for the
+# first CHARS, 1 for the second and so on, for any number of choices.
+# Enter gives the first letter of HINT. With -l the prompt's options (split
+# at ", " and " or " after the first ":") are shown one per line above the
+# answer line.
 confirm() {
-params=( "$@" )
-rval=7
-while (( $rval > 6 )); do
-    echo -ne "${params[0]} ${params[1]} "
+local list=0
+[[ $1 == -l ]] && { list=1; shift; }
+local prompt=$1 hint=$2 i
+shift 2
+local choices=( "$@" )
+if (( list )); then
+    # heading = the text up to the first ":", then the options, split at
+    # ", " and " or " (an option needn't start with its "(X)")
+    local head=${prompt%%:*} item
+    local words=${prompt#*: }
+    words=${words%\?}
+    words=${words// or /, }
+    echo -e "${head}:"
+    while [[ -n $words ]]; do
+        item=${words%%, *}
+        echo "  ${item## }"
+        [[ $words == *", "* ]] && words=${words#*, } || words=
+    done
+fi
+rval=-1
+while (( rval < 0 )); do
+    if (( list )); then
+        echo -n "${hint} "
+    else
+        echo -ne "${prompt} ${hint} "
+    fi
     ans=
-    rval=
     read -r ans
     # Get first option if ans is empty
-    ans=${ans:-$(echo ${params[1]} | cut -b 2)}
+    ans=${ans:-$(echo ${hint} | cut -b 2)}
     echo $ans
-        case "$ans" in
-            [${params[2]}])
-                rval=0
-                ;;
-            [${params[3]}])
-                rval=1
-                ;;
-            [${params[4]}])
-                rval=2
-                ;;
-            [${params[5]}])
-                rval=3
-                ;;
-            [${params[6]}])
-                rval=4
-                ;;
-            [${params[7]}])
-                rval=5
-                ;;
-            [${params[8]}])
-                rval=6
-                ;;
-            *)
-                rval=7
-                ;;
-        esac
+    for (( i=0; i<${#choices[@]}; i++ )); do
+        if [[ -n $ans && $ans == [${choices[i]}] ]]; then rval=$i; break; fi
+    done
 done
     return $rval
 }
@@ -620,6 +634,7 @@ echo -e "It will optionally:\n \
 * Restore from a previous backup.\n \
 * Switch backup with current \n \
 * Create a new FreeDV-RADE desktop file.\n \
+* Set up the sound routing and rig control for a radio (runs freedv-rade-setup,\n   which asks before it changes anything).\n \
 * Quit the program.\n\n\
 ************** Nothing will be done until you finally confirm after the summary *************
 
@@ -654,7 +669,7 @@ if grep -q venv < ~/freedv-start; then
 fi
 
 if (( slotmode == 1 )); then
-        confirm "\nDo you want to (U)pdate, (F)ull re-build, create (D)esktop launcher or (Q)uit?" "[U/F/D/Q]" "Uu" "Ff" "Dd" "qQ"
+        confirm -l "\nDo you want to: (U)pdate, (F)ull re-build, Create (D)esktop launcher, (A)udio & radio setup or (Q)uit?" "[U/F/D/A/Q]" "Uu" "Ff" "Dd" "Aa" "qQ"
         case $rval in
             0)
             fastupdt=1
@@ -666,12 +681,15 @@ if (( slotmode == 1 )); then
             desktop=1
             ;;
             3)
+            run_setup
+            ;;
+            4)
             bye
             ;;
         esac
 elif (( bak == 1 )); then
 
-    confirm "\nDo you want to (U)pdate, (F)ull re-build, (B)ackup, (R)estore from backup, (S)witch backup/current, Create (D)esktop launcher or (Q)uit?" "[U/F/B/R/S/D/Q]" "Uu" "Ff" "Bb" "Rr" "Ss" "Dd" "Qq"
+    confirm -l "\nDo you want to: (U)pdate, (F)ull re-build, (B)ackup, (R)estore from backup, (S)witch backup/current, Create (D)esktop launcher, (A)udio & radio setup or (Q)uit?" "[U/F/B/R/S/D/A/Q]" "Uu" "Ff" "Bb" "Rr" "Ss" "Dd" "Aa" "Qq"
         case $rval in
             0)
             fastupdt=1
@@ -692,11 +710,14 @@ elif (( bak == 1 )); then
             desktop=1
             ;;
             6)
+            run_setup
+            ;;
+            7)
             bye
             ;;
         esac
 else
-        confirm "\nDo you want to (U)pdate, (F)ull re-build,  (B)ackup, create (D)esktop launcher or (Q)uit?" "[U/F/B/D/Q]" "Uu" "Ff" "Bb" "Dd" "qQ"
+        confirm -l "\nDo you want to: (U)pdate, (F)ull re-build,  (B)ackup, Create (D)esktop launcher, (A)udio & radio setup or (Q)uit?" "[U/F/B/D/A/Q]" "Uu" "Ff" "Bb" "Dd" "Aa" "qQ"
         case $rval in
             0)
             fastupdt=1
@@ -711,6 +732,9 @@ else
             desktop=1
             ;;
             4)
+            run_setup
+            ;;
+            5)
             bye
             ;;
         esac
