@@ -1697,7 +1697,8 @@ write_start_script() {
 #         start --links   the same, then save the links fixed in qpwgraph
 #
 # Extras: executable scripts hooks/before-freedv and hooks/after-freedv in
-# this folder are run before FreeDV starts and after it closes.
+# this folder are run before FreeDV starts and after it closes, and a file
+# hooks/env is read just before FreeDV starts (e.g. export GDK_BACKEND=x11).
 
 EOF
         settings_block
@@ -2067,8 +2068,12 @@ if ! [[ -h model19_check3 ]]; then
     ln -s "$(pwd)/rade_src/model19_check3" model19_check3
 fi
 
-# Uncomment to force X11 under Wayland (keeps window positions)
-#export GDK_BACKEND=x11
+# Extra settings for FreeDV, kept when the setup rewrites this script: a
+# file hooks/env with lines such as
+#   export GDK_BACKEND=x11    (X11 under Wayland: keeps window positions,
+#                              and lets X11 tools find FreeDV's windows)
+# shellcheck disable=SC1091
+[[ -f $RADIO_DIR/hooks/env ]] && source "$RADIO_DIR/hooks/env"
 
 # Process substitution (not a pipe) so the script carries on as soon as FreeDV exits
 src/freedv -f "$CONF" "$@" > >(tee "$RADIO_DIR/freedv-debug.log") 2>&1
