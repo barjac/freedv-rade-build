@@ -589,10 +589,48 @@ node_users() {
     local IFS=,; echo "${users[*]}" | sed "s/,/, /g"
 }
 
+# set_aside_rules ROLE CARD FILES -> 0 if the files were set aside
+# Another rule (an older setup or guide) already names this card's socket.
+# If its name is for the other role (e.g. "Radio Interface" on the socket
+# being set up as the headset), it was probably written for different
+# wiring: offer to rename the files to .disabled so the setup can name it.
+set_aside_rules() {
+    local role=$1 card=$2 f name def=n wrong=0 other_role=headset
+    local -a files
+    mapfile -t files <<<"$3"
+    [[ $role == headset ]] && other_role=radio
+    name="${card#alsa_card.} $(card_desc "$card")"
+    say "This card already has a name, \"$(card_desc "$card")\" ($card), from:"
+    for f in "${files[@]}"; do say "  $f"; done
+    if [[ $role == headset && ${name,,} =~ radio|rig ]] \
+       || [[ $role == radio && ${name,,} =~ headset|mic|phone ]]; then
+        wrong=1; def=y
+        say "That is a $other_role name, but you are setting this card up as the $role:"
+        say "the file was probably written for different wiring."
+    fi
+    for f in "${files[@]}"; do
+        if [[ $f != "$REAL_CFG"/* || ! -w $f ]]; then
+            ((wrong)) && say "It is a system file, so it stays. To set it aside yourself:\n  sudo mv '$f' '$f.disabled'\nthen run this step again."
+            return 1
+        fi
+    done
+    say "Setting it aside renames it to .disabled (nothing is deleted). Any other"
+    say "cards it names get their normal names back, and anything that still uses"
+    say "the old names (an older start script, for example) will need the new ones."
+    yesno "Set it aside and give this card the setup's own name?" "$def" || return 1
+    for f in "${files[@]}"; do
+        mv -f -- "$f" "$f.disabled" || { warn "Couldn't rename $f"; return 1; }
+        say "Renamed: $f.disabled"
+        log "Set aside $f (named this card $card)"
+    done
+    return 0
+}
+
 # Files outside freedv-rade-setup's own that mention this bus path
 existing_rule_for() {
+    # only files WirePlumber reads (not ones set aside as .disabled)
     grep -rlsF -- "$1" "$REAL_CFG/wireplumber" /etc/wireplumber 2>/dev/null \
-        | grep -v 'freedv-rade-setup-'
+        | grep -E '\.(conf|lua)$' | grep -v 'freedv-rade-setup-'
 }
 
 # write_wp_rule FILEID BUSPATH STEM DESC IN_NODE OUT_NODE
@@ -994,8 +1032,8 @@ name_card() {
         fi
     elif [[ $bus != usb || -z $bp ]]; then
         pref_in=""; pref_out=""
-    elif other=$(existing_rule_for "$bp") && [[ -n $other ]]; then
-        say "This card already has a name from: $other"
+    elif other=$(existing_rule_for "$bp") && [[ -n $other ]] \
+         && ! set_aside_rules "$role" "$card" "$other"; then
         say "Keeping that name."
         pref_in=""; pref_out=""
     else
