@@ -1724,6 +1724,21 @@ TEST=0 EDIT_LINKS=0
 
 [[ -f $LINKS ]] || { echo "Missing $LINKS - run freedv-rade-setup"; exit 1; }
 
+# One start script at a time, for any radio: they all share the FDV_ boxes
+# and the sound server, and starting one restarts the sound and the filter
+# under the other. The lock is held until this script (and FreeDV, which
+# inherits it) ends; helpers started below close it, so a leftover filter
+# or qpwgraph can't keep it.
+LOCK="${XDG_RUNTIME_DIR:-/tmp}/freedv-rade-setup.lock"
+exec 9>>"$LOCK"
+if ! flock -n 9; then
+    other=$(cat "$LOCK.radio" 2>/dev/null)
+    echo "FreeDV is already running${other:+ (radio $other)}. Close it first."
+    [[ -t 0 ]] && read -r -p "Press Enter to close this window. " _
+    exit 1
+fi
+echo "$RADIO_LABEL" > "$LOCK.radio"
+
 restart_sound() {
     # A restart normally takes a second or two. If it hangs, the sound server
     # is usually stuck waiting for a USB sound device that went away while in
@@ -1825,7 +1840,7 @@ start_bpf() {
         return
     fi
     pkill -x "$(basename "$BPF_BIN")" && sleep 0.2
-    nohup "$BPF_BIN" >/dev/null 2>&1 </dev/null &
+    nohup "$BPF_BIN" >/dev/null 2>&1 </dev/null 9>&- &
     BPF_PID=$!
     local i
     for ((i=0; i<25; i++)); do
@@ -1969,7 +1984,7 @@ start_rig() {
             fi
             echo "Starting rigctld"
             "$RIGCTLD_BIN" -m "$RIG_MODEL" -r "$RIG_PORT" -T "$RIG_LISTEN" -t 4532 \
-                ${RIG_SETCONF:+--set-conf="$RIG_SETCONF"} &
+                ${RIG_SETCONF:+--set-conf="$RIG_SETCONF"} 9>&- &
             RIGCTLD_PID=$!
             STARTED_RIGCTLD=1
             sleep 1 ;;
@@ -2020,7 +2035,7 @@ restore_vols
 if ((TEST)); then
     check_links
     # QPWGRAPH_CMD may be "flatpak run ..." - left unquoted on purpose
-    [[ -n $QPWGRAPH_CMD ]] && { $QPWGRAPH_CMD &>/dev/null & disown; }
+    [[ -n $QPWGRAPH_CMD ]] && { $QPWGRAPH_CMD &>/dev/null 9>&- & disown; }
     echo
     echo "Check the routing in qpwgraph. Press F5 there if it shows nothing or looks wrong."
     echo "FreeDV itself isn't shown yet: its links to the FDV_ boxes only appear"
