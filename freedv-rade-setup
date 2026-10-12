@@ -113,6 +113,12 @@ else
     exec >>"$LOGFILE" 2>&1
 fi
 
+# Started from freedv-rade-update's (A): its desktop icon's terminal window
+# closes as soon as this script ends, so wait first (however it ends).
+if [[ -n $FRS_PAUSE_AT_END ]] && [[ -c /dev/tty ]]; then
+    trap 'printf "\n" >&3; read -r -p "Press Enter to close this window. " _ </dev/tty 2>&3' EXIT
+fi
+
 ##################### user interface helpers #####################
 
 log()    { printf '%b\n' "$*" >> "$LOGFILE"; }
@@ -1940,9 +1946,11 @@ if ((TEST)); then
         read -r -p "Fix the routing in qpwgraph, then press Enter to save it (or N then Enter to keep the saved links)... " REPLY
         [[ $REPLY == [Nn]* ]] && echo "Links not changed." || save_links
     else
-        echo "If you change the routing in qpwgraph, save it now: the test removes"
-        echo "the filter's links when it ends."
-        read -r -p "Press Enter when you have finished looking, or S then Enter to save the links as they are now... " REPLY
+        echo "Did you change any links in qpwgraph? The test removes its links when"
+        echo "it ends, so changes are lost unless you save them now."
+        echo "  No:  just press Enter to end the test."
+        echo "  Yes: type S then Enter to save them first."
+        read -r -p "> " REPLY
         [[ $REPLY == [Ss]* ]] && save_links
     fi
     exit 0

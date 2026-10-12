@@ -93,7 +93,7 @@ run_setup() {
     # This script's output goes through tee into its own log; the setup keeps
     # its own log, so give it the terminal directly.
     [[ -c /dev/tty ]] && exec </dev/tty >/dev/tty 2>/dev/tty
-    exec "$RUN_DIR/freedv-rade-setup"
+    FRS_PAUSE_AT_END=1 exec "$RUN_DIR/freedv-rade-setup"
 }
 
 
