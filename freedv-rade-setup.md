@@ -76,6 +76,19 @@ press Start Modem):
   filter there are no Fdv-bpf boxes, and FDV_TX_out links straight to Radio
   output.
 
+With FreeDV running and **Start Modem** pressed, FreeDV's own four boxes
+appear between the FDV_ boxes:
+
+![qpwgraph with FreeDV running, unused boxes moved to the bottom](freedv_basic_qpwgraph_with_FDV.png)
+
+- Receive (top): FDV_RX_in → **FreeDV [Radio to FreeDV]**, and
+  **FreeDV [FreeDV to Speaker]** → FDV_RX_out.
+- Transmit (lower): FDV_TX_in → **FreeDV [Mic to FreeDV]**, and
+  **FreeDV [FreeDV to Radio]** → FDV_TX_out.
+- The boxes along the bottom aren't used by FreeDV (MIDI, the cards'
+  "[Monitor]" outputs, the PC's built-in input), so they're moved out of
+  the way there.
+
 Running it again later lets you test or change a radio (sound card, headset,
 rig control, filter), or set up another radio.
 
