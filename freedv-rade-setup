@@ -83,8 +83,8 @@ WP_LUA_DIR="$CFG_HOME/wireplumber/main.lua.d"
 FDV_SINKS=(FDV_RX_in FDV_RX_out FDV_TX_in FDV_TX_out)
 
 # Settings saved at the top of each radio's start script
-SETTINGS_VARS=(RADIO RADIO_LABEL FREEDV_DIR RADIO_KIND RADIO_CARD RADIO_RX_NODE RADIO_TX_NODE
-               MIC_NODE PHONES_NODE SPEAKER_NODE MONITOR
+SETTINGS_VARS=(RADIO RADIO_LABEL FREEDV_DIR RADIO_KIND RADIO_CARD RADIO_CARD_ID RADIO_RX_NODE RADIO_TX_NODE
+               MIC_NODE MIC_CARD_ID PHONES_NODE SPEAKER_NODE MONITOR
                RIG_MODE RIG_MODEL RIG_MODEL_NAME RIG_PORT RIG_SETCONF RIG_LISTEN RIG_HOST
                RIGCTL_BIN RIGCTLD_BIN BPF BPF_BIN QPWGRAPH_CMD)
 
@@ -486,6 +486,13 @@ card_desc() {
     local d
     d=$(card_prop "$1" device.description)
     echo "${d:-$1}"
+}
+
+# card_ident CARD -> "VENDOR:PRODUCT SERIAL" of a USB card (empty otherwise).
+# The start script compares it with the card it finds in the same socket.
+card_ident() {
+    [[ $(card_prop "$1" device.bus) == usb ]] || return 0
+    echo "$(card_prop "$1" device.vendor.id):$(card_prop "$1" device.product.id) $(card_prop "$1" device.serial)"
 }
 
 # All node names that have ports
@@ -1098,7 +1105,7 @@ radio_audio_step() {
             RADIO_KIND=card; RADIO_CARD=$PICKED_CARD ;;
         3)
             # NOT YET TESTED - needs a quisk/piHPSDR user
-            RADIO_KIND=software; RADIO_CARD=""
+            RADIO_KIND=software; RADIO_CARD=""; RADIO_CARD_ID=""
             say "Start the radio program now, with its audio running."
             pause "Press Enter when it is running... "
             pick_node "Which node carries the RECEIVED audio from the radio program?" apps-out || return 1
@@ -1116,6 +1123,7 @@ radio_audio_step() {
     done
     RADIO_RX_NODE=$ROLE_IN
     RADIO_TX_NODE=$ROLE_OUT
+    RADIO_CARD_ID=$(card_ident "$RADIO_CARD")
     set_radio_volume
 }
 
@@ -1148,12 +1156,13 @@ name_chosen_headset() {
     say "Giving this USB headset fixed names:"
     name_card headset "$card"
     MIC_NODE=$ROLE_IN
+    MIC_CARD_ID=$(card_ident "$card")
     ((phones_same)) && PHONES_NODE=$ROLE_OUT
 }
 
 headset_step() {
     heading "Microphone, headphones and speakers"
-    MIC_NODE=""; PHONES_NODE=""; SPEAKER_NODE=""
+    MIC_NODE=""; MIC_CARD_ID=""; PHONES_NODE=""; SPEAKER_NODE=""
     # ESC (or "not unplugged") while detecting comes back to this question
     while true; do
     say "Which microphone will you use for transmitting?"
@@ -1167,6 +1176,7 @@ headset_step() {
             detect_plugin "your USB headset" || continue
             name_card headset "$NEW_CARD"
             MIC_NODE=$ROLE_IN
+            MIC_CARD_ID=$(card_ident "$NEW_CARD")
             PHONES_NODE=$ROLE_OUT ;;
         2)
             pick_node "Which microphone?" sources "" usb || true
@@ -1734,6 +1744,42 @@ wait_for_nodes() {
     echo "WARNING: not found (unplugged?):$missing"
 }
 
+# node_ident NODE -> "VENDOR:PRODUCT SERIAL" of the USB card behind a node
+node_ident() {
+    { LC_ALL=C pactl list sinks; LC_ALL=C pactl list sources; } 2>/dev/null | awk -v node="$1" '
+        /^(Sink|Source) #/ { innode = 0 }
+        $1 == "Name:" { innode = ($2 == node) }
+        innode && $2 == "=" && ($1 == "device.vendor.id" || $1 == "device.product.id" || $1 == "device.serial") {
+            v = $0; sub(/^[^=]*= *"/, "", v); sub(/"$/, "", v); p[$1] = v
+        }
+        END { if (p["device.vendor.id"] != "") print p["device.vendor.id"] ":" p["device.product.id"] " " p["device.serial"] }'
+}
+
+# The radio's and the headset's cards are named by USB socket. If they have
+# been plugged into each other's sockets, the radio's audio would go to the
+# headset (and the other way round), so ask before going on.
+check_cards() {
+    local have swapped=0
+    if [[ -n $RADIO_CARD_ID && -n $RADIO_TX_NODE ]]; then
+        have=$(node_ident "$RADIO_TX_NODE")
+        [[ -n $have && $have != "$RADIO_CARD_ID" ]] && swapped=1
+    fi
+    if [[ -n $MIC_CARD_ID && -n $MIC_NODE ]]; then
+        have=$(node_ident "$MIC_NODE")
+        [[ -n $have && $have != "$MIC_CARD_ID" ]] && swapped=1
+    fi
+    ((swapped)) || return 0
+    echo
+    echo "The sound cards in the USB sockets are not the ones this radio was set up with."
+    read -r -p "Have you switched your USB audio cables around? [y/N] " REPLY
+    if [[ $REPLY == [Yy]* ]]; then
+        echo "Please plug each one back into its own socket, then start again."
+        exit 1
+    fi
+    echo "Carrying on. If the sound goes to the wrong place, run freedv-rade-setup"
+    echo "again to set up this radio's sound card and headset."
+}
+
 start_bpf() {
     [[ $BPF == none || -z $BPF_BIN ]] && return
     if [[ ! -x $BPF_BIN ]]; then
@@ -1924,6 +1970,7 @@ create_sinks
 start_bpf
 fix_bpf_ports
 wait_for_nodes
+check_cards
 echo "Setting up links"
 remove_other_links
 restore_links
