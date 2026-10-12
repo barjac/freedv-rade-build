@@ -231,6 +231,15 @@ Instead, please contribute it properly:
 2. Make your change there and test it.
 3. Open a Pull Request against the main repository.
 
+---
+ **Bug Reports**
+ 
 If you're not sure whether something's a bug or intentional, or want to
 discuss an idea first, open a GitHub issue instead of diving straight into
 code — much easier to sort out before any patching happens.
+
+Please remember that this project is not part of the official FreeDV project.
+If you find a bug in freedv-rade-build or freedv-rade-update please report it to:
+[barjac/freedv-rade-build](https://github.com/barjac/freedv-rade-build)
+and not to FreeDV.
+ 

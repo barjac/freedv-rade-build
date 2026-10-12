@@ -2126,7 +2126,7 @@ fi
 if [[ -z $RADIO ]]; then
     heading "New radio"
     while true; do
-        ask "A short name for this radio (e.g. ic7300, ts450s)" ""
+        ask "A short name for this radio (e.g. IC-7300, TS-450S)" ""
         RADIO=$(tr 'A-Z' 'a-z' <<<"$REPLY" | tr -c 'a-z0-9-\n' '-' | sed 's/^-*//;s/-*$//')
         [[ -n $RADIO ]] || continue
         # shown as typed (e.g. TS450S); the id above names files and nodes

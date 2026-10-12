@@ -50,7 +50,7 @@ with BPF unconnected. Your plan to strip the four FDV_* sinks from the links fil
 Patch files: `~/freedv_make/patch-A-freedv-pipewire-role.patch`, `patch-B-bpf-pipewire-role.patch`
 
 ## Fix for null sink creation (applied 2026-10-01)
-In `create-main-sinks()` (now folded into `~/freedv-start-pan`/`~/freedv-start-v2` on both the
+In `create-main-sinks()` (now folded into `~/freedv-start-v1`/`~/freedv-start-v2` on both the
 RPi4 and the desktop), changed:
 ```bash
 pactl load-module module-null-sink sink_name="$sink" \
