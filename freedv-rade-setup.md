@@ -102,3 +102,10 @@ rig control, filter), or set up another radio.
   restore your snapshot, if you took one).
 - If a script stops with "the sound server is stuck", reboot. This usually
   means a USB sound device dropped out while in use.
+
+## What it looks like when it works
+
+FreeDV on Linux Mint 22.1, started from the "FreeDV radio *name*" icon, with
+**Start Modem** pressed and receiving RADE V1 on 60 m:
+
+![FreeDV running on Linux Mint 22.1](freedv_Mint-22.1_main.png)
