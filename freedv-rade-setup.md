@@ -53,6 +53,27 @@ appear only when FreeDV is running and you press **Start Modem**.
 If you change the routing in qpwgraph during the test, press **S** at the end
 of the test to save it.
 
+When qpwgraph first opens, the boxes are piled on top of each other and the
+links look like a heap of spaghetti. Click and drag the boxes apart until they
+look like the picture below. Drag any boxes that have no links (other sound
+cards, other programs) to the bottom, out of the way. qpwgraph remembers where
+you put them, so you only need to do this once.
+
+This is how it should look without FreeDV running (the test, or before you
+press Start Modem):
+
+![qpwgraph with the FDV_ boxes linked to the radio, headset and filter](freedv_basic_qpwgraph.png)
+
+- Left: **Radio input** feeds FDV_RX_in, and **Headset input** (your
+  microphone) feeds FDV_TX_in.
+- Right: FDV_RX_out feeds your **Headset output** (here also the PC's
+  speakers, because both were chosen), and FDV_TX_out goes through the
+  transmit filter (Fdv-bpf, the two "PipeWire ALSA [Fdv-bpf]" boxes) to
+  **Radio output**.
+- The speakers box is named after your PC's sound card. If you chose no
+  filter there are no Fdv-bpf boxes, and FDV_TX_out links straight to Radio
+  output.
+
 Running it again later lets you test or change a radio (sound card, headset,
 rig control, filter), or set up another radio.
 
