@@ -105,7 +105,8 @@ rig control, filter), or set up another radio.
 
 ## What it looks like when it works
 
-FreeDV on Linux Mint 22.1, started from the "FreeDV radio *name*" icon, with
-**Start Modem** pressed and receiving RADE V1 on 60 m:
+The whole Linux Mint 22.1 screen: FreeDV, started from the "FreeDV radio
+*name*" icon, with **Start Modem** pressed and receiving RADE V1 on 60 m,
+and FreeDV Reporter below it:
 
-![FreeDV running on Linux Mint 22.1](freedv_Mint-22.1_main.png)
+![FreeDV and FreeDV Reporter running on Linux Mint 22.1](freedv_Mint-22.1.png)
