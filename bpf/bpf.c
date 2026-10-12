@@ -28,6 +28,11 @@
 #define SAMPLE_RATE 48000
 #define CHANNELS 1
 #define BUFFER_SIZE 512
+// ALSA ring buffer, in frames (~85 ms at 48 kHz). Left to the PipeWire ALSA
+// plugin's default it is far bigger, and the filter then passes the audio
+// through a backlog (measured ~0.9 s): the transmit audio reached the radio
+// that much after PTT.
+#define RING_SIZE (8 * BUFFER_SIZE)
 
 // Filter parameters (override with -D at compile time)
 #ifndef CUTOFF_LOW
@@ -202,6 +207,23 @@ void fir_filter_destroy(fir_filter_t *fir) {
 // PIPEWIRE_PROPS whatever ALSA's "default" is (on Ubuntu 22.04 that is
 // PulseAudio's plugin, even when PipeWire is running). Falls back to
 // "default" where the "pipewire" device isn't defined.
+// Keep the period at the processing block size and the ring buffer small,
+// so no backlog can build up between FreeDV and the radio.
+static void set_small_buffer(snd_pcm_t *handle, snd_pcm_hw_params_t *hw_params)
+{
+    snd_pcm_uframes_t period = BUFFER_SIZE, ring = RING_SIZE;
+    snd_pcm_hw_params_set_period_size_near(handle, hw_params, &period, 0);
+    snd_pcm_hw_params_set_buffer_size_near(handle, hw_params, &ring);
+}
+
+static void print_buffer(const char *what, snd_pcm_t *handle, unsigned int rate)
+{
+    snd_pcm_uframes_t ring = 0, period = 0;
+    snd_pcm_get_params(handle, &ring, &period);
+    printf("%s buffer: %lu frames (%.0f ms), period %lu\n",
+           what, (unsigned long)ring, ring * 1000.0 / rate, (unsigned long)period);
+}
+
 static int open_pcm(snd_pcm_t **handle, snd_pcm_stream_t stream)
 {
     int err = snd_pcm_open(handle, "pipewire", stream, 0);
@@ -263,6 +285,7 @@ int main(int argc, char *argv[]) {
     snd_pcm_hw_params_set_channels(capture_handle, hw_params, CHANNELS);
     unsigned int rate = SAMPLE_RATE;
     snd_pcm_hw_params_set_rate_near(capture_handle, hw_params, &rate, 0);
+    set_small_buffer(capture_handle, hw_params);
     snd_pcm_hw_params(capture_handle, hw_params);
 
     printf("Capture rate: %d Hz\n", rate);
@@ -289,9 +312,12 @@ int main(int argc, char *argv[]) {
     snd_pcm_hw_params_set_channels(playback_handle, hw_params, CHANNELS);
     rate = SAMPLE_RATE;
     snd_pcm_hw_params_set_rate_near(playback_handle, hw_params, &rate, 0);
+    set_small_buffer(playback_handle, hw_params);
     snd_pcm_hw_params(playback_handle, hw_params);
 
     printf("Playback rate: %d Hz\n", rate);
+    print_buffer("Capture", capture_handle, capture_rate);
+    print_buffer("Playback", playback_handle, rate);
     if (rate != capture_rate)
         fprintf(stderr, "Warning: playback rate %u Hz differs from capture rate %u Hz\n",
                 rate, capture_rate);
