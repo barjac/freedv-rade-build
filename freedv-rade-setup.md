@@ -50,8 +50,10 @@ At the end it offers a test: it links your radio, headset and filter to
 FreeDV's FDV_ boxes and shows them in **qpwgraph**, then tidies up again.
 FreeDV itself isn't shown in the test. Its own links to the FDV_ boxes
 appear only when FreeDV is running and you press **Start Modem**.
-If you change the routing in qpwgraph during the test, press **S** at the end
-of the test to save it.
+Changes you make in qpwgraph only last for now: each time you start FreeDV
+for this radio, its links are set up again from a saved list. If you change
+any links during the test and want to keep them, type **S** then Enter at the
+last question to save them to that list.
 
 When qpwgraph first opens, the boxes are piled on top of each other and the
 links look like a heap of spaghetti. Click and drag the boxes apart until they

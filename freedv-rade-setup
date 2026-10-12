@@ -1946,10 +1946,11 @@ if ((TEST)); then
         read -r -p "Fix the routing in qpwgraph, then press Enter to save it (or N then Enter to keep the saved links)... " REPLY
         [[ $REPLY == [Nn]* ]] && echo "Links not changed." || save_links
     else
-        echo "Did you change any links in qpwgraph? The test removes its links when"
-        echo "it ends, so changes are lost unless you save them now."
-        echo "  No:  just press Enter to end the test."
-        echo "  Yes: type S then Enter to save them first."
+        echo "Changes you make in qpwgraph only last for now: each time you start"
+        echo "FreeDV for this radio, its links are set up again from a saved list."
+        echo "Did you change any links in qpwgraph, and want to keep them?"
+        echo "  No:  just press Enter to finish."
+        echo "  Yes: type S then Enter to save them to the list first."
         read -r -p "> " REPLY
         [[ $REPLY == [Ss]* ]] && save_links
     fi
