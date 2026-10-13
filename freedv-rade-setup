@@ -1611,8 +1611,9 @@ ask_station() {
 
 write_freedv_conf() {
     local conf="$RADIO_DIR/freedv.conf"
-    # Only a FreeDV using this radio's config matters (it saves over it on exit)
-    while pgrep -f -- "freedv -f $conf" >/dev/null; do
+    # Only a FreeDV using this radio's config matters (it saves over it on
+    # exit). The prefix also covers freedv-v2.conf.
+    while pgrep -f -- "freedv -f $RADIO_DIR/freedv" >/dev/null; do
         warn "FreeDV is running for this radio. Its settings can't be changed while it runs."
         pause "Please close FreeDV, then press Enter... "
     done
@@ -1659,6 +1660,24 @@ write_freedv_conf() {
         set_ini "$conf" Hamlib UseForPTT 0
     fi
     log "Updated $conf (FreeDV's own settings for this radio)"
+
+    # A RADE V2 build has its own copy, freedv-v2.conf (see the start
+    # script). Keep the settings managed here the same in it; the rest,
+    # such as the TX level, stays that build's own.
+    local v2="$RADIO_DIR/freedv-v2.conf" key val
+    if [[ -f $v2 ]]; then
+        for key in Reporting/Callsign Reporting/GridSquare \
+                   Audio/soundCard1InDeviceName Audio/soundCard1OutDeviceName \
+                   Audio/soundCard2InDeviceName Audio/soundCard2OutDeviceName \
+                   Audio/soundCard1InSampleRate Audio/soundCard1OutSampleRate \
+                   Audio/soundCard2InSampleRate Audio/soundCard2OutSampleRate \
+                   Hamlib/UseForPTT Hamlib/RigNameStr Hamlib/RigName Hamlib/SerialPort \
+                   Hamlib/PttType Rig/UseSerialPTT; do
+            val=$(get_ini "$conf" "${key%%/*}" "${key#*/}")
+            [[ -n $val ]] && set_ini "$v2" "${key%%/*}" "${key#*/}" "$val"
+        done
+        log "Updated $v2 to match (the RADE V2 build's settings)"
+    fi
 }
 
 settings_block() {
@@ -1716,6 +1735,17 @@ if [[ $BPF != none && -n $BPF_BIN ]]; then
 fi
 BPF_NODE=${BPF_BIN##*/}
 CONF="$RADIO_DIR/freedv.conf"
+# A RADE V2 build keeps its own FreeDV settings (it needs a different TX
+# level, for one), made from freedv.conf the first time. Re-running the
+# setup keeps the sound, rig and station settings the same in both.
+if grep -qa RADEV2 "$FREEDV_BIN" 2>/dev/null; then
+    CONF="$RADIO_DIR/freedv-v2.conf"
+    if [[ ! -f $CONF && -f $RADIO_DIR/freedv.conf ]]; then
+        cp "$RADIO_DIR/freedv.conf" "$CONF"
+        echo "RADE V2 build: its settings are now kept separately in freedv-v2.conf"
+        echo "(copied from freedv.conf). Check its TX level in FreeDV."
+    fi
+fi
 VOLS="$RADIO_DIR/volumes.db"
 SINKS=(FDV_RX_in FDV_RX_out FDV_TX_in FDV_TX_out)
 

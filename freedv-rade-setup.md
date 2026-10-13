@@ -92,6 +92,13 @@ appear between the FDV_ boxes:
 Running it again later lets you test or change a radio (sound card, headset,
 rig control, filter), or set up another radio.
 
+If you switch between a RADE V1 and a RADE V2 build of FreeDV (e.g. with
+freedv-rade-update's Switch), each keeps its own FreeDV settings for the
+radio: `freedv.conf` for V1, `freedv-v2.conf` for V2, so things like the TX
+level can differ. `freedv-v2.conf` is copied from `freedv.conf` the first
+time a V2 build starts. Running the setup again keeps the sound, rig control
+and station settings the same in both.
+
 ## If something goes wrong
 
 - Everything the setup did is logged in
