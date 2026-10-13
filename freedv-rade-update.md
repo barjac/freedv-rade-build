@@ -195,6 +195,20 @@ freedv-rade-update --profile="exact profile description"
 This still stops at the final summary for confirmation, same as everything
 else — it just answers all the earlier questions for you.
 
+### `--add-profiles=NAME` (shared recipe sets)
+
+`.profiles` is your own and isn't part of the repo, so a fresh install
+starts without it. A set of recipes can be kept in the repo as
+`profiles.NAME` instead (same format, `#` lines are comments) and copied into
+`.profiles` with:
+
+```
+freedv-rade-update --add-profiles=NAME
+```
+
+Only recipes whose name isn't already in `.profiles` are added, so it's safe
+to run again. Nothing is added unless you ask for it.
+
 ### `--dev` and personal fork branches
 
 This is a hidden flag, mostly relevant if the maintainer has specifically

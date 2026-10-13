@@ -1,0 +1,6 @@
+# G4MKT's personal build recipes, in .profiles format (one per line:
+# name | PR(s)/branch | patch(es) | custom name). Add them to .profiles with:
+#   freedv-rade-update --add-profiles=g4mkt
+# Only recipes whose name isn't already in .profiles are added.
+Personal build (v3.0-dev+rade-v2+1445+AGC) | fork:bcj-g4mkt-project | patches/bcj-g4mkt-backend-fork.patch |
+Personal build V1 (v3.0-dev+1445+AGC, RADE V1) | fork:bcj-g4mkt-project | patches/bcj-g4mkt-v1.patch patches/bcj-no-forced-usb.patch |

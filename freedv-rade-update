@@ -39,6 +39,11 @@ DEV_MODE=false
 # instead. Still stops at the final summary/confirm like everything
 # else -- this only fast-forwards through the *selection* questions.
 PROFILE_NAME=""
+# --add-profiles=NAME: copy any build recipes from the tracked
+# profiles.NAME file into .profiles (only those not already there, by
+# name), so a fresh install can get a set of personal recipes back in one
+# step. Nothing is added unless asked for, so other users never see them.
+ADD_PROFILES=""
 _args=()
 for _arg in "$@"; do
     case "$_arg" in
@@ -46,6 +51,7 @@ for _arg in "$@"; do
         --debug)   DEBUG=true; _args+=("$_arg") ;;
         --dev)     DEV_MODE=true; _args+=("$_arg") ;;
         --profile=*) PROFILE_NAME="${_arg#--profile=}"; _args+=("$_arg") ;;
+        --add-profiles=*) ADD_PROFILES="${_arg#--add-profiles=}"; _args+=("$_arg") ;;
         *)         _args+=("$_arg") ;;
     esac
 done
@@ -745,6 +751,26 @@ patches=()
 _profile_loaded=false
 _profile_edit_mode=false
 _profiles_file="/home/${user}/freedv-rade-build/.profiles"
+
+if [[ -n "$ADD_PROFILES" ]]; then
+    _add_file="/home/${user}/freedv-rade-build/profiles.${ADD_PROFILES}"
+    if [[ ! -f "$_add_file" ]]; then
+        echo -e "\nNo profiles.${ADD_PROFILES} found in freedv-rade-build - nothing added."
+    else
+        _added=0
+        while IFS= read -r _line; do
+            # Skip blank lines and comments.
+            [[ -z "${_line// }" || "$_line" == \#* ]] && continue
+            _name="$(echo "${_line%%|*}" | xargs)"
+            if ! { [[ -f "$_profiles_file" ]] && awk -F' \\| ' -v want="$_name" '$1 == want {found=1} END {exit !found}' "$_profiles_file"; }; then
+                printf '%s\n' "$_line" >> "$_profiles_file"
+                echo "Added profile: $_name"
+                _added=$((_added + 1))
+            fi
+        done < "$_add_file"
+        (( _added == 0 )) && echo -e "\nAll profiles in profiles.${ADD_PROFILES} are already saved."
+    fi
+fi
 
 # --profile=NAME given on the command line: load it now and skip the
 # top-level menu entirely, same as picking (U)pdate by hand.
