@@ -2400,7 +2400,8 @@ else
             5) bpf_step; finish ;;
             6) edit_links ;;
             7) write_start_script; write_launchers
-               ok "Rewrote the start script and $(icons_text)" ;;
+               ok "Rewrote the start script and $(icons_text)"
+               sleep 1.5 ;;   # the menu redraw would hide it at once
             8) break ;;
         esac
     done
