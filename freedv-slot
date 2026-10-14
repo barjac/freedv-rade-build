@@ -7,6 +7,7 @@
 #
 #   freedv-slot              list slots, marking the selected one
 #   freedv-slot list         same
+#   freedv-slot names        print the slot names, one per line (for scripts)
 #   freedv-slot current      print the selected slot's name
 #   freedv-slot select NAME  point ~/freedv-rade at slot NAME
 #   freedv-slot off          leave slot mode: remove the ~/freedv-rade link
@@ -18,12 +19,26 @@
 #                            (default: the slot remembered by 'off')
 #
 # Slots are created with mk-slot.
+#
+# The slots folder is $FREEDV_SLOTS_DIR if set, else the folder the
+# ~/freedv-rade link points into, else the one remembered by 'off', else
+# /rade-slots if it exists, else ~/freedv-slots.
 
-SLOTS_DIR=${FREEDV_SLOTS_DIR:-/rade-slots}
 LINK="$HOME/freedv-rade"
+LAST="$HOME/.freedv-slot"     # line 1: slot remembered by 'off', line 2: its folder
+if [[ -n $FREEDV_SLOTS_DIR ]]; then
+    SLOTS_DIR=$FREEDV_SLOTS_DIR
+elif [[ -L $LINK ]]; then
+    SLOTS_DIR=$(dirname "$(readlink "$LINK")")
+elif [[ -n $(sed -n 2p "$LAST" 2>/dev/null) ]]; then
+    SLOTS_DIR=$(sed -n 2p "$LAST")
+elif [[ -d /rade-slots ]]; then
+    SLOTS_DIR=/rade-slots
+else
+    SLOTS_DIR="$HOME/freedv-slots"
+fi
 INDEX="$HOME/freedv-rade-build/.build_index"
 NORMAL="$HOME/freedv-rade.normal"
-LAST="$HOME/.freedv-slot"
 OFF="$HOME/.freedv-slot-off"   # present while slot mode is switched off
 
 die() { echo "freedv-slot: $*" >&2; exit 1; }
@@ -50,6 +65,14 @@ current() {
 }
 
 is_slot() { [[ -d "$SLOTS_DIR/$1/freedv-gui" ]]; }
+
+names() {
+    local d
+    for d in "$SLOTS_DIR"/*/; do
+        is_slot "$(basename "$d")" && basename "$d"
+    done
+    return 0
+}
 
 list() {
     [[ -d "$SLOTS_DIR" ]] || die "$SLOTS_DIR not found (partition not mounted?)"
@@ -101,7 +124,7 @@ slots_off() {
     fi
     local cur
     cur=$(current)
-    [[ -n "$cur" ]] && echo "$cur" > "$LAST"
+    [[ -n "$cur" ]] && printf '%s\n%s\n' "$cur" "$SLOTS_DIR" > "$LAST"
     rm -f "$LINK" || die "could not remove $LINK"
     touch "$OFF"
     echo "Slot mode off: removed $LINK${cur:+ (was slot '$cur', remembered for 'on')}."
@@ -116,7 +139,7 @@ slots_off() {
 slots_on() {
     local name=${1:-}
     if [[ -z "$name" ]]; then
-        [[ -f "$LAST" ]] && name=$(cat "$LAST")
+        [[ -f "$LAST" ]] && name=$(sed -n 1p "$LAST")
         [[ -n "$name" ]] || die "usage: freedv-slot on NAME (no remembered slot)"
     fi
     is_slot "$name" || die "no slot '$name' in $SLOTS_DIR"
@@ -136,10 +159,11 @@ slots_on() {
 
 case "${1:-list}" in
     list)    list ;;
+    names)   names ;;
     current) current || die "no slot selected" ;;
     select)  select_slot "$2" ;;
     off)     slots_off ;;
     on)      slots_on "$2" ;;
-    -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+    -h|--help|help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//' ;;
     *)       die "unknown command '$1' (try --help)" ;;
 esac

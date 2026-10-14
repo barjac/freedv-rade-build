@@ -1612,7 +1612,7 @@ ask_station() {
 write_freedv_conf() {
     local conf="$RADIO_DIR/freedv.conf"
     # Only a FreeDV using this radio's config matters (it saves over it on
-    # exit). The prefix also covers freedv-v2.conf.
+    # exit). The prefix also covers the slots' freedv-<slot>.conf.
     while pgrep -f -- "freedv -f $RADIO_DIR/freedv" >/dev/null; do
         warn "FreeDV is running for this radio. Its settings can't be changed while it runs."
         pause "Please close FreeDV, then press Enter... "
@@ -1661,11 +1661,12 @@ write_freedv_conf() {
     fi
     log "Updated $conf (FreeDV's own settings for this radio)"
 
-    # A RADE V2 build has its own copy, freedv-v2.conf (see the start
-    # script). Keep the settings managed here the same in it; the rest,
-    # such as the TX level, stays that build's own.
-    local v2="$RADIO_DIR/freedv-v2.conf" key val
-    if [[ -f $v2 ]]; then
+    # Each build slot has its own copy, freedv-<slot>.conf (see the start
+    # script). Keep the settings managed here the same in them; the rest,
+    # such as the TX level, stays that slot's own.
+    local sc key val
+    for sc in "$RADIO_DIR"/freedv-*.conf; do
+        [[ -f $sc ]] || continue
         for key in Reporting/Callsign Reporting/GridSquare \
                    Audio/soundCard1InDeviceName Audio/soundCard1OutDeviceName \
                    Audio/soundCard2InDeviceName Audio/soundCard2OutDeviceName \
@@ -1674,10 +1675,10 @@ write_freedv_conf() {
                    Hamlib/UseForPTT Hamlib/RigNameStr Hamlib/RigName Hamlib/SerialPort \
                    Hamlib/PttType Rig/UseSerialPTT; do
             val=$(get_ini "$conf" "${key%%/*}" "${key#*/}")
-            [[ -n $val ]] && set_ini "$v2" "${key%%/*}" "${key#*/}" "$val"
+            [[ -n $val ]] && set_ini "$sc" "${key%%/*}" "${key#*/}" "$val"
         done
-        log "Updated $v2 to match (the RADE V2 build's settings)"
-    fi
+        log "Updated $sc to match (a build slot's settings)"
+    done
 }
 
 settings_block() {
@@ -1714,6 +1715,8 @@ write_start_script() {
 # Usage:  start [FreeDV options]
 #         start --test    set up the sound only, check it, then tidy up
 #         start --links   the same, then save the links fixed in qpwgraph
+#         start --slot NAME [...]   first select FreeDV build slot NAME
+#                                   (see freedv-slot), then as above
 #
 # Extras: executable scripts hooks/before-freedv and hooks/after-freedv in
 # this folder are run before FreeDV starts and after it closes, and a file
@@ -1725,31 +1728,16 @@ EOF
 
 RADIO_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 LINKS="$RADIO_DIR/links"
-# The filter follows the FreeDV build: Fdv-bpf-1k for a RADE V2 build (it has
-# the RADEV2 mode), Fdv-bpf otherwise. Its PipeWire node is named after the
-# program; the links file calls it Fdv-bpf either way.
-FREEDV_BIN="$FREEDV_DIR/freedv-gui/build_linux/src/freedv"
-if [[ $BPF != none && -n $BPF_BIN ]]; then
-    BPF_BIN=${BPF_BIN%-1k}
-    grep -qa RADEV2 "$FREEDV_BIN" 2>/dev/null && BPF_BIN="$BPF_BIN-1k"
-fi
-BPF_NODE=${BPF_BIN##*/}
-CONF="$RADIO_DIR/freedv.conf"
-# A RADE V2 build keeps its own FreeDV settings (it needs a different TX
-# level, for one), made from freedv.conf the first time. Re-running the
-# setup keeps the sound, rig and station settings the same in both.
-if grep -qa RADEV2 "$FREEDV_BIN" 2>/dev/null; then
-    CONF="$RADIO_DIR/freedv-v2.conf"
-    if [[ ! -f $CONF && -f $RADIO_DIR/freedv.conf ]]; then
-        cp "$RADIO_DIR/freedv.conf" "$CONF"
-        echo "RADE V2 build: its settings are now kept separately in freedv-v2.conf"
-        echo "(copied from freedv.conf). Check its TX level in FreeDV."
-    fi
-fi
 VOLS="$RADIO_DIR/volumes.db"
 SINKS=(FDV_RX_in FDV_RX_out FDV_TX_in FDV_TX_out)
+SLOT_TOOL="$HOME/freedv-rade-build/freedv-slot"
 
-TEST=0 EDIT_LINKS=0
+TEST=0 EDIT_LINKS=0 SLOT=""
+if [[ $1 == --slot ]]; then
+    SLOT=$2
+    [[ -n $SLOT ]] || { echo "Usage: start --slot NAME [--test|--links] [FreeDV options]"; exit 1; }
+    shift 2
+fi
 [[ $1 == --test ]] && { TEST=1; shift; }
 [[ $1 == --links ]] && { TEST=1; EDIT_LINKS=1; shift; }
 
@@ -1768,7 +1756,38 @@ if ! flock -n 9; then
     [[ -t 0 ]] && read -r -p "Press Enter to close this window. " _
     exit 1
 fi
-echo "$RADIO_LABEL" > "$LOCK.radio"
+
+# Build slots: with more than one FreeDV build (e.g. RADE V1 and V2), each
+# is a slot and ~/freedv-rade points at the selected one. --slot selects
+# one; without it the selected slot is used. Each slot keeps its own FreeDV
+# settings for this radio (it may need a different TX level, for one), made
+# from freedv.conf the first time. Re-running the setup keeps the sound, rig
+# and station settings the same in all of them.
+if [[ -n $SLOT ]] && ! "$SLOT_TOOL" select "$SLOT"; then
+    [[ -t 0 ]] && read -r -p "Press Enter to close this window. " _
+    exit 1
+fi
+[[ -x $SLOT_TOOL ]] && SLOT=$("$SLOT_TOOL" current 2>/dev/null)
+echo "$RADIO_LABEL${SLOT:+ ($SLOT)}" > "$LOCK.radio"
+
+# The filter follows the FreeDV build: Fdv-bpf-1k for a RADE V2 build (it has
+# the RADEV2 mode), Fdv-bpf otherwise. Its PipeWire node is named after the
+# program; the links file calls it Fdv-bpf either way.
+FREEDV_BIN="$FREEDV_DIR/freedv-gui/build_linux/src/freedv"
+if [[ $BPF != none && -n $BPF_BIN ]]; then
+    BPF_BIN=${BPF_BIN%-1k}
+    grep -qa RADEV2 "$FREEDV_BIN" 2>/dev/null && BPF_BIN="$BPF_BIN-1k"
+fi
+BPF_NODE=${BPF_BIN##*/}
+CONF="$RADIO_DIR/freedv.conf"
+if [[ -n $SLOT ]]; then
+    CONF="$RADIO_DIR/freedv-$SLOT.conf"
+    if [[ ! -f $CONF && -f $RADIO_DIR/freedv.conf ]]; then
+        cp "$RADIO_DIR/freedv.conf" "$CONF"
+        echo "First start of build slot $SLOT for this radio: its FreeDV settings are"
+        echo "kept in freedv-$SLOT.conf (copied from freedv.conf). Check its TX level in FreeDV."
+    fi
+fi
 
 restart_sound() {
     # A restart normally takes a second or two. If it hangs, the sound server
@@ -2117,31 +2136,74 @@ EOF
     log "Wrote $f"
 }
 
-write_launchers() {
-    local link="$LINK_DIR/freedv-radio-$RADIO" desk
-    ln -sfn "$RADIO_DIR/start" "$link"
-    log "Terminal command: $link"
+# slot_names -> the FreeDV build slots, one per line (none without slots)
+slot_names() {
+    local tool="$SCRIPT_DIR/freedv-slot"
+    [[ -L $FREEDV_DIR && -x $tool ]] || return 0
+    "$tool" current &>/dev/null || return 0
+    "$tool" names 2>/dev/null
+}
 
-    mkdir -p "$DESKTOP_DIR" "$APPS_DIR"
-    desk="$DESKTOP_DIR/freedv-radio-$RADIO.desktop"
-    cat > "$desk" <<EOF
+# icons_text -> "the 'FreeDV radio X' desktop icon" or the per-slot ones
+icons_text() {
+    local -a slots
+    mapfile -t slots < <(slot_names)
+    if ((${#slots[@]})); then
+        echo "the 'FreeDV radio $RADIO_LABEL <slot>' desktop icons (${slots[*]})"
+    else
+        echo "the 'FreeDV radio $RADIO_LABEL' desktop icon"
+    fi
+}
+
+# write_desktop FILE NAME EXEC SLOT
+write_desktop() {
+    cat > "$1" <<EOF
 [Desktop Entry]
 Version=1.0
-Name=FreeDV radio $RADIO_LABEL
-Exec=$RADIO_DIR/start
+Name=$2
+Exec=$3
 Icon=$RUN_DIR/freedv.png
 Type=Application
 Terminal=true
 Categories=AudioVideo;Audio;HamRadio;
-Comment=FreeDV for radio $RADIO_LABEL (made by freedv-rade-setup)
+Comment=$2 (made by freedv-rade-setup)
 Keywords=Radio;HAM;HF;RF;codec2;voice;modem;
 StartupWMClass=freedv
+X-FreeDV-Radio=$RADIO
+X-FreeDV-Slot=$4
 EOF
-    chmod +x "$desk"
-    gio set "$desk" metadata::trusted true 2>/dev/null || true
-    cp "$desk" "$APPS_DIR/"
+    chmod +x "$1"
+    gio set "$1" metadata::trusted true 2>/dev/null || true
+    cp "$1" "$APPS_DIR/"
+}
+
+# One desktop icon for the radio, or with build slots one per slot
+# ("FreeDV radio TS-450S v1"). Icons for slots that are gone are removed.
+write_launchers() {
+    local link="$LINK_DIR/freedv-radio-$RADIO" f slot
+    local -a slots
+    ln -sfn "$RADIO_DIR/start" "$link"
+    log "Terminal command: $link"
+
+    mapfile -t slots < <(slot_names)
+    mkdir -p "$DESKTOP_DIR" "$APPS_DIR"
+    for f in "$DESKTOP_DIR"/freedv-radio-*.desktop "$APPS_DIR"/freedv-radio-*.desktop; do
+        [[ -f $f ]] && grep -qxF "X-FreeDV-Radio=$RADIO" "$f" && rm -f "$f"
+    done
+    # icons made before X-FreeDV-Radio existed
+    rm -f "$DESKTOP_DIR/freedv-radio-$RADIO.desktop" "$APPS_DIR/freedv-radio-$RADIO.desktop"
+    if ((${#slots[@]})); then
+        for slot in "${slots[@]}"; do
+            write_desktop "$DESKTOP_DIR/freedv-radio-$RADIO-$slot.desktop" \
+                "FreeDV radio $RADIO_LABEL $slot" "$RADIO_DIR/start --slot $slot" "$slot"
+            log "Desktop icon: FreeDV radio $RADIO_LABEL $slot"
+        done
+    else
+        write_desktop "$DESKTOP_DIR/freedv-radio-$RADIO.desktop" \
+            "FreeDV radio $RADIO_LABEL" "$RADIO_DIR/start" ""
+        log "Desktop icon: FreeDV radio $RADIO_LABEL"
+    fi
     command -v update-desktop-database &>/dev/null && update-desktop-database "$APPS_DIR" 2>/dev/null
-    log "Desktop icon: FreeDV radio $RADIO_LABEL"
 
     # pw-link-ls: lists the current links, e.g. for checking by hand
     if [[ -f $SCRIPT_DIR/pw-link-ls ]]; then
@@ -2156,8 +2218,8 @@ finish() {
     write_freedv_conf
     write_start_script
     write_launchers
-    say "Saved for $RADIO_LABEL: the sound links ($(grep -c . "$RADIO_DIR/links" 2>/dev/null)), FreeDV settings, start script and the"
-    say "'FreeDV radio $RADIO_LABEL' desktop icon. Details are in the log."
+    say "Saved for $RADIO_LABEL: the sound links ($(grep -c . "$RADIO_DIR/links" 2>/dev/null)), FreeDV settings, start script and"
+    say "$(icons_text). Details are in the log."
 }
 
 test_sound() {
@@ -2328,5 +2390,9 @@ else
     done
 fi
 
-say "\nAll done. Start FreeDV for this radio with the 'FreeDV radio $RADIO_LABEL' desktop"
-say "icon, or in a terminal with:  ~/freedv-radio-$RADIO"
+say "\nAll done. Start FreeDV for this radio with $(icons_text),"
+if [[ -n $(slot_names) ]]; then
+    say "or in a terminal with:  ~/freedv-radio-$RADIO --slot NAME"
+else
+    say "or in a terminal with:  ~/freedv-radio-$RADIO"
+fi

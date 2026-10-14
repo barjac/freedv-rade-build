@@ -18,7 +18,17 @@
 # The new slot is not selected; use freedv-slot select NEW, or start it with
 # ~/freedv-start-slot NEW.
 
-SLOTS_DIR=${FREEDV_SLOTS_DIR:-/rade-slots}
+# Same slots folder as freedv-slot: $FREEDV_SLOTS_DIR, else where the
+# ~/freedv-rade link points into, else /rade-slots, else ~/freedv-slots.
+if [[ -n $FREEDV_SLOTS_DIR ]]; then
+    SLOTS_DIR=$FREEDV_SLOTS_DIR
+elif [[ -L $HOME/freedv-rade ]]; then
+    SLOTS_DIR=$(dirname "$(readlink "$HOME/freedv-rade")")
+elif [[ -d /rade-slots ]]; then
+    SLOTS_DIR=/rade-slots
+else
+    SLOTS_DIR="$HOME/freedv-slots"
+fi
 CONF_DIR="$HOME/.config/freedv"
 
 die() { echo "mk-slot: $*" >&2; exit 1; }

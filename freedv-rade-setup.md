@@ -92,12 +92,16 @@ appear between the FDV_ boxes:
 Running it again later lets you test or change a radio (sound card, headset,
 rig control, filter), or set up another radio.
 
-If you switch between a RADE V1 and a RADE V2 build of FreeDV (e.g. with
-freedv-rade-update's Switch), each keeps its own FreeDV settings for the
-radio: `freedv.conf` for V1, `freedv-v2.conf` for V2, so things like the TX
-level can differ. `freedv-v2.conf` is copied from `freedv.conf` the first
-time a V2 build starts. Running the setup again keeps the sound, rig control
-and station settings the same in both.
+If you have more than one FreeDV build in slots (see `freedv-slot --help`, e.g. `v1`
+for RADE V1 and `v2` for RADE V2), the setup makes one icon per slot for
+the radio ("FreeDV radio *name* v1", "... v2"); in a terminal use
+`~/freedv-radio-name --slot v1`. Each slot keeps its own FreeDV settings for
+the radio, `freedv-v1.conf`, `freedv-v2.conf` and so on, so things like the
+TX level can differ. Each is copied from the radio's `freedv.conf` the first
+time that slot starts, so check its TX level then. Running the setup again
+keeps the sound, rig control and station settings the same in all of them,
+and adds or removes icons to match the slots. Without slots there is one
+icon and `freedv.conf`, as before.
 
 ## If something goes wrong
 
