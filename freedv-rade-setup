@@ -2384,7 +2384,8 @@ else
             4) rig_step; finish ;;
             5) bpf_step; finish ;;
             6) edit_links ;;
-            7) write_start_script; write_launchers ;;
+            7) write_start_script; write_launchers
+               ok "Rewrote the start script and $(icons_text)" ;;
             8) break ;;
         esac
     done
