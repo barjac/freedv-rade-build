@@ -2117,6 +2117,21 @@ if ! [[ -h model19_check3 ]]; then
     ln -s "$(pwd)/rade_src/model19_check3" model19_check3
 fi
 
+# GTK theme: FreeDV draws badly with custom desktop themes (as upstream's
+# AppImage notes), so use Adwaita, dark or light to match the desktop's
+# colour scheme: the desktop portal's setting if it gives one, else GNOME's.
+# A GTK_THEME line in hooks/env (below) overrides this.
+scheme=$(dbus-send --session --dest=org.freedesktop.portal.Desktop --type=method_call --print-reply \
+    --reply-timeout=1000 /org/freedesktop/portal/desktop org.freedesktop.portal.Settings.Read \
+    string:org.freedesktop.appearance string:color-scheme 2>/dev/null | awk 'END { print $NF }')
+case $scheme in
+    1) GTK_THEME=Adwaita:dark ;;
+    2) GTK_THEME=Adwaita:light ;;
+    *) [[ $(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null) == "'prefer-dark'" ]] \
+           && GTK_THEME=Adwaita:dark || GTK_THEME=Adwaita:light ;;
+esac
+export GTK_THEME
+
 # Extra settings for FreeDV, kept when the setup rewrites this script: a
 # file hooks/env with lines such as
 #   export GDK_BACKEND=x11    (X11 under Wayland: keeps window positions,
