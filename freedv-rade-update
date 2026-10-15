@@ -97,12 +97,13 @@ echo "Script is up to date"
 bpf_check() {
     local src="$RUN_DIR/bpf/bpf.c" b
     local -a old=()
+    local failed=0
     [[ -f $src ]] || return 0
     for b in "$HOME/.local/bin/Fdv-bpf" "$HOME/.local/bin/Fdv-bpf-1k"; do
         [[ -x $b && $src -nt $b ]] && old+=("$b")
     done
     (( ${#old[@]} )) || return 0
-    echo -e "\nThe band-pass filter has been updated: ${old[*]##*/} should be rebuilt."
+    echo -e "\nThe band-pass filter needs updating: ${old[*]##*/} should be rebuilt."
     if pgrep -x 'Fdv-bpf|Fdv-bpf-1k' >/dev/null; then
         echo "The filter is running: close FreeDV, then run freedv-rade-update again to rebuild it."
         return 0
@@ -113,8 +114,9 @@ bpf_check() {
             gcc -O3 -DCUTOFF_LOW=981.0 -DCUTOFF_HIGH=1956.0 -o "$b" "$src" -lm -lasound
         else
             gcc -O3 -o "$b" "$src" -lm -lasound
-        fi && echo "Rebuilt $b" || echo "WARNING: $b could not be rebuilt (see the errors above)."
+        fi || { echo "WARNING: $b could not be rebuilt (see the errors above)."; failed=1; }
     done
+    (( failed )) || echo "The band-pass filter(s) have been updated."
 }
 
 # Shown once, wherever the script ends; (A)udio passes it on to freedv-rade-setup
