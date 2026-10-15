@@ -115,27 +115,31 @@ run_as_root() {
 # installs may not have it, and then a restarted PipeWire (the start scripts
 # restart it) can run without realtime priority, so the transmit audio has
 # gaps when the computer is busy. Offer to add the user.
-rt_limit=$(ulimit -r)
-if [[ $rt_limit != unlimited ]] && (( rt_limit < 11 )) \
-   && awk '$1 == "@pipewire" && $3 == "rtprio"' /etc/security/limits.conf /etc/security/limits.d/*.conf 2>/dev/null | grep -q . \
-   && getent group pipewire >/dev/null; then
-    if id -nG "$user" | grep -qw pipewire; then
-        echo -e "\nNOTE: $user is in the pipewire group, which gives the sound server realtime"
-        echo "priority, but that only takes effect after a reboot. Please reboot before using FreeDV."
-    else
-        echo -e "\nThe sound server (PipeWire) can't have realtime priority, so FreeDV's transmit"
-        echo "audio can have gaps when the computer is busy. That needs $user in the pipewire group."
-        if confirm "Add $user to the pipewire group now (needs the root password)?" "[Y/n]" "Yy" "Nn"; then
-            if run_as_root "PATH=/usr/sbin:/sbin:\$PATH usermod -aG pipewire '$user'"; then
-                echo -e "\n####  $user has been added to the pipewire group, please reboot before using FreeDV  ####\n"
-            else
-                echo "WARNING: $user could not be added to the pipewire group."
-            fi
+# Called just before the first menu, so the screen clears don't hide it.
+rt_check() {
+    local rt_limit
+    rt_limit=$(ulimit -r)
+    if [[ $rt_limit != unlimited ]] && (( rt_limit < 11 )) \
+       && awk '$1 == "@pipewire" && $3 == "rtprio"' /etc/security/limits.conf /etc/security/limits.d/*.conf 2>/dev/null | grep -q . \
+       && getent group pipewire >/dev/null; then
+        if id -nG "$user" | grep -qw pipewire; then
+            echo -e "\nNOTE: $user is in the pipewire group, which gives the sound server realtime"
+            echo "priority, but that only takes effect after a reboot. Please reboot before using FreeDV."
         else
-            echo "WARNING: No realtime priority for the sound server: the transmit audio may have gaps."
+            echo -e "\nThe sound server (PipeWire) can't have realtime priority, so FreeDV's transmit"
+            echo "audio can have gaps when the computer is busy. That needs $user in the pipewire group."
+            if confirm "Add $user to the pipewire group now (needs the root password)?" "[Y/n]" "Yy" "Nn"; then
+                if run_as_root "PATH=/usr/sbin:/sbin:\$PATH usermod -aG pipewire '$user'"; then
+                    echo -e "\n####  $user has been added to the pipewire group, please reboot before using FreeDV  ####\n"
+                else
+                    echo "WARNING: $user could not be added to the pipewire group."
+                fi
+            else
+                echo "WARNING: No realtime priority for the sound server: the transmit audio may have gaps."
+            fi
         fi
     fi
-fi
+}
 
 # (A)udio & radio setup: hand over to freedv-rade-setup, which was updated
 # along with this project just above.
@@ -714,6 +718,8 @@ else
 fi
 (( slotmode != 1 )) && [[ -d ${basedir}/freedv-rade_bak ]] && show_dir_build "Backup " "${basedir}/freedv-rade_bak"
 echo ""
+
+rt_check
 
 if grep -q venv < ~/freedv-start; then
     echo "*************************** Your system is using a Python based version of FreeDV RADE."
