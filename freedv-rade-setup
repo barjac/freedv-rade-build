@@ -501,6 +501,22 @@ card_desc() {
 
 # card_ident CARD -> "VENDOR:PRODUCT SERIAL" of a USB card (empty otherwise).
 # The start script compares it with the card it finds in the same socket.
+# card_hw CARD -> the sound card's own name (e.g. "GeneralPlus USB Audio
+# Device"). The setup's names ("Radio", "Headset") belong to the USB socket,
+# so they don't say which device is plugged in there now.
+card_hw() {
+    local h
+    h=$(card_prop "$1" alsa.long_card_name)
+    h=${h%% at *}
+    echo "${h:-$(card_prop "$1" alsa.card_name)}"
+}
+# card_label CARD -> "Radio - GeneralPlus USB Audio Device  (alsa_card.frs-radio)"
+card_label() {
+    local d h
+    d=$(card_desc "$1"); h=$(card_hw "$1")
+    [[ -n $h && $h != "$d" ]] && d+=" - $h"
+    echo "$d  ($1)"
+}
 card_ident() {
     [[ $(card_prop "$1" device.bus) == usb ]] || return 0
     echo "$(card_prop "$1" device.vendor.id):$(card_prop "$1" device.product.id) $(card_prop "$1" device.serial)"
@@ -611,7 +627,7 @@ set_aside_rules() {
     mapfile -t files <<<"$3"
     [[ $role == headset ]] && other_role=radio
     name="${card#alsa_card.} $(card_desc "$card")"
-    say "This card already has a name, \"$(card_desc "$card")\" ($card), from:"
+    say "This card already has a name, \"$(card_desc "$card")\" ($card - $(card_hw "$card")), from:"
     for f in "${files[@]}"; do say "  $f"; done
     if [[ $role == headset && ${name,,} =~ radio|rig ]] \
        || [[ $role == radio && ${name,,} =~ headset|mic|phone ]]; then
@@ -1016,12 +1032,12 @@ detect_plugin() {
     else
         local -a items=()
         local c
-        for c in "${new_cards[@]}"; do items+=("$(card_desc "$c")  ($c)"); done
+        for c in "${new_cards[@]}"; do items+=("$(card_label "$c")"); done
         say "More than one new sound card appeared:"
         choose "Which one is it?" 1 "${items[@]}"
         NEW_CARD=${new_cards[CHOICE-1]}
     fi
-    say "Found sound card: $(card_desc "$NEW_CARD")  ($NEW_CARD)"
+    say "Found sound card: $(card_label "$NEW_CARD")"
 
     if ((${#new_serial[@]} == 1)); then
         NEW_SERIAL="/dev/serial/by-id/${new_serial[0]}"
@@ -1043,7 +1059,7 @@ pick_card() {
     local c
     mapfile -t cards < <(list_cards)
     ((${#cards[@]})) || { warn "No sound cards found."; return 1; }
-    for c in "${cards[@]}"; do items+=("$(card_desc "$c")  ($c)"); done
+    for c in "${cards[@]}"; do items+=("$(card_label "$c")"); done
     choose "$1" 1 "${items[@]}"
     PICKED_CARD=${cards[CHOICE-1]}
 }
@@ -1121,16 +1137,18 @@ name_card() {
 }
 
 # Lists for choosing nodes: "name<TAB>description"
-list_sinks_desc() {
-    LC_ALL=C pactl list sinks 2>/dev/null | awk '
+# list_sinks_desc / list_sources_desc -> NAME<tab>DESCRIPTION<tab>CARD'S OWN NAME
+list_nodes_desc() {
+    LC_ALL=C pactl list "$1" 2>/dev/null | awk '
+        function out() { if (n != "" && n !~ /\.monitor$/) print n "\t" d "\t" h }
+        /^[^\t]/ { out(); n = d = h = "" }
         /^\tName: / { n = $2 }
-        /^\tDescription: / { sub(/^\tDescription: /, ""); print n "\t" $0 }'
+        /^\tDescription: / { d = $0; sub(/^\tDescription: /, "", d) }
+        /^\t\talsa\.long_card_name = / { h = $0; sub(/^[^"]*"/, "", h); sub(/"$/, "", h); sub(/ at .*/, "", h) }
+        END { out() }'
 }
-list_sources_desc() {
-    LC_ALL=C pactl list sources 2>/dev/null | awk '
-        /^\tName: / { n = $2 }
-        /^\tDescription: / { sub(/^\tDescription: /, ""); if (n !~ /\.monitor$/) print n "\t" $0 }'
-}
+list_sinks_desc()   { list_nodes_desc sinks; }
+list_sources_desc() { list_nodes_desc sources; }
 
 # pick_node PROMPT sinks|sources|apps-out|apps-in [none] -> PICKED_NODE ("" for none)
 pick_node() {
@@ -1143,7 +1161,9 @@ pick_node() {
         apps-in)  mapfile -t lines < <(pw-link -i 2>/dev/null | cut -d: -f1 | sort -u | sed 's/$/\t/') ;;
     esac
     for line in "${lines[@]}"; do
-        local n=${line%%$'\t'*} d=${line#*$'\t'}
+        local n=${line%%$'\t'*} d=${line#*$'\t'} h=""
+        [[ $d == *$'\t'* ]] && { h=${d#*$'\t'}; d=${d%%$'\t'*}; }
+        [[ -n $h && $h != "$d" ]] && d+="${d:+ - }$h"
         [[ " ${FDV_SINKS[*]} " == *" $n "* || $n == Fdv-bpf* ]] && continue
         # the radio's own sound card is never the headset or speakers
         if [[ $kind == sinks || $kind == sources ]]; then
