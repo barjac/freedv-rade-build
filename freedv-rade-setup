@@ -133,7 +133,14 @@ say() {
 }
 ok()   { say "  OK    $*"; }
 warn() { say "WARNING: $*"; }
-die()  { say "\nERROR: $*"; screen "\nFull details are in $LOGFILE"; exit 1; }
+die()  { say "\nERROR: $*"; rt_reboot_note; screen "\nFull details are in $LOGFILE"; exit 1; }
+# rt_reboot_note -> the reminder to reboot, at the end, after rt_check added
+# the user to the pipewire group (here or in freedv-rade-update)
+rt_reboot_note() {
+    ((${RT_REBOOT:-0})) || return 0
+    say "\n####  For realtime audio, $USER is now in the pipewire group: please reboot before using FreeDV  ####"
+    RT_REBOOT=0
+}
 heading() { ((GAP)) || say ""; say "==================== $* ====================\n"; }
 
 # Why 'pactl info' failed, and what to do about it
@@ -720,16 +727,14 @@ rt_check() {
         return
     fi
     if id -nG "$USER" | tr ' ' '\n' | grep -qxF pipewire; then
-        warn "You are in the pipewire group, which gives the sound server realtime"
-        say "  priority, but that only takes effect after a reboot. Please reboot"
-        say "  before using FreeDV."
+        ok "In the pipewire group, for realtime priority (after a reboot)"
+        RT_REBOOT=1
         return
     fi
     say "The sound server does not have realtime priority, so the transmit audio"
     say "can have gaps when the computer is busy. That needs you in the pipewire group."
     if yesno "Add $USER to the pipewire group now (recommended)?" y \
        && root_quiet "Adding $USER to the pipewire group" "PATH=/usr/sbin:/sbin:\$PATH usermod -aG pipewire '$USER'"; then
-        say "This takes effect after a REBOOT. Please reboot before using FreeDV."
         RT_REBOOT=1
     else
         warn "No realtime priority for the sound server: the transmit audio may have gaps."
@@ -2349,9 +2354,9 @@ say "Version $FRS_VERSION"
 say "\nIf you're not sure about a question, press Enter for the recommended answer."
 screen "(Full details of each step go to $LOGFILE)"
 
-RT_REBOOT=0
+RT_REBOOT=${FRS_RT_REBOOT:-0}
 preflight
-((CHECK_ONLY)) && { say "System checks finished."; ((RT_REBOOT)) && say "Please reboot before using FreeDV."; exit 0; }
+((CHECK_ONLY)) && { say "System checks finished."; rt_reboot_note; exit 0; }
 
 mkdir -p "$SETUP_ROOT"
 mapfile -t radios < <(find "$SETUP_ROOT" -mindepth 2 -maxdepth 2 -name start -printf '%h\n' 2>/dev/null | xargs -r -n1 basename | sort)
@@ -2447,10 +2452,10 @@ else
     done
 fi
 
-((RT_REBOOT)) && say "\nYou were added to the pipewire group: please REBOOT before using FreeDV."
 say "\nAll done. Start FreeDV for this radio with $(icons_text),"
 if [[ -n $(slot_names) ]]; then
     say "or in a terminal with:  ~/freedv-radio-$RADIO --slot NAME"
 else
     say "or in a terminal with:  ~/freedv-radio-$RADIO"
 fi
+rt_reboot_note

@@ -91,6 +91,13 @@ fi
 
 echo "Script is up to date"
 
+# Shown once, wherever the script ends; (A)udio passes it on to freedv-rade-setup
+rt_reboot_note() {
+    (( RT_REBOOT )) || return 0
+    echo -e "\n####  For realtime audio, $user is now in the pipewire group: please reboot before using FreeDV  ####"
+    RT_REBOOT=0
+}
+
 # run_as_root COMMAND -> runs COMMAND (a string) as root via sudo, or su when
 # the user can't use sudo (as in freedv-rade-build)
 run_as_root() {
@@ -115,7 +122,9 @@ run_as_root() {
 # installs may not have it, and then a restarted PipeWire (the start scripts
 # restart it) can run without realtime priority, so the transmit audio has
 # gaps when the computer is busy. Offer to add the user.
-# Called just before the first menu, so the screen clears don't hide it.
+# Called just before the first menu, so the screen clears don't hide it. The
+# reminder to reboot comes at the end (rt_reboot_note), as in freedv-rade-build.
+RT_REBOOT=0
 rt_check() {
     local rt_limit
     rt_limit=$(ulimit -r)
@@ -123,14 +132,15 @@ rt_check() {
        && awk '$1 == "@pipewire" && $3 == "rtprio"' /etc/security/limits.conf /etc/security/limits.d/*.conf 2>/dev/null | grep -q . \
        && getent group pipewire >/dev/null; then
         if id -nG "$user" | grep -qw pipewire; then
-            echo -e "\nNOTE: $user is in the pipewire group, which gives the sound server realtime"
-            echo "priority, but that only takes effect after a reboot. Please reboot before using FreeDV."
+            # added already, but not rebooted since
+            RT_REBOOT=1
         else
             echo -e "\nThe sound server (PipeWire) does not have realtime priority, so FreeDV's transmit"
             echo "audio can have gaps when the computer is busy. That needs $user in the pipewire group."
             if confirm "Add $user to the pipewire group now (needs the root password)?" "[Y/n]" "Yy" "Nn"; then
+                echo "Adding $user to group pipewire"
                 if run_as_root "PATH=/usr/sbin:/sbin:\$PATH usermod -aG pipewire '$user'"; then
-                    echo -e "\n####  $user has been added to the pipewire group, please reboot before using FreeDV  ####\n"
+                    RT_REBOOT=1
                 else
                     echo "WARNING: $user could not be added to the pipewire group."
                 fi
@@ -149,7 +159,7 @@ run_setup() {
     # This script's output goes through tee into its own log; the setup keeps
     # its own log, so give it the terminal directly.
     [[ -c /dev/tty ]] && exec </dev/tty >/dev/tty 2>/dev/tty
-    FRS_PAUSE_AT_END=1 exec "$RUN_DIR/freedv-rade-setup"
+    FRS_PAUSE_AT_END=1 FRS_RT_REBOOT=$RT_REBOOT exec "$RUN_DIR/freedv-rade-setup"
 }
 
 
@@ -560,6 +570,7 @@ return $make_exit
 }
 
 bye() {
+rt_reboot_note
 echo -e "\nClosing - Goodbye! :)"
 sleep 1
 flock -u 8 || { echo "Failed to release lock"; exit 1; }
@@ -580,6 +591,7 @@ exit 0
 # exit through this instead so the same pause applies regardless of
 # success or failure.
 pause_and_exit() {
+    rt_reboot_note
     read -r -s -n 1 -p $'\nPress any key to exit...'
     echo
     exit "${1:-1}"
@@ -1320,6 +1332,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
 else
     bye
 fi
+rt_reboot_note
 read -r -s -n 1 -p $'\nPress any key to exit...'
 echo
 bye
