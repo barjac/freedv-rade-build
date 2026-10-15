@@ -113,10 +113,13 @@ else
     exec >>"$LOGFILE" 2>&1
 fi
 
-# Started from freedv-rade-update's (A): its desktop icon's terminal window
-# closes as soon as this script ends, so wait first (however it ends).
+# The reminder to reboot (rt_reboot_note) shows however the setup ends, even
+# on Ctrl+C. Started from freedv-rade-update's (A): its desktop icon's terminal
+# window closes as soon as this script ends, so wait first (however it ends).
 if [[ -n $FRS_PAUSE_AT_END ]] && [[ -c /dev/tty ]]; then
-    trap 'printf "\n" >&3; read -r -p "Press Enter to close this window. " _ </dev/tty 2>&3' EXIT
+    trap 'rt_reboot_note; printf "\n" >&3; read -r -p "Press Enter to close this window. " _ </dev/tty 2>&3' EXIT
+else
+    trap 'rt_reboot_note' EXIT
 fi
 
 ##################### user interface helpers #####################
@@ -138,6 +141,7 @@ die()  { say "\nERROR: $*"; rt_reboot_note; screen "\nFull details are in $LOGFI
 # the user to the pipewire group (here or in freedv-rade-update)
 rt_reboot_note() {
     ((${RT_REBOOT:-0})) || return 0
+    GAP=0   # always a blank line first, even straight after a prompt
     say "\n####  For realtime audio, $USER is now in the pipewire group: please reboot before using FreeDV  ####"
     RT_REBOOT=0
 }

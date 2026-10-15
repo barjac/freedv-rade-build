@@ -97,6 +97,17 @@ rt_reboot_note() {
     echo -e "\n####  For realtime audio, $user is now in the pipewire group: please reboot before using FreeDV  ####"
     RT_REBOOT=0
 }
+# Ctrl+C: show it too (on the terminal, as Ctrl+C also stops the logging tee),
+# and wait for a key so a desktop icon's window doesn't close on it
+rt_on_ctrl_c() {
+    if (( RT_REBOOT )); then
+        rt_reboot_note > /dev/tty 2>&1
+        read -r -s -n 1 -p $'\nPress any key to exit...' < /dev/tty 2> /dev/tty
+        echo > /dev/tty
+    fi
+    exit 130
+}
+trap rt_on_ctrl_c INT
 
 # run_as_root COMMAND -> runs COMMAND (a string) as root via sudo, or su when
 # the user can't use sudo (as in freedv-rade-build)
