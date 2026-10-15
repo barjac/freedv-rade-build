@@ -2119,6 +2119,8 @@ restart_sound
 echo "Creating FreeDV sinks"
 create_sinks
 start_bpf
+# waiting for a missing sound card can take a while
+((TEST)) || echo "Starting FreeDV..."
 fix_bpf_ports
 wait_for_nodes
 check_cards
