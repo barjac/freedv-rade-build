@@ -596,6 +596,64 @@ rule_nodes() {
 }
 
 # free_rule_id ROLE -> radio, radio2, radio3 ... (the first one not in use)
+rule_bp()   { sed -n 's/.*device\.bus-path"\{0,1\} *[,=] *\("equals", *\)\{0,1\}"\([^"]*\)".*/\2/p' "$1" | head -1; }
+rule_stem() { sed -n 's/.*"alsa_card\.\([^"]*\)".*/\1/p' "$1" | head -1; }
+# role_rule ROLE -> the rule file with the names this radio uses for ROLE now
+# (or, for a new radio, the plain "radio" / "headset" one)
+role_rule() {
+    local node f
+    [[ $1 == radio ]] && node=$RADIO_RX_NODE || node=$MIC_NODE_WAS
+    while read -r f; do
+        if [[ -n $node ]]; then
+            [[ " $(rule_nodes "$f") " == *" $node "* ]] && { echo "$f"; return 0; }
+        elif [[ $(rule_id "$f") == "$1" ]]; then
+            echo "$f"; return 0
+        fi
+    done < <(rule_files)
+    return 1
+}
+# socket_card BUS-PATH -> the card in that USB socket now, if any
+socket_card() {
+    local c
+    for c in $(list_cards); do
+        [[ $(card_prop "$c" device.bus_path) == "$1" ]] && { echo "$c"; return; }
+    done
+}
+socket_hw() { local c; c=$(socket_card "$1") && [[ -n $c ]] && card_hw "$c"; }
+# offer_swap ROLE RULE BUS-PATH -> the chosen card's socket (RULE) has the
+# other role's names. When ROLE's names are on another socket, as after the
+# cards were swapped round (or, in a VM, attached in the other order), offer
+# to swap the two sockets' names. Sets SWAPPED_RULE to ROLE's rule.
+offer_swap() {
+    local role=$1 f=$2 bp=$3 t tbp hw users a b
+    t=$(role_rule "$role") && [[ $t != "$f" ]] || return 1
+    tbp=$(rule_bp "$t"); [[ -n $tbp && $tbp != "$bp" ]] || return 1
+    hw=$(socket_hw "$tbp")
+    read -r a b <<<"$(rule_nodes "$f")"
+    if [[ $role == radio ]]; then
+        say "This card's USB socket has the headset's names ($a, $b), and the radio's"
+    else
+        say "This card's USB socket has the radio's names ($a, $b), and the headset's"
+    fi
+    say "names ($(rule_nodes "$t" | sed 's/ $//; s/ /, /')) are on another USB socket, holding ${hw:-no card now}."
+    say "If the two cards were swapped round, their names can be swapped to match."
+    users=$(node_users $a $b $(rule_nodes "$t"))
+    [[ -n $users ]] && say "(Radio $users uses these names too, so it follows the swap.)"
+    yesno "Swap the names of the two sockets?" y || return 1
+    a=$(<"$f"); b=$(<"$t")
+    printf '%s\n' "${a//\"$bp\"/\"$tbp\"}" > "$f"
+    printf '%s\n' "${b//\"$tbp\"/\"$bp\"}" > "$t"
+    log "swapped sockets: $f -> $tbp, $t -> $bp"
+    say "Swapped."
+    restart_wireplumber
+    read -r a b <<<"$(rule_nodes "$t")"
+    wait_node "$a" 10 || wait_node "$b" 5
+    # the other role's names now belong to the card in the other socket
+    a=$(socket_card "$tbp"); a=${a:+$(card_ident "$a")}
+    if [[ $role == radio && -n $MIC_CARD_ID ]]; then MIC_CARD_ID=$a
+    elif [[ $role != radio && -n $RADIO_CARD_ID ]]; then RADIO_CARD_ID=$a; fi
+    SWAPPED_RULE=$t
+}
 free_rule_id() {
     local n=1 id=$1
     while [[ -f $WP_LUA_DIR/60-freedv-rade-setup-$id.lua || -f $WP_CONF_DIR/60-freedv-rade-setup-$id.conf ]]; do
@@ -1080,12 +1138,19 @@ name_card() {
         id=$(rule_id "$f")
         read -r pref_in pref_out <<<"$(rule_nodes "$f")"
         if [[ $id != "$role" && ! $id =~ ^$role[0-9]+$ && ! ( $role == radio && $id == radio-* ) ]]; then
-            if [[ $id == radio* ]]; then say "This card is already set up as a radio sound card."
-            else say "This card is already set up as a headset."; fi
-            # the headset steps carry on with the card's current names
-            ROLE_IN=$(resolve_node "$pref_in" "$stem" input)
-            ROLE_OUT=$(resolve_node "$pref_out" "$stem" output)
-            return 2
+            if ! offer_swap "$role" "$f" "$bp"; then
+                if [[ $id == radio* ]]; then say "This card is already set up as a radio sound card."
+                else say "This card is already set up as a headset."; fi
+                # the headset steps carry on with the card's current names
+                ROLE_IN=$(resolve_node "$pref_in" "$stem" input)
+                ROLE_OUT=$(resolve_node "$pref_out" "$stem" output)
+                return 2
+            fi
+            # this card now has ROLE's names
+            f=$SWAPPED_RULE
+            id=$(rule_id "$f")
+            read -r pref_in pref_out <<<"$(rule_nodes "$f")"
+            stem=$(rule_stem "$f")
         fi
         # This socket already has a name: use it (shared with other radios)
         say "This card already has fixed names: $pref_in, $pref_out"
@@ -1268,6 +1333,7 @@ name_chosen_headset() {
 
 headset_step() {
     heading "Microphone, headphones and speakers"
+    MIC_NODE_WAS=$MIC_NODE   # for offer_swap
     MIC_NODE=""; MIC_CARD_ID=""; PHONES_NODE=""; SPEAKER_NODE=""
     # ESC (or "not unplugged") while detecting comes back to this question
     while true; do
