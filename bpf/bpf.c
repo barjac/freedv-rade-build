@@ -13,8 +13,21 @@
  *   V2: 14 carriers x 62.5 Hz, 1062.5-1875 Hz, occupied 1031-1906 Hz, centre 1468.75 Hz
  * The V2 cutoffs match RADE's own V2 receive BPF (rade_rx_v2.c).
  *
- * 48 kHz is requested. As a safety net, the filter is designed at the rate
+ * The filter normally runs inside PipeWire: the program writes the filter
+ * as an impulse response (a 48 kHz float WAV) and a filter-chain config to
+ * $XDG_RUNTIME_DIR, then runs "pipewire -c" on that config as a child. The
+ * filter-chain's convolver does the filtering in PipeWire's real-time data
+ * thread, so it can't fall behind the way a separate process reading and
+ * writing ALSA can (on a busy Raspberry Pi 4 that dropped blocks of the
+ * transmit audio). Stopping the program stops the filter-chain.
+ *
+ * Without the filter-chain (an old PipeWire, or "--alsa" given), it filters
+ * in its own process through PipeWire's ALSA device instead. There, 48 kHz
+ * is requested and, as a safety net, the filter is designed at the rate
  * ALSA actually gives, with a warning if that isn't 48 kHz.
+ *
+ * Either way the PipeWire nodes are named after the program (Fdv-bpf,
+ * Fdv-bpf-1k), with mono ports input_MONO and output_MONO.
  */
 
 #include <stdio.h>
@@ -23,6 +36,11 @@
 #include <math.h>
 #include <signal.h>
 #include <unistd.h>
+#include <errno.h>
+#include <stdint.h>
+#include <time.h>
+#include <sys/prctl.h>
+#include <sys/wait.h>
 #include <alsa/asoundlib.h>
 
 #define SAMPLE_RATE 48000
@@ -232,6 +250,139 @@ static int open_pcm(snd_pcm_t **handle, snd_pcm_stream_t stream)
     return err;
 }
 
+/* ── Filter-chain mode ───────────────────────────────────────────────── */
+
+static volatile pid_t chain_pid;
+
+static void chain_signal_handler(int sig) {
+    if (chain_pid > 0)
+        kill(chain_pid, sig);
+}
+
+static void put_le(FILE *f, uint32_t v, int bytes) {
+    for (int i = 0; i < bytes; i++)
+        fputc((v >> (8 * i)) & 0xff, f);
+}
+
+// Mono 32-bit float WAV
+static int write_ir_wav(const char *path, const float *taps, int n, int rate) {
+    FILE *f = fopen(path, "wb");
+    if (!f) return -1;
+    uint32_t data = (uint32_t)n * 4;
+    fputs("RIFF", f); put_le(f, 4 + 26 + 12 + 8 + data, 4); fputs("WAVE", f);
+    fputs("fmt ", f); put_le(f, 18, 4);
+    put_le(f, 3, 2);                // WAVE_FORMAT_IEEE_FLOAT
+    put_le(f, 1, 2);                // channels
+    put_le(f, rate, 4);
+    put_le(f, rate * 4, 4);         // bytes per second
+    put_le(f, 4, 2);                // block align
+    put_le(f, 32, 2);               // bits per sample
+    put_le(f, 0, 2);                // no extension
+    fputs("fact", f); put_le(f, 4, 4); put_le(f, n, 4);
+    fputs("data", f); put_le(f, data, 4);
+    fwrite(taps, sizeof(float), n, f);
+    return fclose(f) == 0 ? 0 : -1;
+}
+
+static int write_chain_conf(const char *path, const char *prog, const char *wav) {
+    FILE *f = fopen(path, "w");
+    if (!f) return -1;
+    fprintf(f,
+        "# Written by %s each time it starts.\n"
+        "context.properties = { log.level = 0 }\n"
+        "context.spa-libs = {\n"
+        "    audio.convert.* = audioconvert/libspa-audioconvert\n"
+        "    support.*       = support/libspa-support\n"
+        "}\n"
+        "context.modules = [\n"
+        "    { name = libpipewire-module-rt flags = [ ifexists nofail ] }\n"
+        "    { name = libpipewire-module-protocol-native }\n"
+        "    { name = libpipewire-module-client-node }\n"
+        "    { name = libpipewire-module-adapter }\n"
+        "    { name = libpipewire-module-filter-chain\n"
+        "        args = {\n"
+        "            node.description = \"%s %.0f-%.0fHz\"\n"
+        "            media.name       = \"%.0f-%.0fHz\"\n"
+        "            filter.graph = {\n"
+        "                nodes = [\n"
+        "                    { type = builtin name = bpf label = convolver\n"
+        "                      config = { filename = \"%s\" } }\n"
+        "                ]\n"
+        "            }\n"
+        "            audio.rate     = %d\n"
+        "            audio.channels = 1\n"
+        "            audio.position = [ MONO ]\n"
+        "            capture.props  = { node.name = \"%s\" node.autoconnect = false }\n"
+        "            playback.props = { node.name = \"%s\" node.autoconnect = false }\n"
+        "        }\n"
+        "    }\n"
+        "]\n",
+        prog, prog, CUTOFF_LOW, CUTOFF_HIGH, CUTOFF_LOW, CUTOFF_HIGH,
+        wav, SAMPLE_RATE, prog, prog);
+    return fclose(f) == 0 ? 0 : -1;
+}
+
+static double now_s(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec + ts.tv_nsec / 1e9;
+}
+
+// Runs the filter as a PipeWire filter-chain until stopped. Returns 0 when
+// it ran and was stopped, -1 if it couldn't start (use the ALSA filter).
+static int run_filter_chain(const char *prog) {
+    const char *dir = getenv("XDG_RUNTIME_DIR");
+    if (!dir || !*dir) dir = "/tmp";
+    char wav[512], conf[512];
+    snprintf(wav, sizeof wav, "%s/%s.wav", dir, prog);
+    snprintf(conf, sizeof conf, "%s/%s.conf", dir, prog);
+
+    float *taps;
+    int n = design_bandpass_filter(&taps, SAMPLE_RATE, CUTOFF_LOW, CUTOFF_HIGH,
+                                   TRANSITION_WIDTH, KAISER_BETA);
+    if (n < 0) return -1;
+    int bad = write_ir_wav(wav, taps, n, SAMPLE_RATE) || write_chain_conf(conf, prog, wav);
+    free(taps);
+    if (bad) {
+        fprintf(stderr, "Cannot write %s or %s: %s\n", wav, conf, strerror(errno));
+        return -1;
+    }
+
+    signal(SIGINT, chain_signal_handler);
+    signal(SIGTERM, chain_signal_handler);
+    fflush(stdout);
+    double start = now_s();
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        // Stop the filter-chain with this program, even if it is killed
+        prctl(PR_SET_PDEATHSIG, SIGTERM);
+        if (getppid() == 1) _exit(0);
+        execlp("pipewire", "pipewire", "-c", conf, (char *)NULL);
+        _exit(127);
+    }
+    chain_pid = pid;
+    printf("Filter running in a PipeWire filter-chain (%s)\n", conf);
+    fflush(stdout);
+
+    int status;
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR)
+        ;
+    chain_pid = 0;
+    signal(SIGINT, SIG_DFL);
+    signal(SIGTERM, SIG_DFL);
+    // Gone within 3s and not because it was told to stop: it never started
+    if (now_s() - start < 3.0 && !(WIFSIGNALED(status)
+            && (WTERMSIG(status) == SIGTERM || WTERMSIG(status) == SIGINT))) {
+        fprintf(stderr, "The PipeWire filter-chain did not start - "
+                        "filtering through ALSA instead\n");
+        return -1;
+    }
+    return 0;
+}
+
+/* ── ALSA mode ───────────────────────────────────────────────────────── */
+
 int main(int argc, char *argv[]) {
     snd_pcm_hw_params_t *hw_params;
     float *filter_taps;
@@ -251,13 +402,17 @@ int main(int argc, char *argv[]) {
     snprintf(props, sizeof props,
              "node.name=\"%s\" media.name=\"%.0f-%.0fHz\" node.autoconnect=false",
              prog, CUTOFF_LOW, CUTOFF_HIGH);
-    setenv("PIPEWIRE_PROPS", props, 0);
-
-    signal(SIGINT, signal_handler);
-    signal(SIGTERM, signal_handler);
 
     printf("FreeDV Bandpass Filter\n");
     printf("======================\n");
+
+    if (!(argc > 1 && strcmp(argv[1], "--alsa") == 0)
+            && run_filter_chain(prog) == 0)
+        return 0;
+
+    setenv("PIPEWIRE_PROPS", props, 0);
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
 
     // Allocate buffers
     input_buffer = (float *)calloc(BUFFER_SIZE, sizeof(float));

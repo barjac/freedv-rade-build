@@ -70,7 +70,7 @@ press Start Modem):
   microphone) feeds FDV_TX_in.
 - Right: FDV_RX_out feeds your **Headset output** (here also the PC's
   speakers, because both were chosen), and FDV_TX_out goes through the
-  transmit filter (Fdv-bpf, the two "PipeWire ALSA [Fdv-bpf]" boxes) to
+  transmit filter (the two "Fdv-bpf" boxes, labelled with its passband) to
   **Radio output**.
 - The speakers box is named after your PC's sound card. If you chose no
   filter there are no Fdv-bpf boxes, and FDV_TX_out links straight to Radio
