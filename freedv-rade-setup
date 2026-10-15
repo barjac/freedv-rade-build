@@ -1184,6 +1184,15 @@ name_card() {
         fi
     fi
 
+    # The card's name changes when WirePlumber restarts with a new or swapped
+    # rule: find it again by its socket, for card_ident
+    NAMED_CARD=$card
+    if [[ -n $bp ]]; then
+        local now
+        now=$(socket_card "$bp")
+        [[ -n $now ]] && NAMED_CARD=$now
+    fi
+
     ROLE_IN=$(resolve_node "$pref_in" "$stem" input)
     ROLE_OUT=$(resolve_node "$pref_out" "$stem" output)
     # If the new rule isn't active (yet), use the card's current node names
@@ -1294,6 +1303,7 @@ radio_audio_step() {
     done
     RADIO_RX_NODE=$ROLE_IN
     RADIO_TX_NODE=$ROLE_OUT
+    RADIO_CARD=$NAMED_CARD
     RADIO_CARD_ID=$(card_ident "$RADIO_CARD")
     set_radio_volume
 }
@@ -1314,20 +1324,31 @@ set_radio_volume() {
 
 # A USB headset picked from the list gets the same fixed names as a
 # detected one: headset-mic, headset-phones (headset2-... in another socket)
+# node_card NODE -> the sound card a source or sink belongs to
+node_card() {
+    { LC_ALL=C pactl list sources; LC_ALL=C pactl list sinks; } 2>/dev/null | awk -v node="$1" '
+        /^[^\t]/ { f = 0 }
+        /^\tName: / { f = ($2 == node) }
+        f && $1 == "device.name" { sub(/^[^"]*"/, ""); sub(/"$/, ""); print; exit }'
+}
 name_chosen_headset() {
     local stem card
-    [[ $MIC_NODE == alsa_input.* ]] || return
-    stem=${MIC_NODE#alsa_input.}
-    stem=${stem%.*}
-    card="alsa_card.$stem"
-    list_cards | grep -qxF -- "$card" || return
+    card=$(node_card "$MIC_NODE")
+    [[ -n $card ]] && list_cards | grep -qxF -- "$card" || return
     [[ $(card_prop "$card" device.bus) == usb ]] || return
+    # already has fixed names: just note which card it is, for the start
+    # script's check that the cards are in their own sockets
+    if [[ $MIC_NODE != alsa_input.* ]]; then
+        MIC_CARD_ID=$(card_ident "$card")
+        return
+    fi
+    stem=${card#alsa_card.}
     local phones_same=0
     [[ $PHONES_NODE == "alsa_output.$stem."* ]] && phones_same=1
     say "Giving this USB headset fixed names:"
     name_card headset "$card"
     MIC_NODE=$ROLE_IN
-    MIC_CARD_ID=$(card_ident "$card")
+    MIC_CARD_ID=$(card_ident "$NAMED_CARD")
     ((phones_same)) && PHONES_NODE=$ROLE_OUT
 }
 
@@ -1348,7 +1369,7 @@ headset_step() {
             detect_plugin "your USB headset" || continue
             name_card headset "$NEW_CARD"
             MIC_NODE=$ROLE_IN
-            MIC_CARD_ID=$(card_ident "$NEW_CARD")
+            MIC_CARD_ID=$(card_ident "$NAMED_CARD")
             PHONES_NODE=$ROLE_OUT ;;
         2)
             pick_node "Which microphone?" sources "" usb || true
