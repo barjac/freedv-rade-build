@@ -581,7 +581,12 @@ return $make_exit
 }
 
 bye() {
-rt_reboot_note
+# (Q)uit closes a desktop icon's window at once: wait so the reminder can be read
+if (( RT_REBOOT )); then
+    rt_reboot_note
+    read -r -s -n 1 -p $'\nPress any key to exit...'
+    echo
+fi
 echo -e "\nClosing - Goodbye! :)"
 sleep 1
 flock -u 8 || { echo "Failed to release lock"; exit 1; }
