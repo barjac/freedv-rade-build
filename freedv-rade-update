@@ -126,7 +126,7 @@ rt_check() {
             echo -e "\nNOTE: $user is in the pipewire group, which gives the sound server realtime"
             echo "priority, but that only takes effect after a reboot. Please reboot before using FreeDV."
         else
-            echo -e "\nThe sound server (PipeWire) can't have realtime priority, so FreeDV's transmit"
+            echo -e "\nThe sound server (PipeWire) does not have realtime priority, so FreeDV's transmit"
             echo "audio can have gaps when the computer is busy. That needs $user in the pipewire group."
             if confirm "Add $user to the pipewire group now (needs the root password)?" "[Y/n]" "Yy" "Nn"; then
                 if run_as_root "PATH=/usr/sbin:/sbin:\$PATH usermod -aG pipewire '$user'"; then

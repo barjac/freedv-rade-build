@@ -714,9 +714,9 @@ rt_check() {
     log "realtime limit $have; groups: $(id -nG)"
     if ! awk '$1 == "@pipewire" && $3 == "rtprio"' /etc/security/limits.conf /etc/security/limits.d/*.conf 2>/dev/null | grep -q . \
        || ! getent group pipewire >/dev/null; then
-        warn "The sound server can't have realtime priority, so the transmit audio"
-        say "  may have gaps when the computer is busy. This system has no pipewire"
-        say "  group with realtime priority in /etc/security/limits.d."
+        warn "The sound server does not have realtime priority, so the transmit"
+        say "  audio may have gaps when the computer is busy. This system has no"
+        say "  pipewire group with realtime priority in /etc/security/limits.d."
         return
     fi
     if id -nG "$USER" | tr ' ' '\n' | grep -qxF pipewire; then
@@ -725,8 +725,8 @@ rt_check() {
         say "  before using FreeDV."
         return
     fi
-    say "The sound server can't have realtime priority, so the transmit audio can"
-    say "have gaps when the computer is busy. That needs you in the pipewire group."
+    say "The sound server does not have realtime priority, so the transmit audio"
+    say "can have gaps when the computer is busy. That needs you in the pipewire group."
     if yesno "Add $USER to the pipewire group now (recommended)?" y \
        && root_quiet "Adding $USER to the pipewire group" "PATH=/usr/sbin:/sbin:\$PATH usermod -aG pipewire '$USER'"; then
         say "This takes effect after a REBOOT. Please reboot before using FreeDV."
