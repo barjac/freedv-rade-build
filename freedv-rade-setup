@@ -699,6 +699,43 @@ EOF
 
 ##################### system checks #####################
 
+# Realtime priority for the sound server: PipeWire's limits file gives it to
+# the pipewire group. freedv-rade-build adds the user to that group now, but
+# older installs may not have it, and then a restarted PipeWire (the start
+# scripts restart it) can run without realtime priority, so the transmit
+# audio has gaps when the computer is busy. Offer to add the user.
+rt_check() {
+    local have
+    have=$(ulimit -r)
+    if [[ $have == unlimited ]] || ((have >= 11)); then
+        ok "Realtime priority for the sound server (limit $have)"
+        return
+    fi
+    log "realtime limit $have; groups: $(id -nG)"
+    if ! awk '$1 == "@pipewire" && $3 == "rtprio"' /etc/security/limits.conf /etc/security/limits.d/*.conf 2>/dev/null | grep -q . \
+       || ! getent group pipewire >/dev/null; then
+        warn "The sound server can't have realtime priority, so the transmit audio"
+        say "  may have gaps when the computer is busy. This system has no pipewire"
+        say "  group with realtime priority in /etc/security/limits.d."
+        return
+    fi
+    if id -nG "$USER" | tr ' ' '\n' | grep -qxF pipewire; then
+        warn "You are in the pipewire group, which gives the sound server realtime"
+        say "  priority, but that only takes effect after a reboot. Please reboot"
+        say "  before using FreeDV."
+        return
+    fi
+    say "The sound server can't have realtime priority, so the transmit audio can"
+    say "have gaps when the computer is busy. That needs you in the pipewire group."
+    if yesno "Add $USER to the pipewire group now (recommended)?" y \
+       && root_quiet "Adding $USER to the pipewire group" "usermod -aG pipewire '$USER'"; then
+        say "This takes effect after a REBOOT. Please reboot before using FreeDV."
+        RT_REBOOT=1
+    else
+        warn "No realtime priority for the sound server: the transmit audio may have gaps."
+    fi
+}
+
 preflight() {
     heading "Checking your system"
 
@@ -759,6 +796,8 @@ preflight() {
         WP_LUA=0
         ok "WirePlumber ${WP_VER:-unknown version}"
     fi
+
+    rt_check
 
     # qpwgraph is required: it's how routing is checked and fixed
     QPWGRAPH_CMD=""
@@ -2310,8 +2349,9 @@ say "Version $FRS_VERSION"
 say "\nIf you're not sure about a question, press Enter for the recommended answer."
 screen "(Full details of each step go to $LOGFILE)"
 
+RT_REBOOT=0
 preflight
-((CHECK_ONLY)) && { say "System checks finished."; exit 0; }
+((CHECK_ONLY)) && { say "System checks finished."; ((RT_REBOOT)) && say "Please reboot before using FreeDV."; exit 0; }
 
 mkdir -p "$SETUP_ROOT"
 mapfile -t radios < <(find "$SETUP_ROOT" -mindepth 2 -maxdepth 2 -name start -printf '%h\n' 2>/dev/null | xargs -r -n1 basename | sort)
@@ -2407,6 +2447,7 @@ else
     done
 fi
 
+((RT_REBOOT)) && say "\nYou were added to the pipewire group: please REBOOT before using FreeDV."
 say "\nAll done. Start FreeDV for this radio with $(icons_text),"
 if [[ -n $(slot_names) ]]; then
     say "or in a terminal with:  ~/freedv-radio-$RADIO --slot NAME"
