@@ -1882,6 +1882,14 @@ node_exists() { { pw-link -i; pw-link -o; } 2>/dev/null | cut -d: -f1 | grep -qx
 # Nodes named in the links file, apart from FreeDV's own streams
 link_nodes() { tr ' ' '\n' < "$LINKS" | cut -d: -f1 | sed '/^$/d' | sort -u; }
 
+# stop_start MESSAGE -> stop the start, after Enter: a desktop icon's window
+# closes as soon as this script ends
+stop_start() {
+    echo "$1"
+    [[ -t 0 ]] && read -r -p "Press Enter to close this window. " _
+    exit 1
+}
+
 wait_for_nodes() {
     local n i missing
     for ((i=0; i<50; i++)); do
@@ -1893,6 +1901,11 @@ wait_for_nodes() {
         sleep 0.2
     done
     echo "WARNING: not found (unplugged?):$missing"
+    # ask, or FreeDV's window would cover the warning before it can be read
+    if [[ -t 0 ]]; then
+        read -r -p "(C)ontinue or (S)top? [C/s] " REPLY
+        [[ $REPLY == [Ss]* ]] && stop_start "Stopped. Check the sound cards are plugged in, then start again."
+    fi
 }
 
 # node_ident NODE -> "VENDOR:PRODUCT SERIAL" of the USB card behind a node
@@ -1923,10 +1936,7 @@ check_cards() {
     echo
     echo "The sound cards in the USB sockets are not the ones this radio was set up with."
     read -r -p "Have you switched your USB audio cables around? [y/N] " REPLY
-    if [[ $REPLY == [Yy]* ]]; then
-        echo "Please plug each one back into its own socket, then start again."
-        exit 1
-    fi
+    [[ $REPLY == [Yy]* ]] && stop_start "Please plug each one back into its own socket, then start again."
     echo "Carrying on. If the sound goes to the wrong place, run freedv-rade-setup"
     echo "again to set up this radio's sound card and headset."
 }
