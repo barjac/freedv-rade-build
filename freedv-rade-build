@@ -365,6 +365,15 @@ case $ID in
 #=================================
 esac
 
+# Realtime priority for PipeWire: its limits file gives it to a group, usually
+# "pipewire", which the user isn't always in. Without it, a restarted PipeWire
+# (FreeDV's start scripts restart it) can run without realtime priority and
+# the transmit audio then has gaps when the computer is busy.
+if awk '$1 == "@pipewire" && $3 == "rtprio"' /etc/security/limits.conf /etc/security/limits.d/*.conf 2>/dev/null | grep -q . \
+   && getent group pipewire >/dev/null; then
+    groups_to_add+=(pipewire)
+fi
+
 # Add the user to each required group, if not already a member
 
 groups_added=()
@@ -373,7 +382,7 @@ for group in "${groups_to_add[@]}"; do
         echo "User $user is already in group $group"
     else
         echo "Adding $user to group $group"
-        run_as_root "usermod -aG $group $user"  && groups_added+=$group
+        run_as_root "usermod -aG $group $user"  && groups_added+=("$group")
     fi
 done
 
@@ -434,9 +443,5 @@ echo -e "\n\n########### Build is complete \o/ ############\n\nYou can run it fr
         ./freedv-start [-f configfile]\n\n  OR  use the FreeDV-RADE desktop icon.\n\n"
 
 if (( ${#groups_added[@]} > 0 )); then
-        echo -e "####  Your user has been added to ${groups_added[0]} group"
-    if (( ${#groups_add[@]} == 2 )); then
-        echo -e " and ${groups_added[1]} group"
-    fi
-    echo -e ", please reboot before using FreeDV  ####"
+    echo -e "####  Your user has been added to group(s): ${groups_added[*]}, please reboot before using FreeDV  ####"
 fi
