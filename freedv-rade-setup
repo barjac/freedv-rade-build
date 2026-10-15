@@ -728,7 +728,7 @@ rt_check() {
     say "The sound server can't have realtime priority, so the transmit audio can"
     say "have gaps when the computer is busy. That needs you in the pipewire group."
     if yesno "Add $USER to the pipewire group now (recommended)?" y \
-       && root_quiet "Adding $USER to the pipewire group" "usermod -aG pipewire '$USER'"; then
+       && root_quiet "Adding $USER to the pipewire group" "PATH=/usr/sbin:/sbin:\$PATH usermod -aG pipewire '$USER'"; then
         say "This takes effect after a REBOOT. Please reboot before using FreeDV."
         RT_REBOOT=1
     else

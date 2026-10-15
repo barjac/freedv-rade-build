@@ -91,6 +91,25 @@ fi
 
 echo "Script is up to date"
 
+# run_as_root COMMAND -> runs COMMAND (a string) as root via sudo, or su when
+# the user can't use sudo (as in freedv-rade-build)
+run_as_root() {
+    local CMD="$*"
+    if command -v sudo >/dev/null 2>&1; then
+        if sudo -n true 2>/dev/null || sudo -v >/dev/null 2>&1; then
+            sudo bash -c "$CMD"
+            return $?
+        fi
+    fi
+    if command -v su >/dev/null 2>&1; then
+        echo "The root password is needed:"
+        su -c "$CMD"
+        return $?
+    fi
+    echo "Unable to gain root access via sudo or su." >&2
+    return 1
+}
+
 # Realtime priority for PipeWire: its limits file gives it to the pipewire
 # group. freedv-rade-build adds the user to that group now, but older
 # installs may not have it, and then a restarted PipeWire (the start scripts
@@ -107,8 +126,7 @@ if [[ $rt_limit != unlimited ]] && (( rt_limit < 11 )) \
         echo -e "\nThe sound server (PipeWire) can't have realtime priority, so FreeDV's transmit"
         echo "audio can have gaps when the computer is busy. That needs $user in the pipewire group."
         if confirm "Add $user to the pipewire group now (needs the root password)?" "[Y/n]" "Yy" "Nn"; then
-            if { command -v sudo >/dev/null && sudo usermod -aG pipewire "$user"; } \
-               || { command -v su >/dev/null && su -c "usermod -aG pipewire '$user'"; }; then
+            if run_as_root "PATH=/usr/sbin:/sbin:\$PATH usermod -aG pipewire '$user'"; then
                 echo -e "\n####  $user has been added to the pipewire group, please reboot before using FreeDV  ####\n"
             else
                 echo "WARNING: $user could not be added to the pipewire group."

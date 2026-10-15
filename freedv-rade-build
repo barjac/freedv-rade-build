@@ -382,7 +382,7 @@ for group in "${groups_to_add[@]}"; do
         echo "User $user is already in group $group"
     else
         echo "Adding $user to group $group"
-        run_as_root "usermod -aG $group $user"  && groups_added+=("$group")
+        run_as_root "PATH=/usr/sbin:/sbin:\$PATH usermod -aG $group $user"  && groups_added+=("$group")
     fi
 done
 
