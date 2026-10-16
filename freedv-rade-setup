@@ -2382,8 +2382,21 @@ export GTK_THEME
 # shellcheck disable=SC1091
 [[ -f $RADIO_DIR/hooks/env ]] && source "$RADIO_DIR/hooks/env"
 
+# FreeDV's output, for troubleshooting. On a Raspberry Pi where the radio
+# folder is on the SD card (not just the boot files), it's kept in RAM (gone
+# at the next reboot) to spare the card ~10MB of writes per session; the
+# radio folder then has a link to it.
+LOG="$RADIO_DIR/freedv-debug.log"
+if grep -qa "Raspberry Pi" /proc/device-tree/model 2>/dev/null \
+   && [[ $(findmnt -no SOURCE --target "$RADIO_DIR" 2>/dev/null) == /dev/mmcblk* && -d ${XDG_RUNTIME_DIR:-} ]]; then
+    LOG="$XDG_RUNTIME_DIR/freedv-debug-${RADIO_DIR##*/}.log"
+    ln -sfn "$LOG" "$RADIO_DIR/freedv-debug.log"
+elif [[ -L $LOG ]]; then
+    rm -f "$LOG"   # moved from an SD card: a real file again
+fi
+
 # Process substitution (not a pipe) so the script carries on as soon as FreeDV exits
-src/freedv -f "$CONF" "$@" > >(tee "$RADIO_DIR/freedv-debug.log") 2>&1
+src/freedv -f "$CONF" "$@" > >(tee "$LOG") 2>&1
 
 run_hook after-freedv
 cd
