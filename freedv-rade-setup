@@ -2402,15 +2402,44 @@ slot_names() {
     "$tool" names 2>/dev/null
 }
 
-# icons_text -> "the 'FreeDV radio X' desktop icon" or the per-slot ones
+# icons_text -> "the 'FreeDV' desktop icon" or the per-slot ones
 icons_text() {
     local -a slots
     mapfile -t slots < <(slot_names)
     if ((${#slots[@]})); then
-        echo "the 'FreeDV radio $RADIO_LABEL <slot>' desktop icons (${slots[*]})"
+        echo "the '$(icon_name "$RADIO_LABEL" "<slot>")' desktop icons (${slots[*]})"
     else
-        echo "the 'FreeDV radio $RADIO_LABEL' desktop icon"
+        echo "the '$(icon_name "$RADIO_LABEL" "")' desktop icon"
     fi
+}
+
+# icon_name LABEL SLOT -> a desktop icon's name: just "FreeDV v1" while only
+# one radio is set up (no radio name on a card passed on to someone else),
+# "FreeDV radio TS-450S v1" once there are more, to tell them apart
+icon_name() {
+    local n
+    n=$(find "$SETUP_ROOT" -mindepth 2 -maxdepth 2 -name start 2>/dev/null | wc -l)
+    if ((n > 1)); then
+        echo "FreeDV radio $1${2:+ $2}"
+    else
+        echo "FreeDV${2:+ $2}"
+    fi
+}
+
+# rename_other_icons -> other radios' icons, renamed to match icon_name (a
+# second radio adds the radio names to the first one's icons)
+rename_other_icons() {
+    local f r slot name
+    for f in "$DESKTOP_DIR"/freedv-radio-*.desktop "$APPS_DIR"/freedv-radio-*.desktop; do
+        [[ -f $f ]] || continue
+        r=$(sed -n 's/^X-FreeDV-Radio=//p' "$f")
+        [[ -n $r && $r != "$RADIO" && -f $SETUP_ROOT/$r/start ]] || continue
+        slot=$(sed -n 's/^X-FreeDV-Slot=//p' "$f")
+        name=$(icon_name "$(radio_label "$r")" "$slot")
+        grep -qxF "Name=$name" "$f" && continue
+        sed -i "s|^Name=.*|Name=$name|; s|^Comment=.*|Comment=$name (made by freedv-rade-setup)|" "$f"
+        log "Renamed desktop icon $f: $name"
+    done
 }
 
 # write_desktop FILE NAME EXEC SLOT
@@ -2435,8 +2464,9 @@ EOF
     cp "$1" "$APPS_DIR/"
 }
 
-# One desktop icon for the radio, or with build slots one per slot
-# ("FreeDV radio TS-450S v1"). Icons for slots that are gone are removed.
+# One desktop icon for the radio, or with build slots one per slot ("FreeDV
+# v1", or "FreeDV radio TS-450S v1" with more radios: see icon_name). Icons
+# for slots that are gone are removed.
 write_launchers() {
     local link="$LINK_DIR/freedv-radio-$RADIO" f slot
     local -a slots
@@ -2453,14 +2483,15 @@ write_launchers() {
     if ((${#slots[@]})); then
         for slot in "${slots[@]}"; do
             write_desktop "$DESKTOP_DIR/freedv-radio-$RADIO-$slot.desktop" \
-                "FreeDV radio $RADIO_LABEL $slot" "$RADIO_DIR/start --slot $slot" "$slot"
-            log "Desktop icon: FreeDV radio $RADIO_LABEL $slot"
+                "$(icon_name "$RADIO_LABEL" "$slot")" "$RADIO_DIR/start --slot $slot" "$slot"
+            log "Desktop icon: $(icon_name "$RADIO_LABEL" "$slot")"
         done
     else
         write_desktop "$DESKTOP_DIR/freedv-radio-$RADIO.desktop" \
-            "FreeDV radio $RADIO_LABEL" "$RADIO_DIR/start" ""
-        log "Desktop icon: FreeDV radio $RADIO_LABEL"
+            "$(icon_name "$RADIO_LABEL" "")" "$RADIO_DIR/start" ""
+        log "Desktop icon: $(icon_name "$RADIO_LABEL" "")"
     fi
+    rename_other_icons
     command -v update-desktop-database &>/dev/null && update-desktop-database "$APPS_DIR" 2>/dev/null
 
     # pw-link-ls: lists the current links, e.g. for checking by hand

@@ -12,7 +12,8 @@ It makes, for one radio:
 - fixed names for your USB sound cards (they stay the same after a reboot),
 - rig control through Hamlib's rigctld (CAT and PTT),
 - an optional transmit band-pass filter,
-- a start script, a desktop icon ("FreeDV radio *name*") and a FreeDV
+- a start script, a desktop icon ("FreeDV", or "FreeDV radio *name*" once
+  there is more than one radio) and a FreeDV
   configuration just for this radio. Your existing FreeDV settings and start
   scripts are not changed.
 
@@ -94,7 +95,8 @@ rig control, filter), or set up another radio.
 
 If you have more than one FreeDV build in slots (see `freedv-slot --help`, e.g. `v1`
 for RADE V1 and `v2` for RADE V2), the setup makes one icon per slot for
-the radio ("FreeDV radio *name* v1", "... v2"); in a terminal use
+the radio ("FreeDV v1", "FreeDV v2", or "FreeDV radio *name* v1" ... with
+more than one radio); in a terminal use
 `~/freedv-radio-name --slot v1`. Each slot keeps its own FreeDV settings for
 the radio, `freedv-v1.conf`, `freedv-v2.conf` and so on, so things like the
 TX level can differ. Each is copied from the radio's `freedv.conf` the first
