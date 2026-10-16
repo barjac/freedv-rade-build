@@ -209,7 +209,7 @@ pname=""
 cname=""
 
 # Get path of base dir in use, defaults to /home/$user
-if cat /home/${user}/freedv-rade-build/freedv-rade-build.cfg |grep -v '^[#]'|grep -q "basedir="; then
+if cat /home/${user}/freedv-rade-build/freedv-rade-build.cfg 2>/dev/null |grep -v '^[#]'|grep -q "basedir="; then
     basedir=$(cat /home/${user}/freedv-rade-build/freedv-rade-build.cfg|grep -v '^[#]'|grep 'basedir='|cut -d= -f2)
 else
     basedir=/home/$user

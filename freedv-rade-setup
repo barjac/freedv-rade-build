@@ -147,12 +147,24 @@ rt_reboot_note() {
 }
 heading() { ((GAP)) || say ""; say "==================== $* ====================\n"; }
 
-# Why 'pactl info' failed, and what to do about it
-sound_server_help() {
+# sound_stuck -> names of sound server processes stuck waiting on a device
+sound_stuck() {
     local p stuck=""
     for p in $(pgrep -u "$USER" -x 'pipewire|pipewire-pulse|wireplumber|pulseaudio'); do
         [[ $(awk '{print $3}' "/proc/$p/stat" 2>/dev/null) == D ]] && stuck+=" $(cat "/proc/$p/comm")"
     done
+    echo "$stuck"
+}
+# no_sound_server -> true when neither PipeWire nor PulseAudio is running
+no_sound_server() {
+    ! systemctl --user is-active --quiet pipewire pipewire-pulse 2>/dev/null \
+        && ! systemctl --user is-active --quiet pulseaudio 2>/dev/null
+}
+
+# Why 'pactl info' failed, and what to do about it
+sound_server_help() {
+    local stuck
+    stuck=$(sound_stuck)
     log "sound server processes: $(pgrep -u "$USER" -a 'pipewire|wireplumber|pulseaudio' | tr '\n' ';') stuck:${stuck:-none}"
     say ""
     if [[ -n $stuck ]]; then
@@ -160,8 +172,7 @@ sound_server_help() {
         say "was removed while it was in use - for example unplugged, or taken over by"
         say "another program or a virtual machine. It can't be restarted like this."
         say "Please REBOOT, then run freedv-rade-setup again."
-    elif ! systemctl --user is-active --quiet pipewire pipewire-pulse 2>/dev/null \
-         && ! systemctl --user is-active --quiet pulseaudio 2>/dev/null; then
+    elif no_sound_server; then
         say "The sound server isn't running. Start it with:"
         say "    systemctl --user restart pipewire pipewire-pulse wireplumber"
         say "(or log out and in again), then run freedv-rade-setup again."
@@ -850,6 +861,13 @@ preflight() {
         offer_pipewire_switch "$server"
         exit 0
     else
+        # Nothing running at all (e.g. switched off by hand, or units left
+        # masked): on Debian/Ubuntu the switch below sets PipeWire up
+        if is_apt_distro && [[ -z $(sound_stuck) ]] && no_sound_server; then
+            log "no sound server running: $(systemctl --user list-unit-files 2>/dev/null | grep -E 'pipewire|pulse|wireplumber' | tr -s ' ' | tr '\n' ';')"
+            offer_pipewire_switch ""
+            exit 0
+        fi
         sound_server_help
         die "Could not contact the sound server ('pactl info' failed)."
     fi
@@ -949,8 +967,12 @@ install_qpwgraph_flatpak() {
 # Ubuntu 22.04 / Mint 21 use PulseAudio by default (PipeWire is installed,
 # but only used for video there). NOT YET TESTED - needs a 22.04 tester.
 offer_pipewire_switch() {
-    say "Your sound server is: $1"
-    say "FreeDV setup here needs PipeWire (with its PulseAudio layer) instead."
+    if [[ -n $1 ]]; then
+        say "Your sound server is: $1"
+    else
+        say "No sound server is running (neither PipeWire nor PulseAudio)."
+    fi
+    say "FreeDV setup here needs PipeWire (with its PulseAudio layer)${1:+ instead}."
     say ""
     case " $ID $ID_LIKE " in
         *" mageia "*)
@@ -1031,6 +1053,10 @@ pkg_installed() {
 switch_to_pipewire() {
     systemctl --user --now disable pulseaudio.service pulseaudio.socket
     systemctl --user mask pulseaudio.service pulseaudio.socket || { pulseaudio_back; return 1; }
+    # this user's own masks on PipeWire's units (the --global ones are cleared
+    # before this); harmless when there are none
+    systemctl --user unmask pipewire.socket pipewire.service pipewire-pulse.socket \
+        pipewire-pulse.service wireplumber.service
     if ! systemctl --user --now enable pipewire.socket pipewire-pulse.socket wireplumber.service; then
         pulseaudio_back
         return 1
