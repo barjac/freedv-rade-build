@@ -439,8 +439,12 @@ ln -s "$(pwd)"/rade_src/model19_check3 model19_check3 || { echo "Failed to creat
 ~/freedv-rade-build/mk-updt-desktop || echo "WARNING: Update-RADE desktop file was not created (maybe already exists?)"
 
 cd || exit 1
-echo -e "\n\n########### Build is complete \o/ ############\n\nYou can run it from your home folder using:\n\n \
+if compgen -G "$HOME/.config/freedv-rade-setup/*/start" >/dev/null; then
+    echo -e "\n\n########### Build is complete \o/ ############\n\nStart it with the FreeDV desktop icons made by freedv-rade-setup.\n\n"
+else
+    echo -e "\n\n########### Build is complete \o/ ############\n\nYou can run it from your home folder using:\n\n \
         ./freedv-start [-f configfile]\n\n  OR  use the FreeDV-RADE desktop icon.\n\n"
+fi
 
 if (( ${#groups_added[@]} > 0 )); then
     echo -e "####  Your user has been added to group(s): ${groups_added[*]}, please reboot before using FreeDV  ####"

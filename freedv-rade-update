@@ -778,7 +778,7 @@ echo ""
 rt_check
 bpf_check
 
-if grep -q venv < ~/freedv-start; then
+if [[ -f ~/freedv-start ]] && grep -q venv ~/freedv-start; then
     echo "*************************** Your system is using a Python based version of FreeDV RADE."
     echo "*************************** You MUST use the 'Full rebuild' (f) option NOW to update to the new C build."
 fi
@@ -1365,7 +1365,7 @@ if (( fastupdt == 1 )) || (( update == 1 )) || (( backup == 1 )) || (( restore =
             freedv-rade-build/mk-desktop
         fi
 
-        if grep -q venv < ~/freedv-start; then
+        if [[ -f ~/freedv-start ]] && grep -q venv ~/freedv-start; then
             echo -e "Your ~/freedv-start script has been edited to work without Python \n\
                  and a backup of the original has been saved as freedv-start.pybak. \n\
                  Any other custom start scripts will need to be modified in a similar fashion. \n"
