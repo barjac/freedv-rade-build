@@ -119,6 +119,43 @@ bpf_check() {
     (( failed )) || echo "The band-pass filter(s) have been updated."
 }
 
+# pw-volctl, where it's installed: a symlink on the PATH to the binary in its
+# git clone. Keeps it up to date: fast-forward and rebuild when there's
+# something new. Machines without it are left alone, and a clone with local
+# changes or unpushed commits is never touched.
+pwv_update() {
+    local bin dir old oldfull new behind
+    bin=$(command -v pw-volctl) || return 0
+    [[ -L $bin ]] || return 0
+    dir=$(dirname "$(readlink -f "$bin")")
+    [[ -f $dir/Makefile ]] && git -C "$dir" remote get-url origin 2>/dev/null | grep -q 'pw-volctl' || return 0
+    git -C "$dir" fetch -q 2>/dev/null || return 0
+    behind=$(git -C "$dir" rev-list --count HEAD..@{u} 2>/dev/null) || return 0
+    (( behind > 0 )) || return 0
+    if [[ -n $(git -C "$dir" status --porcelain --untracked-files=no) ]] \
+       || (( $(git -C "$dir" rev-list --count @{u}..HEAD) > 0 )); then
+        echo -e "\npw-volctl has an update, but $dir has local changes - not updated."
+        return 0
+    fi
+    if pgrep -x pw-volctl >/dev/null; then
+        echo -e "\npw-volctl has an update: close pw-volctl, then run freedv-rade-update again."
+        return 0
+    fi
+    old=$(git -C "$dir" rev-parse --short HEAD)
+    oldfull=$(git -C "$dir" rev-parse HEAD)
+    cp -p "$dir/pw-volctl" "$dir/pw-volctl.prev" 2>/dev/null
+    if git -C "$dir" pull -q --ff-only && make -C "$dir" -s >/dev/null 2>"$dir/build.log"; then
+        new=$(git -C "$dir" log -1 --format='%h (%s)')
+        echo -e "\npw-volctl updated: $old -> $new"
+        rm -f "$dir/pw-volctl.prev" "$dir/build.log"
+    else
+        [[ -f $dir/pw-volctl.prev ]] && mv -f "$dir/pw-volctl.prev" "$dir/pw-volctl"
+        # back to the version that binary was built from, so the next update tries again
+        git -C "$dir" reset -q --hard "$oldfull"
+        echo -e "\nWARNING: pw-volctl could not be updated (see $dir/build.log) - the previous version is kept."
+    fi
+}
+
 # Shown once, wherever the script ends; (A)udio passes it on to freedv-rade-setup
 rt_reboot_note() {
     (( RT_REBOOT )) || return 0
@@ -777,6 +814,7 @@ echo ""
 
 rt_check
 bpf_check
+pwv_update
 
 if [[ -f ~/freedv-start ]] && grep -q venv ~/freedv-start; then
     echo "*************************** Your system is using a Python based version of FreeDV RADE."
