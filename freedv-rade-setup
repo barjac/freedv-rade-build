@@ -2005,9 +2005,11 @@ echo "$RADIO_LABEL${SLOT:+ ($SLOT)}" > "$LOCK.radio"
 # the RADEV2 mode), Fdv-bpf otherwise. Its PipeWire node is named after the
 # program; the links file calls it Fdv-bpf either way.
 FREEDV_BIN="$FREEDV_DIR/freedv-gui/build_linux/src/freedv"
+# The build's RADE mode, also for the hooks (e.g. the panadapter's passband)
+if grep -qa RADEV2 "$FREEDV_BIN" 2>/dev/null; then export FREEDV_RADE=V2; else export FREEDV_RADE=V1; fi
 if [[ $BPF != none && -n $BPF_BIN ]]; then
     BPF_BIN=${BPF_BIN%-1k}
-    grep -qa RADEV2 "$FREEDV_BIN" 2>/dev/null && BPF_BIN="$BPF_BIN-1k"
+    [[ $FREEDV_RADE == V2 ]] && BPF_BIN="$BPF_BIN-1k"
 fi
 BPF_NODE=${BPF_BIN##*/}
 CONF="$RADIO_DIR/freedv.conf"
