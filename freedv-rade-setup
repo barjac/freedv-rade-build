@@ -1429,6 +1429,56 @@ headset_step() {
     else
         warn "No headphones or speakers chosen - you won't hear received audio."
     fi
+    pi_jack_rule
+}
+
+# sink_prop SINK PROP -> a property of a sink (e.g. alsa.card_name)
+sink_prop() {
+    LC_ALL=C pactl list sinks 2>/dev/null | awk -v sink="$1" -v prop="$2" '
+        /^[^\t]/ { f = 0 }
+        /^\tName: / { f = ($2 == sink) }
+        f && $1 == prop && $2 == "=" { sub(/^[^=]*= *"/, ""); sub(/"$/, ""); print; exit }'
+}
+
+# pi_jack_rule -> when a Raspberry Pi's own headphone jack (bcm2835) is the
+# headphones or speakers, give it more headroom. Its driver reports the buffer
+# level in large uneven steps, so following the USB cards' clock it kept
+# leaving PipeWire's window: ~15 resyncs a minute (an occasional tick) and
+# errors. headroom 1024 stopped them (Pi 4), for ~20ms more delay there.
+pi_jack_rule() {
+    local n jack="" f lua body
+    for n in "$SPEAKER_NODE" "$PHONES_NODE"; do
+        [[ -n $n && $(sink_prop "$n" alsa.card_name) == "bcm2835 Headphones" ]] && { jack=$n; break; }
+    done
+    [[ -n $jack ]] || return 0
+    if ((WP_LUA)); then
+        f="$WP_LUA_DIR/61-freedv-rade-pi-jack.lua"
+        body="-- Written by freedv-rade-setup: the Raspberry Pi's headphone jack plays without
+-- resyncs (ticks) with more headroom. Delete this file to undo.
+table.insert(alsa_monitor.rules, {
+  matches = { { { \"node.name\", \"equals\", \"$jack\" } } },
+  apply_properties = { [\"api.alsa.headroom\"] = 1024 },
+})"
+    else
+        f="$WP_CONF_DIR/61-freedv-rade-pi-jack.conf"
+        body="# Written by freedv-rade-setup: the Raspberry Pi's headphone jack plays without
+# resyncs (ticks) with more headroom. Delete this file to undo.
+monitor.alsa.rules = [
+  {
+    matches = [ { node.name = \"$jack\" } ]
+    actions = { update-props = { api.alsa.headroom = 1024 } }
+  }
+]"
+    fi
+    [[ -f $f && $(<"$f") == "$body" ]] && return 0
+    mkdir -p "${f%/*}"
+    printf '%s\n' "$body" > "$f"
+    log "Wrote $f"
+    say "The Raspberry Pi's own headphone jack is set to play smoothly (more buffering,"
+    say "about 20ms more delay there)."
+    [[ $MONITOR == both && $jack == "$SPEAKER_NODE" ]] \
+        && say "With both playing, the speakers will be about 20ms behind the headphones."
+    restart_wireplumber
 }
 
 # rig_test HOST|PORT MODEL [SETCONF] -> 0 if the radio answered
