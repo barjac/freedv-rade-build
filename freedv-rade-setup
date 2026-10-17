@@ -1840,6 +1840,45 @@ ask_station() {
     [[ -n $loc ]] && set_ini "$conf" Reporting GridSquare "$loc"
 }
 
+# kiwi_hooks_dir -> kiwiclient's freedv-hooks folder, when kiwipanadapter (a
+# KiwiSDR panadapter that runs alongside FreeDV) is installed
+kiwi_hooks_dir() {
+    local d
+    for d in "$HOME/GIT/kiwiclient" "$HOME/kiwiclient"; do
+        [[ -x $d/kiwipanadapter.py && -x $d/freedv-hooks/before-freedv ]] && { echo "$d/freedv-hooks"; return; }
+    done
+}
+
+# panadapter_step -> with kiwipanadapter installed, offer to start it with
+# FreeDV for this radio: its hooks are linked into the radio's hooks folder
+# (links, so a git pull in kiwiclient updates them)
+panadapter_step() {
+    local src h f on=0
+    src=$(kiwi_hooks_dir)
+    [[ -n $src ]] || return 0
+    h="$RADIO_DIR/hooks"
+    [[ -L $h/before-freedv ]] && on=1
+    heading "KiwiSDR panadapter"
+    say "kiwipanadapter is installed: a KiwiSDR waterfall and S-meter that follows"
+    say "the radio's frequency, started and closed together with FreeDV."
+    ((on)) && say "(It starts with FreeDV for this radio now.)"
+    if yesno "Start it together with FreeDV for this radio?" y; then
+        mkdir -p "$h"
+        for f in before-freedv after-freedv env; do
+            [[ -e $src/$f ]] && ln -sfn "$src/$f" "$h/$f"
+        done
+        log "Linked $src/{before-freedv,after-freedv,env} into $h"
+        ok "The panadapter starts and closes with FreeDV"
+    else
+        # only our links: hooks of the user's own are left alone
+        for f in before-freedv after-freedv env; do
+            [[ -L $h/$f && $(readlink "$h/$f") == "$src/$f" ]] && rm -f "$h/$f"
+        done
+        log "Removed the panadapter hook links from $h"
+        say "The panadapter won't be started with FreeDV."
+    fi
+}
+
 # own_freedv_settings -> the user's own FreeDV settings file, if any. Where
 # FreeDV keeps it depends on its version (wxWidgets): ~/.config/freedv/
 # freedv.conf or the old ~/.freedv (which may also be a link to the other).
@@ -2696,6 +2735,7 @@ if [[ -z $RADIO ]]; then
     headset_step
     rig_step
     bpf_step
+    panadapter_step
     finish
     test_sound
 else
@@ -2713,10 +2753,11 @@ else
         say "  Redo the (M)icrophone, headphones and speakers"
         say "  Redo rig (C)ontrol"
         say "  Change the band-pass (F)ilter"
+        [[ -n $(kiwi_hooks_dir) ]] && say "  KiwiSDR (P)anadapter with FreeDV, on or off"
         say "  Fix the sound links in qpwgraph and (S)ave them"
         say "  Re(W)rite the start script and desktop icon only"
         say "  (Q)uit"
-        confirm "What would you like to do?" "[T/r/m/c/f/s/w/q]" "Tt" "Rr" "Mm" "Cc" "Ff" "Ss" "Ww" "Qq"
+        confirm "What would you like to do?" "[T/r/m/c/f/p/s/w/q]" "Tt" "Rr" "Mm" "Cc" "Ff" "Pp" "Ss" "Ww" "Qq"
         CHOICE=$(($? + 1))
         case $CHOICE in
             1) test_sound ;;
@@ -2724,11 +2765,12 @@ else
             3) headset_step; finish ;;
             4) rig_step; finish ;;
             5) bpf_step; finish ;;
-            6) edit_links ;;
-            7) write_start_script; write_launchers
+            6) panadapter_step ;;
+            7) edit_links ;;
+            8) write_start_script; write_launchers
                ok "Rewrote the start script and $(icons_text)"
                sleep 1.5 ;;   # the menu redraw would hide it at once
-            8) break ;;
+            9) break ;;
         esac
     done
 fi

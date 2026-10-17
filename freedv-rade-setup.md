@@ -12,6 +12,8 @@ It makes, for one radio:
 - fixed names for your USB sound cards (they stay the same after a reboot),
 - rig control through Hamlib's rigctld (CAT and PTT),
 - an optional transmit band-pass filter,
+- if kiwiclient's kiwipanadapter is installed, optionally starting it (a
+  KiwiSDR waterfall) together with FreeDV,
 - a start script, a desktop icon ("FreeDV", or "FreeDV radio *name*" once
   there is more than one radio) and a FreeDV
   configuration just for this radio. Your existing FreeDV settings and start
