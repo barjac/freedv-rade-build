@@ -1077,6 +1077,63 @@ pulseaudio_back() {
 
 # detect_plugin WHAT -> NEW_CARD and NEW_SERIAL (NEW_SERIAL may be empty)
 # Same idea as sdcbr: unplug, snapshot, plug in, look for what's new.
+# detect_serial -> NEW_SERIAL: the serial (CAT) port that appears when the
+# radio's CAT cable is plugged in, as detect_plugin does for sound cards
+detect_serial() {
+    local before after key
+    local -a new
+    NEW_SERIAL=""
+    while true; do
+        say ""
+        say "Make sure the radio's CAT (USB serial) cable is UNPLUGGED from the computer."
+        yesno "Is it unplugged now?" y || return 1
+        before=$(list_serial)
+        say "\nNow PLUG IN the CAT cable. (Press ESC to go back)"
+        echo -n "Waiting." >&3
+        while true; do
+            key=""
+            read -r -s -n1 -t1 key
+            [[ $key == $'\e' ]] && { screen ""; log "(ESC - back to the previous question)"; return 1; }
+            after=$(list_serial)
+            [[ $after != "$before" ]] && break
+            echo -n "." >&3
+        done
+        screen " found."
+        sleep 1
+        after=$(list_serial)
+        mapfile -t new < <(comm -13 <(echo "$before") <(echo "$after") | sed '/^$/d')
+        ((${#new[@]})) && break
+        say "No new serial port was found (something may have been unplugged instead). Let's try again."
+    done
+    if ((${#new[@]} == 1)); then
+        NEW_SERIAL="/dev/serial/by-id/${new[0]}"
+    else
+        say "More than one new serial port appeared:"
+        choose "Which one is the CAT (rig control) port?" 1 "${new[@]}"
+        NEW_SERIAL="/dev/serial/by-id/${new[CHOICE-1]}"
+    fi
+    say "Found serial port: $NEW_SERIAL"
+}
+
+# fix_setconf OPTIONS -> hamlib --set-conf options with the usual values in
+# hamlib's own spelling (they're case-sensitive: serial_handshake=none fails)
+fix_setconf() {
+    local -a out=()
+    local o k v c
+    local IFS=,
+    for o in $1; do
+        k=${o%%=*} v=${o#*=}
+        k=${k// /} v=${v## }
+        case $k in
+            serial_handshake) for c in None XONXOFF Hardware; do [[ ${v,,} == "${c,,}" ]] && v=$c; done ;;
+            serial_parity)    for c in None Even Odd Mark Space; do [[ ${v,,} == "${c,,}" ]] && v=$c; done ;;
+            rts_state|dtr_state) for c in Unset ON OFF; do [[ ${v,,} == "${c,,}" ]] && v=$c; done ;;
+        esac
+        [[ $o == *=* ]] && out+=("$k=$v") || out+=("$o")
+    done
+    echo "${out[*]}"
+}
+
 detect_plugin() {
     local what=$1 before_c before_s after_c after_s key
     local -a new_cards new_serial
@@ -1571,26 +1628,33 @@ rig_step() {
         say "The serial port found with the radio's USB cable is:\n  $RADIO_SERIAL"
     fi
     local -a ports
-    mapfile -t ports < <(ls -1 /dev/serial/by-id/* 2>/dev/null)
     if [[ -n $RADIO_SERIAL ]] && yesno "Use it for rig control?" y; then
         RIG_PORT=$RADIO_SERIAL
-    elif ((${#ports[@]})); then
-        choose "Which serial port is the radio's CAT port?" 1 "${ports[@]}" "Type a different port"
-        if ((CHOICE <= ${#ports[@]})); then
-            RIG_PORT=${ports[CHOICE-1]}
-        else
-            ask "Port (e.g. /dev/ttyUSB0)" ""
-            RIG_PORT=$REPLY
-        fi
     else
-        ask "No USB serial ports were found. Port (e.g. /dev/ttyUSB0)" "/dev/ttyUSB0"
-        RIG_PORT=$REPLY
+        # like the sound cards: detect the CAT cable by plugging it in, or
+        # pick one already connected, or type one
+        RIG_PORT=""
+        while [[ -z $RIG_PORT ]]; do
+            mapfile -t ports < <(ls -1 /dev/serial/by-id/* 2>/dev/null)
+            ((${#ports[@]})) || say "No USB serial (CAT) port is connected at the moment."
+            choose "Which serial port is the radio's CAT port?" 1 \
+                "Detect the radio's CAT cable by plugging it in (recommended)" "${ports[@]}" "Type a port"
+            if ((CHOICE == 1)); then
+                detect_serial && RIG_PORT=$NEW_SERIAL
+            elif ((CHOICE <= ${#ports[@]} + 1)); then
+                RIG_PORT=${ports[CHOICE-2]}
+            else
+                ask "Port (e.g. /dev/ttyUSB0)" "/dev/ttyUSB0"
+                RIG_PORT=$REPLY
+            fi
+        done
     fi
 
     say "\nMost radios need nothing more. Some older ones need extra hamlib options,"
     say "for example the TS-450S needs:  serial_handshake=None"
     ask "Extra --set-conf options (press Enter for none)" ""
-    RIG_SETCONF=$REPLY
+    RIG_SETCONF=$(fix_setconf "$REPLY")
+    [[ $RIG_SETCONF != "$REPLY" ]] && say "  (written as hamlib wants it: $RIG_SETCONF)"
 
     say ""
     say "Make sure the radio is switched ON."
