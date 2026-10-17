@@ -1853,6 +1853,17 @@ write_links() {
 }
 
 # set_ini FILE SECTION KEY VALUE (sets the key in every copy of the section)
+# set_top_ini FILE KEY VALUE -> a top-level key, before the first [section]
+set_top_ini() {
+    local f=$1 k=$2 v=$3 tmp
+    tmp=$(mktemp)
+    awk -v k="$k" -v v="$v" '
+        !done && /^\[/ { print k "=" v; done = 1 }
+        !done && index($0, k "=") == 1 { next }
+        { print }
+        END { if (!done) print k "=" v }' "$f" > "$tmp" && cat "$tmp" > "$f"
+    rm -f "$tmp"
+}
 set_ini() {
     local f=$1 s=$2 k=$3 v=$4 tmp
     tmp=$(mktemp)
@@ -1989,6 +2000,10 @@ write_freedv_conf() {
             say "FreeDV's TX attenuation starts at -20 dB. Raise it in FreeDV until the"
             say "radio's ALC just moves, or any lower level you require."
         fi
+        # FreeDV opens its first-run Easy Setup wizard unless its settings say
+        # it has been set up (FirstTimeUse, a top-level key, default true) -
+        # this setup does that job, so a new file says so
+        grep -qE '^FirstTimeUse=' "$conf" || set_top_ini "$conf" FirstTimeUse 0
     fi
     ask_station "$conf"
 
