@@ -2462,6 +2462,13 @@ rename_other_icons() {
 
 # write_desktop FILE NAME EXEC SLOT
 write_desktop() {
+    # Written complete under a hidden name in the same folder, then renamed
+    # into place in one step: the Pi's desktop (pcmanfm) read an icon file
+    # rewritten in place half-way through, took it for an unknown file
+    # (shown by its file name) and never looked again
+    local final=$1 tmp mtmp
+    tmp=$(mktemp "${final%/*}/.freedv-icon.XXXXXX") || return 1
+    set -- "$tmp" "${@:2}"
     cat > "$1" <<EOF
 [Desktop Entry]
 Version=1.0
@@ -2477,9 +2484,12 @@ StartupWMClass=freedv
 X-FreeDV-Radio=$RADIO
 X-FreeDV-Slot=$4
 EOF
-    chmod +x "$1"
-    gio set "$1" metadata::trusted true 2>/dev/null || true
-    cp "$1" "$APPS_DIR/"
+    chmod 755 "$1"
+    # the menu's copy the same way
+    mtmp=$(mktemp "$APPS_DIR/.freedv-icon.XXXXXX") && cp "$1" "$mtmp" && chmod 755 "$mtmp" \
+        && mv -f "$mtmp" "$APPS_DIR/${final##*/}"
+    mv -f "$1" "$final"
+    gio set "$final" metadata::trusted true 2>/dev/null || true
 }
 
 # One desktop icon for the radio, or with build slots one per slot ("FreeDV
