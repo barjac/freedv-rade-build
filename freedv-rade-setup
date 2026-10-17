@@ -1541,6 +1541,16 @@ monitor.alsa.rules = [
     restart_wireplumber
 }
 
+# rig_data_modes MODEL -> yes/no: whether hamlib lists data modes (PKTUSB)
+# for the radio model; nothing if it can't tell
+rig_data_modes() {
+    local list
+    [[ -x $RIGCTL_BIN ]] || return 0
+    list=$("$RIGCTL_BIN" -m "$1" --dump-caps 2>/dev/null | grep -m1 -i '^Mode list')
+    [[ -n $list ]] || return 0
+    grep -qw PKTUSB <<<"$list" && echo yes || echo no
+}
+
 # rig_test HOST|PORT MODEL [SETCONF] -> 0 if the radio answered
 rig_test() {
     local port=$1 model=$2 setconf=$3 out
@@ -2025,6 +2035,14 @@ write_freedv_conf() {
     done
 
     if [[ $RIG_MODE != none ]]; then
+        # A radio without data modes (no PKTUSB in hamlib's list, e.g. the
+        # TS-450S) needs FreeDV to send plain USB/LSB: its default PKTUSB/
+        # PKTLSB get substituted, and the radio (and a panadapter following
+        # it) briefly shows the wrong sideband on each band change
+        if [[ -n $RIG_MODEL ]] && [[ $(rig_data_modes "$RIG_MODEL") == no ]]; then
+            set_ini "$conf" Hamlib UseAnalogModes 1
+            log "$RIG_MODEL_NAME has no data modes: FreeDV uses USB/LSB (UseAnalogModes=1)"
+        fi
         set_ini "$conf" Hamlib UseForPTT 1
         set_ini "$conf" Hamlib RigNameStr "Hamlib NET rigctl"
         set_ini "$conf" Hamlib RigName 0
@@ -2047,7 +2065,7 @@ write_freedv_conf() {
                    Audio/soundCard2InDeviceName Audio/soundCard2OutDeviceName \
                    Audio/soundCard1InSampleRate Audio/soundCard1OutSampleRate \
                    Audio/soundCard2InSampleRate Audio/soundCard2OutSampleRate \
-                   Hamlib/UseForPTT Hamlib/RigNameStr Hamlib/RigName Hamlib/SerialPort \
+                   Hamlib/UseForPTT Hamlib/RigNameStr Hamlib/RigName Hamlib/SerialPort Hamlib/UseAnalogModes \
                    Hamlib/PttType Rig/UseSerialPTT; do
             val=$(get_ini "$conf" "${key%%/*}" "${key#*/}")
             [[ -n $val ]] && set_ini "$sc" "${key%%/*}" "${key#*/}" "$val"
