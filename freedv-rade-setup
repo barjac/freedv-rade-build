@@ -1326,6 +1326,9 @@ pick_node() {
         if [[ $kind == sinks || $kind == sources ]]; then
             [[ -n $RADIO_RX_NODE && $n == "$RADIO_RX_NODE" ]] && continue
             [[ -n $RADIO_TX_NODE && $n == "$RADIO_TX_NODE" ]] && continue
+            # and anything the caller has already taken (e.g. the headphones,
+            # when asking for speakers)
+            [[ -n ${PICK_SKIP:-} && $n == "$PICK_SKIP" ]] && continue
         fi
         names+=("$n")
         items+=("${d:+$d  }($n)")
@@ -1466,7 +1469,7 @@ headset_step() {
 
     ((GAP)) || say ""
     say "Received audio can also play on speakers (handy when you take the headset off)."
-    pick_node "Which speakers?" sinks none || true
+    PICK_SKIP=$PHONES_NODE pick_node "Which speakers?" sinks none || true
     SPEAKER_NODE=$PICKED_NODE
     [[ -n $PHONES_NODE && $SPEAKER_NODE == "$PHONES_NODE" ]] && SPEAKER_NODE=""
 
