@@ -1840,6 +1840,21 @@ ask_station() {
     [[ -n $loc ]] && set_ini "$conf" Reporting GridSquare "$loc"
 }
 
+# own_freedv_settings -> the user's own FreeDV settings file, if any. Where
+# FreeDV keeps it depends on its version (wxWidgets): ~/.config/freedv/
+# freedv.conf or the old ~/.freedv (which may also be a link to the other).
+# One file counts once; if there are two different ones, the newer.
+own_freedv_settings() {
+    local f best="" real seen=""
+    for f in "$CFG_HOME/freedv/freedv.conf" "${TEST_ROOT:-$HOME}/.freedv"; do
+        [[ -f $f && -s $f ]] || continue
+        real=$(readlink -f "$f")
+        [[ $real == "$seen" ]] && continue
+        seen=$real
+        [[ -z $best || $f -nt $best ]] && best=$f
+    done
+    echo "$best"
+}
 write_freedv_conf() {
     local conf="$RADIO_DIR/freedv.conf"
     # Only a FreeDV using this radio's config matters (it saves over it on
@@ -1849,13 +1864,21 @@ write_freedv_conf() {
         pause "Please close FreeDV, then press Enter... "
     done
     if [[ ! -f $conf ]]; then
-        if [[ -f $HOME/.freedv ]] && yesno "Start from your existing FreeDV settings (callsign, reporting etc. in ~/.freedv)?" y; then
-            cp "$HOME/.freedv" "$conf"
+        local own lay="$SETUP_ROOT/layout.conf"
+        own=$(own_freedv_settings)
+        if [[ -n $own ]] && yesno "Start from your existing FreeDV settings (callsign, reporting etc. in ${own/#$HOME/\~})?" y; then
+            cp "$own" "$conf"
+        elif [[ -f $lay ]]; then
+            # window positions and layout only, left by pi-admin's prepare-card
+            cp "$lay" "$conf"
+            say "FreeDV starts with the window layout prepared for this computer."
         else
             : > "$conf"
-            # A clean first setup starts with FreeDV's TX attenuation at -20 dB
-            # (stored in tenths of a dB), so the first transmission can't
-            # overdrive the radio. A copy of the user's own settings is left as is.
+        fi
+        # Without a TX level of its own, FreeDV starts with its TX attenuation
+        # at -20 dB (stored in tenths of a dB), so the first transmission can't
+        # overdrive the radio. A copy of settings that have one is left as is.
+        if [[ -z $(get_ini "$conf" Audio transmitLevel) ]]; then
             set_ini "$conf" Audio transmitLevel -200
             say "FreeDV's TX attenuation starts at -20 dB. Raise it in FreeDV until the"
             say "radio's ALC just moves, or any lower level you require."
