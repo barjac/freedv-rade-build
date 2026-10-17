@@ -2007,8 +2007,6 @@ echo "$RADIO_LABEL${SLOT:+ ($SLOT)}" > "$LOCK.radio"
 FREEDV_BIN="$FREEDV_DIR/freedv-gui/build_linux/src/freedv"
 # The build's RADE mode, also for the hooks (e.g. the panadapter's passband)
 if grep -qa RADEV2 "$FREEDV_BIN" 2>/dev/null; then export FREEDV_RADE=V2; else export FREEDV_RADE=V1; fi
-# rigctld's address from the radio's setup (host:port), also for the hooks
-if [[ $RIG_MODE != none && -n $RIG_HOST ]]; then export FREEDV_RIG_HOST=$RIG_HOST; fi
 if [[ $BPF != none && -n $BPF_BIN ]]; then
     BPF_BIN=${BPF_BIN%-1k}
     [[ $FREEDV_RADE == V2 ]] && BPF_BIN="$BPF_BIN-1k"
@@ -2023,6 +2021,9 @@ if [[ -n $SLOT ]]; then
         echo "kept in freedv-$SLOT.conf (copied from freedv.conf). Check its TX level in FreeDV."
     fi
 fi
+# FreeDV's settings file for this start, for the hooks (e.g. the panadapter
+# follows FreeDV's rig control setting in it)
+export FREEDV_CONF=$CONF
 
 restart_sound() {
     # A restart normally takes a second or two. If it hangs, the sound server
