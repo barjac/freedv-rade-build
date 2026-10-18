@@ -112,6 +112,10 @@ Set Quisk up for FreeDV first, in its Config window:
   `pulse: Use name QuiskDigitalOutput.monitor` and **Digital Tx0 Input** to
   `pulse: Use name QuiskDigitalInput` (both at the end of their lists). Quisk
   makes these two sound boxes when it starts, so restart it afterwards.
+- Don't use `hw:` devices on that tab (for example **Radio Sound Output**
+  `hw:0`). They take the sound card away from the sound system, and FreeDV's
+  receive audio then comes in short bursts with gaps. Use `pulse:` devices,
+  or leave Radio Sound Output empty.
 - On its **Remote** tab, the **Hamlib port** (normally 4532) is what FreeDV
   uses to change the frequency and switch to transmit. The setup finds it.
 - Use a DGT mode (DGT-U) in Quisk. FreeDV selects it through hamlib.

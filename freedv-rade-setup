@@ -1407,6 +1407,9 @@ quisk_help() {
     say "  - On that radio's Sound tab:"
     say "      Digital Rx0 Output:  pulse: Use name QuiskDigitalOutput.monitor"
     say "      Digital Tx0 Input:   pulse: Use name QuiskDigitalInput"
+    say "    and no hw: devices there (e.g. Radio Sound Output hw:0): they take the"
+    say "    sound card away from the sound system, and FreeDV's audio then stops"
+    say "    and starts. Use pulse: devices, or leave Radio Sound Output empty."
     say "  - On its Remote tab, the Hamlib port (4532, or 4575) lets FreeDV change"
     say "    the frequency and switch to transmit."
     say "Quisk makes the QuiskDigitalOutput and QuiskDigitalInput sound boxes when"
@@ -2409,6 +2412,17 @@ stop_app() {
 }
 start_app() {
     [[ $RADIO_KIND == software && -n $RADIO_APP ]] || return
+    # The program's hamlib port stays in TIME-WAIT for up to a minute after
+    # its last connection (Quisk closes them itself), and a program started
+    # before then can't use it (Quisk then runs without hamlib, silently)
+    local port=${RIG_HOST##*:} i
+    if [[ $RIG_MODE == program && $port =~ ^[0-9]+$ ]]; then
+        for ((i=0; i<70; i++)); do
+            [[ -z $(ss -Htan "( sport = :$port )" 2>/dev/null) ]] && break
+            ((i == 0)) && echo "Waiting for $APP_NAME's hamlib port $port to be free (up to a minute)..."
+            sleep 1
+        done
+    fi
     echo "Starting $APP_NAME"
     # its own session, so it carries on when this window closes; RADIO_APP
     # may hold options - left unquoted on purpose
