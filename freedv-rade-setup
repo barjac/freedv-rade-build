@@ -1356,21 +1356,30 @@ radio_audio_step() {
     say "  (D)etect a USB sound card, or a radio with built-in USB sound, by plugging it in (recommended)"
     say "  (C)hoose from the sound cards that are already connected"
     say "  (S)oftware radio program on this computer (quisk, piHPSDR ...)"
+    local -a keys=("Dd" "Cc" "Ss")
+    local hint="[D/c/s" question="Detect, Choose, Software"
+    if [[ -n $(kiwi_hooks_dir) ]]; then
+        say "  (N)o radio here: receive only, from the KiwiSDR panadapter"
+        keys+=("Nn"); hint+="/n"; question+=", No radio"
+    fi
     ((NEW_RADIO)) && say "  (B)ack - stop setting up this radio" \
                   || say "  (B)ack - keep the radio's sound card as it is"
-    confirm "Detect, Choose, Software or Back?" "[D/c/s/b]" "Dd" "Cc" "Ss" "Bb"
-    CHOICE=$(($? + 1))
-    case $CHOICE in
-        4)
+    keys+=("Bb"); hint+="/b]"; question+=" or Back?"
+    confirm "$question" "$hint" "${keys[@]}"
+    case ${keys[$?]} in
+        Bb)
             return 1 ;;
-        1)
+        Dd)
             detect_plugin "the radio's USB cable (or its USB sound interface)" || continue
             RADIO_KIND=usb; RADIO_APP=""; RADIO_CARD=$NEW_CARD; RADIO_SERIAL=$NEW_SERIAL ;;
-        2)
+        Cc)
             pick_card "Which card is connected to the radio?" || return 1
             RADIO_KIND=card; RADIO_APP=""; RADIO_CARD=$PICKED_CARD ;;
-        3)
+        Ss)
             software_radio_step || continue
+            return 0 ;;
+        Nn)
+            receive_only_step
             return 0 ;;
     esac
     name_card radio "$RADIO_CARD"
@@ -1471,12 +1480,27 @@ software_radio_step() {
     RADIO_TX_NODE=$PICKED_NODE
 }
 
+# No radio on this computer: FreeDV only receives, from the KiwiSDR
+# panadapter (with no radio input it feeds the KiwiSDR's own audio, FDV_PAN,
+# into FDV_RX_in). A Dummy rigctld stands in for the radio, so a frequency
+# set in FreeDV (e.g. a double-click in FreeDV Reporter) reaches the
+# panadapter, and its tuning reaches FreeDV.
+receive_only_step() {
+    RADIO_KIND=none; RADIO_APP=""; RADIO_CARD=""; RADIO_CARD_ID=""
+    RADIO_RX_NODE=""; RADIO_TX_NODE=""
+    say "FreeDV will receive from the KiwiSDR panadapter, which starts with it."
+    say "There is nothing to transmit to, so no transmit filter is set up, and"
+    say "hamlib's Dummy rig stands in for a radio: FreeDV and the panadapter"
+    say "share its frequency."
+}
+
 # A radio's sound card comes up at whatever volume it had (e.g. 74%, too quiet
 # for a TS-450S). When setting up a NEW radio, start its output at 100%; the
 # transmit level is then set with FreeDV's TX attenuation. Redoing the card
 # later leaves the user's volume alone.
 set_radio_volume() {
-    ((NEW_RADIO)) && [[ -n $RADIO_TX_NODE && -z $TEST_ROOT ]] || return
+    # (return 0: this is radio_audio_step's last step, so its status is that step's)
+    ((NEW_RADIO)) && [[ -n $RADIO_TX_NODE && -z $TEST_ROOT ]] || return 0
     if timeout 5 pactl set-sink-volume "$RADIO_TX_NODE" 100% 2>/dev/null \
        && timeout 5 pactl set-sink-mute "$RADIO_TX_NODE" 0 2>/dev/null; then
         say "The radio's sound output is set to 100%."
@@ -1678,6 +1702,18 @@ app_rig() {
     RIG_MODE=program; RIG_HOST=$hp
 }
 
+# Receive only: rigctld with hamlib's Dummy rig (model 1), started with
+# FreeDV. It just holds a frequency, mode and PTT state.
+dummy_rig() {
+    if [[ -z $RIGCTLD_BIN ]]; then
+        warn "rigctld is not installed, so FreeDV and the panadapter can't share a frequency."
+        return
+    fi
+    RIG_MODE=ondemand; RIG_MODEL=1; RIG_MODEL_NAME="Hamlib Dummy (no radio)"
+    RIG_PORT=""; RIG_SETCONF=""; RIG_LISTEN=127.0.0.1; RIG_HOST=localhost:4532
+    ok "rigctld with hamlib's Dummy rig, started with FreeDV (localhost:4532)"
+}
+
 rig_step() {
     heading "Rig control (CAT and PTT)"
     RIG_MODE=none; RIG_MODEL=""; RIG_MODEL_NAME=""; RIG_PORT=""; RIG_SETCONF=""
@@ -1685,6 +1721,10 @@ rig_step() {
 
     if [[ $RADIO_KIND == software ]]; then
         app_rig
+        return
+    fi
+    if [[ $RADIO_KIND == none ]]; then
+        dummy_rig
         return
     fi
 
@@ -1847,6 +1887,10 @@ EOF
 }
 
 bpf_step() {
+    if [[ $RADIO_KIND == none ]]; then
+        BPF=none; BPF_BIN=""
+        return
+    fi
     heading "Transmit band-pass filter"
     say "The band-pass filter cleans up FreeDV's transmit audio before it goes to the radio."
     say "The start script picks the right one for the FreeDV build it starts:"
@@ -2069,7 +2113,8 @@ panadapter_step() {
     say "kiwipanadapter is installed: a KiwiSDR waterfall and S-meter that follows"
     say "the radio's frequency, started and closed together with FreeDV."
     ((on)) && say "(It starts with FreeDV for this radio now.)"
-    if yesno "Start it together with FreeDV for this radio?" y; then
+    # receive only: the panadapter is FreeDV's only signal
+    if [[ $RADIO_KIND == none ]] || yesno "Start it together with FreeDV for this radio?" y; then
         mkdir -p "$h"
         for f in before-freedv after-freedv env; do
             [[ -e $src/$f ]] && ln -sfn "$src/$f" "$h/$f"
@@ -2126,8 +2171,10 @@ write_freedv_conf() {
         # overdrive the radio. A copy of settings that have one is left as is.
         if [[ -z $(get_ini "$conf" Audio transmitLevel) ]]; then
             set_ini "$conf" Audio transmitLevel -200
-            say "FreeDV's TX attenuation starts at -20 dB. Raise it in FreeDV until the"
-            say "radio's ALC just moves, or any lower level you require."
+            if [[ $RADIO_KIND != none ]]; then
+                say "FreeDV's TX attenuation starts at -20 dB. Raise it in FreeDV until the"
+                say "radio's ALC just moves, or any lower level you require."
+            fi
         fi
         # FreeDV opens its first-run Easy Setup wizard unless its settings say
         # it has been set up (FirstTimeUse, a top-level key, default true) -
@@ -3054,7 +3101,14 @@ else
         CHOICE=$(($? + 1))
         case $CHOICE in
             1) test_sound ;;
-            2) radio_audio_step && finish ;;
+            2) kind_was=$RADIO_KIND
+               if radio_audio_step; then
+                   # to or from receive only: rig control, filter and panadapter change with it
+                   if [[ $kind_was != "$RADIO_KIND" && ( $kind_was == none || $RADIO_KIND == none ) ]]; then
+                       rig_step; bpf_step; panadapter_step
+                   fi
+                   finish
+               fi ;;
             3) headset_step; finish ;;
             4) rig_step; finish ;;
             5) bpf_step; finish ;;
