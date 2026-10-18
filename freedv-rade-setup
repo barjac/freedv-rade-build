@@ -1422,8 +1422,8 @@ software_radio_step() {
     say "This radio's start script then starts the program too, after it restarts"
     say "the sound system (which would cut off a program that was already running)."
     [[ -z $def ]] && command -v quisk &>/dev/null && def=quisk
-    ask "The command that starts the radio program (Enter on its own to go back)" "$def"
-    [[ -n $REPLY ]] || return 1
+    ask "The command that starts the radio program (B to go back)" "$def"
+    [[ -n $REPLY && $REPLY != [Bb] ]] || return 1
     prog=${REPLY%% *}
     if ! command -v "$prog" &>/dev/null; then
         warn "'$prog' wasn't found."
