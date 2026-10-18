@@ -92,6 +92,30 @@ appear between the FDV_ boxes:
   "[Monitor]" outputs, the PC's built-in input), so they're moved out of
   the way there.
 
+### A software radio (Quisk)
+
+If your radio is an SDR run by a program on this PC, such as **Quisk**,
+choose **(S)oftware radio program** at the radio sound card question. It
+asks for the command that starts the program (`quisk`). The radio's start
+script then closes the program if it is running, restarts the sound, and
+starts it again. The sound restart would otherwise cut it off. The program
+is left running when FreeDV closes.
+
+Set Quisk up for FreeDV first, in its Config window:
+
+- Add your radio on the **Radios** tab, and use that one. The
+  **ConfigFileRadio** settings come from a file and can't be changed in the
+  window. Quisk can't delete the radio it is running, so to replace one, add
+  the new radio, choose it in "When Quisk starts, use the radio", and
+  restart Quisk.
+- On that radio's **Sound** tab, set **Digital Rx0 Output** to
+  `pulse: Use name QuiskDigitalOutput.monitor` and **Digital Tx0 Input** to
+  `pulse: Use name QuiskDigitalInput` (both at the end of their lists). Quisk
+  makes these two sound boxes when it starts, so restart it afterwards.
+- On its **Remote** tab, the **Hamlib port** (normally 4532) is what FreeDV
+  uses to change the frequency and switch to transmit. The setup finds it.
+- Use a DGT mode (DGT-U) in Quisk. FreeDV selects it through hamlib.
+
 Running it again later lets you test or change a radio (sound card, headset,
 rig control, filter), or set up another radio.
 

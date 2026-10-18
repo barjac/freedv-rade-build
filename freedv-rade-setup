@@ -83,7 +83,7 @@ WP_LUA_DIR="$CFG_HOME/wireplumber/main.lua.d"
 FDV_SINKS=(FDV_RX_in FDV_RX_out FDV_TX_in FDV_TX_out)
 
 # Settings saved at the top of each radio's start script
-SETTINGS_VARS=(RADIO RADIO_LABEL FREEDV_DIR RADIO_KIND RADIO_CARD RADIO_CARD_ID RADIO_RX_NODE RADIO_TX_NODE
+SETTINGS_VARS=(RADIO RADIO_LABEL FREEDV_DIR RADIO_KIND RADIO_APP RADIO_CARD RADIO_CARD_ID RADIO_RX_NODE RADIO_TX_NODE
                MIC_NODE MIC_CARD_ID PHONES_NODE SPEAKER_NODE MONITOR
                RIG_MODE RIG_MODEL RIG_MODEL_NAME RIG_PORT RIG_SETCONF RIG_LISTEN RIG_HOST
                RIGCTL_BIN RIGCTLD_BIN BPF BPF_BIN QPWGRAPH_CMD)
@@ -1365,19 +1365,12 @@ radio_audio_step() {
             return 1 ;;
         1)
             detect_plugin "the radio's USB cable (or its USB sound interface)" || continue
-            RADIO_KIND=usb; RADIO_CARD=$NEW_CARD; RADIO_SERIAL=$NEW_SERIAL ;;
+            RADIO_KIND=usb; RADIO_APP=""; RADIO_CARD=$NEW_CARD; RADIO_SERIAL=$NEW_SERIAL ;;
         2)
             pick_card "Which card is connected to the radio?" || return 1
-            RADIO_KIND=card; RADIO_CARD=$PICKED_CARD ;;
+            RADIO_KIND=card; RADIO_APP=""; RADIO_CARD=$PICKED_CARD ;;
         3)
-            # NOT YET TESTED - needs a quisk/piHPSDR user
-            RADIO_KIND=software; RADIO_CARD=""; RADIO_CARD_ID=""
-            say "Start the radio program now, with its audio running."
-            pause "Press Enter when it is running... "
-            pick_node "Which node carries the RECEIVED audio from the radio program?" apps-out || return 1
-            RADIO_RX_NODE=$PICKED_NODE
-            pick_node "Which node should the TRANSMIT audio go to?" apps-in || return 1
-            RADIO_TX_NODE=$PICKED_NODE
+            software_radio_step || continue
             return 0 ;;
     esac
     name_card radio "$RADIO_CARD"
@@ -1392,6 +1385,87 @@ radio_audio_step() {
     RADIO_CARD=$NAMED_CARD
     RADIO_CARD_ID=$(card_ident "$RADIO_CARD")
     set_radio_volume
+}
+
+# app_pids COMMAND -> the PIDs of a running radio program (e.g. quisk, which
+# runs as "python3 /usr/bin/quisk")
+app_pids() {
+    local prog=${1%% *} p a0 a1
+    prog=${prog##*/}
+    [[ -n $prog ]] || return
+    for p in $(pgrep -u "$USER" .); do
+        a0="" a1=""
+        { IFS= read -r -d '' a0; IFS= read -r -d '' a1; } < "/proc/$p/cmdline" 2>/dev/null
+        [[ ${a0##*/} == "$prog" || ( ${a0##*/} == python* && ${a1##*/} == "$prog" ) ]] && echo "$p"
+    done
+}
+
+quisk_help() {
+    say "Quisk's settings for FreeDV (in Quisk's Config window):"
+    say "  - Use a radio added on the Radios tab, not ConfigFileRadio (its settings"
+    say "    come from a file and can't be changed there)."
+    say "  - On that radio's Sound tab:"
+    say "      Digital Rx0 Output:  pulse: Use name QuiskDigitalOutput.monitor"
+    say "      Digital Tx0 Input:   pulse: Use name QuiskDigitalInput"
+    say "  - On its Remote tab, the Hamlib port (4532, or 4575) lets FreeDV change"
+    say "    the frequency and switch to transmit."
+    say "Quisk makes the QuiskDigitalOutput and QuiskDigitalInput sound boxes when"
+    say "it starts, so restart it after changing these."
+}
+
+# A radio program (Quisk, piHPSDR ...) on this computer instead of a sound
+# card. The start script restarts the sound system, which removes the sound
+# nodes the program made, so it starts the program itself after the restart.
+software_radio_step() {
+    local def=$RADIO_APP prog i
+    say "FreeDV can work with a radio program on this computer, such as Quisk."
+    say "This radio's start script then starts the program too, after it restarts"
+    say "the sound system (which would cut off a program that was already running)."
+    [[ -z $def ]] && command -v quisk &>/dev/null && def=quisk
+    ask "The command that starts the radio program (Enter on its own to go back)" "$def"
+    [[ -n $REPLY ]] || return 1
+    prog=${REPLY%% *}
+    if ! command -v "$prog" &>/dev/null; then
+        warn "'$prog' wasn't found."
+        yesno "Use it anyway?" n || return 1
+    fi
+    RADIO_KIND=software; RADIO_APP=$REPLY; RADIO_CARD=""; RADIO_CARD_ID=""
+    [[ ${prog##*/} == quisk ]] && quisk_help
+    if [[ -z $(app_pids "$RADIO_APP") ]]; then
+        say "Starting $RADIO_APP..."
+        # its own session, so it carries on when this window closes
+        setsid -f $RADIO_APP >/dev/null 2>&1 </dev/null 3>&- 9>&-
+    fi
+    while true; do
+        pause "When ${prog##*/} is running with its sound set up as above, press Enter... "
+        if [[ ${prog##*/} == quisk ]]; then
+            for ((i=0; i<25; i++)); do
+                node_exists QuiskDigitalOutput && node_exists QuiskDigitalInput && break
+                sleep 0.2
+            done
+            if node_exists QuiskDigitalOutput && node_exists QuiskDigitalInput; then
+                ok "Found Quisk's QuiskDigitalOutput (received audio) and QuiskDigitalInput (transmit audio)"
+                RADIO_RX_NODE=QuiskDigitalOutput
+                RADIO_TX_NODE=QuiskDigitalInput
+                return 0
+            fi
+            warn "Quisk's QuiskDigitalOutput and QuiskDigitalInput weren't found."
+            say "Check its Sound settings (above) and restart Quisk."
+            say "  (T)ry again"
+            say "  (C)hoose the sound nodes from a list instead"
+            say "  (B)ack"
+            confirm "Try again, Choose or Back?" "[T/c/b]" "Tt" "Cc" "Bb"
+            case $? in
+                0) continue ;;
+                2) return 1 ;;
+            esac
+        fi
+        break
+    done
+    pick_node "Which node carries the RECEIVED audio from the radio program?" apps-out || return 1
+    RADIO_RX_NODE=$PICKED_NODE
+    pick_node "Which node should the TRANSMIT audio go to?" apps-in || return 1
+    RADIO_TX_NODE=$PICKED_NODE
 }
 
 # A radio's sound card comes up at whatever volume it had (e.g. 74%, too quiet
@@ -1564,10 +1638,52 @@ rig_test() {
     return 1
 }
 
+# A radio program controls the radio itself, and answers hamlib commands
+# like a rigctld (Quisk: on port 4532 or 4575), so FreeDV talks to it
+# directly and no rigctld is run for it
+app_rig() {
+    local prog=${RADIO_APP%% *} hp out found=""
+    prog=${prog##*/}
+    say "${prog:-The radio program} controls the radio itself. FreeDV can change its frequency and"
+    say "switch it to transmit through its hamlib server, if it has one."
+    if [[ -n $RIGCTL_BIN ]]; then
+        for hp in localhost:4532 localhost:4575; do
+            out=$(timeout 5 "$RIGCTL_BIN" -m 2 -r "$hp" f 2>/dev/null)
+            [[ $out =~ ^[0-9]+$ ]] && { found=$hp; break; }
+        done
+    fi
+    if [[ -n $found ]]; then
+        say "It answers at $found (frequency $out Hz)."
+        yesno "Use it for FreeDV's rig control and PTT?" y || return
+        RIG_MODE=program; RIG_HOST=$found
+        return
+    fi
+    if [[ -n $RIGCTL_BIN ]]; then
+        say "Nothing answered at localhost:4532 or localhost:4575."
+    else
+        say "(hamlib rigctl isn't installed, so this can't be tested here.)"
+    fi
+    [[ $prog == quisk ]] && say "In Quisk the Hamlib port is on the radio's Remote tab (0 turns it off)."
+    say "Answer No to use VOX or the radio's own PTT."
+    yesno "Set the address of its hamlib server by hand?" n || return
+    ask "Its address (host:port)" "localhost:4532"
+    hp=$REPLY
+    [[ $hp == *:* ]] || hp="$hp:4532"
+    if [[ -n $RIGCTL_BIN ]]; then
+        rig_test "$hp" 2 || yesno "Use it anyway?" n || return
+    fi
+    RIG_MODE=program; RIG_HOST=$hp
+}
+
 rig_step() {
     heading "Rig control (CAT and PTT)"
     RIG_MODE=none; RIG_MODEL=""; RIG_MODEL_NAME=""; RIG_PORT=""; RIG_SETCONF=""
     RIG_LISTEN=127.0.0.1; RIG_HOST=localhost:4532
+
+    if [[ $RADIO_KIND == software ]]; then
+        app_rig
+        return
+    fi
 
     if [[ -z $RIGCTL_BIN ]]; then
         warn "hamlib rigctl is not installed, so rig control can't be set up."
@@ -2241,8 +2357,10 @@ stop_start() {
 }
 
 wait_for_nodes() {
-    local n i missing
-    for ((i=0; i<50; i++)); do
+    local n i missing tries=50
+    # a radio program takes a few seconds to start and make its nodes
+    [[ $RADIO_KIND == software ]] && tries=150
+    for ((i=0; i<tries; i++)); do
         missing=""
         for n in $(link_nodes); do
             node_exists "$n" || missing+=" $n"
@@ -2251,11 +2369,59 @@ wait_for_nodes() {
         sleep 0.2
     done
     echo "WARNING: not found (unplugged?):$missing"
+    if [[ $RADIO_KIND == software && " $missing " == *" $RADIO_RX_NODE "* ]]; then
+        echo "($RADIO_RX_NODE is made by ${APP_NAME:-the radio program}: is it running, with its sound set up?)"
+    fi
     # ask, or FreeDV's window would cover the warning before it can be read
     if [[ -t 0 ]]; then
         read -r -p "(C)ontinue or (S)top? [C/s] " REPLY
         [[ $REPLY == [Ss]* ]] && stop_start "Stopped. Check the sound cards are plugged in, then start again."
     fi
+}
+
+# A radio program (e.g. Quisk) makes its own sound nodes, which the sound
+# restart removes, so it is closed first and started again afterwards. It is
+# left running when FreeDV closes.
+APP_NAME=${RADIO_APP%% *}; APP_NAME=${APP_NAME##*/}
+app_pids() {
+    local p a0 a1
+    [[ -n $APP_NAME ]] || return
+    for p in $(pgrep -u "$USER" .); do
+        a0="" a1=""
+        { IFS= read -r -d '' a0; IFS= read -r -d '' a1; } < "/proc/$p/cmdline" 2>/dev/null
+        [[ ${a0##*/} == "$APP_NAME" || ( ${a0##*/} == python* && ${a1##*/} == "$APP_NAME" ) ]] && echo "$p"
+    done
+}
+stop_app() {
+    [[ $RADIO_KIND == software && -n $RADIO_APP ]] || return
+    local pids i
+    pids=$(app_pids)
+    [[ -n $pids ]] || return
+    echo "Closing $APP_NAME (it is started again after the sound restart)"
+    # shellcheck disable=SC2086
+    kill $pids 2>/dev/null
+    for ((i=0; i<50; i++)); do
+        [[ -z $(app_pids) ]] && return
+        sleep 0.1
+    done
+    # shellcheck disable=SC2086
+    kill -KILL $(app_pids) 2>/dev/null
+}
+start_app() {
+    [[ $RADIO_KIND == software && -n $RADIO_APP ]] || return
+    echo "Starting $APP_NAME"
+    # its own session, so it carries on when this window closes; RADIO_APP
+    # may hold options - left unquoted on purpose
+    # shellcheck disable=SC2086
+    setsid -f $RADIO_APP > "$RADIO_DIR/radio-program.log" 2>&1 </dev/null 9>&-
+}
+# own_app_link A B -> true for a link the radio program made between its own
+# nodes (e.g. Quisk-local -> QuiskDigitalOutput): one end is the program's
+# node in the links file, the other isn't one of the caller's $nodes
+own_app_link() {
+    [[ $RADIO_KIND == software ]] || return 1
+    local x=${1%%:*} y=${2%%:*} app=" $RADIO_RX_NODE $RADIO_TX_NODE "
+    [[ $app == *" $x "* && $nodes != *" $y "* ]] || [[ $app == *" $y "* && $nodes != *" $x "* ]]
 }
 
 # node_ident NODE -> "VENDOR:PRODUCT SERIAL" of the USB card behind a node
@@ -2340,6 +2506,7 @@ save_links() {
     nodes=" ${SINKS[*]} $BPF_NODE $RADIO_RX_NODE $RADIO_TX_NODE $MIC_NODE $PHONES_NODE $SPEAKER_NODE "
     while read -r a b; do
         [[ -z $b || ${a%%:*} == FreeDV || ${b%%:*} == FreeDV ]] && continue
+        own_app_link "$a" "$b" && continue
         [[ $nodes == *" ${a%%:*} "* || $nodes == *" ${b%%:*} "* ]] && echo "$a $b"
     done < <(current_links) | sed "s/^$BPF_NODE:/Fdv-bpf:/; s/ $BPF_NODE:/ Fdv-bpf:/" > "$f.new"
     if ! grep -q . "$f.new"; then
@@ -2366,6 +2533,7 @@ remove_other_links() {
         [[ -z $b ]] && continue
         [[ $nodes == *" ${a%%:*} "* || $nodes == *" ${b%%:*} "* ]] || continue
         grep -qxF "$a $b" "$LINKS" && continue
+        own_app_link "$a" "$b" && continue
         pw-link -d "$a" "$b" 2>/dev/null && echo "Removed link $a -> $b"
     done < <(current_links)
 }
@@ -2450,6 +2618,15 @@ start_rig() {
             if [[ -x $RIGCTL_BIN ]] && ! timeout 5 "$RIGCTL_BIN" -m 2 -r "$RIG_HOST" f &>/dev/null; then
                 echo "WARNING: rigctld at $RIG_HOST is not answering (radio off?)"
             fi ;;
+        program)
+            # the radio program's own hamlib server, which may take a moment
+            local i
+            [[ -x $RIGCTL_BIN ]] || return
+            for ((i=0; i<10; i++)); do
+                timeout 5 "$RIGCTL_BIN" -m 2 -r "$RIG_HOST" f &>/dev/null && return
+                sleep 1
+            done
+            echo "WARNING: $APP_NAME's hamlib server at $RIG_HOST is not answering" ;;
     esac
 }
 
@@ -2474,11 +2651,13 @@ run_hook() {
     [[ -x $RADIO_DIR/hooks/$1 ]] && "$RADIO_DIR/hooks/$1"
 }
 
+stop_app
 echo "Restarting sound servers"
 restart_sound
 echo "Creating FreeDV sinks"
 create_sinks
 start_bpf
+start_app
 # waiting for a missing sound card can take a while
 ((TEST)) || echo "Starting FreeDV..."
 fix_bpf_ports
@@ -2825,7 +3004,7 @@ if [[ -z $RADIO ]]; then
     done
     RADIO_DIR="$SETUP_ROOT/$RADIO"
     mkdir -p "$RADIO_DIR"
-    BPF=none; MONITOR=none; RIG_MODE=none
+    BPF=none; MONITOR=none; RIG_MODE=none; RADIO_APP=""
     NEW_RADIO=1
     if ! radio_audio_step; then
         # (card names belong to the USB socket and may be shared, so they stay)
