@@ -1,8 +1,42 @@
 diff --git a/src/config/ReportingConfiguration.cpp b/src/config/ReportingConfiguration.cpp
-index fe4e1750..c97409a3 100644
+index fe4e1750..b960e173 100644
 --- a/src/config/ReportingConfiguration.cpp
 +++ b/src/config/ReportingConfiguration.cpp
-@@ -332,3 +332,18 @@ void ReportingConfiguration::save(wxConfigBase* config)
+@@ -24,6 +24,7 @@
+ #include <wx/stdpaths.h>
+ #include <wx/filename.h>
+ #include <inttypes.h>
++#include <algorithm>
+ 
+ #include "../defines.h"
+ #include "reporting/FreeDVReporter.h"
+@@ -104,7 +105,7 @@ ReportingConfiguration::ReportingConfiguration()
+ {
+     // Special handling for the frequency list to properly handle locales
+     reportingFrequencyList.setLoadProcessor([this](std::vector<wxString> const& list) {
+-        std::vector<wxString> newList;
++        std::vector<uint64_t> freqs;
+         for (auto& val : list)
+         {
+             // Frequencies are unfortunately saved in US format (legacy behavior). We need 
+@@ -127,8 +128,15 @@ ReportingConfiguration::ReportingConfiguration()
+             long long mhz = 0;
+             wholeNumber.ToLongLong(&mhz);
+             fraction.ToLongLong(&hz);
+-            uint64_t freq = mhz * 1000000 + hz;
++            freqs.push_back(mhz * 1000000 + hz);
++        }
++
++        // Shown in ascending order, whatever order an older config has them in.
++        std::sort(freqs.begin(), freqs.end());
+ 
++        std::vector<wxString> newList;
++        for (auto freq : freqs)
++        {
+             if (reportingFrequencyAsKhz)
+             {
+                 double khzFloat = freq / 1000.0;
+@@ -332,3 +340,18 @@ void ReportingConfiguration::save(wxConfigBase* config)
      wxString tempFreqStr = wxString::Format(wxT("%" PRIu64), reportingFrequency.getWithoutProcessing());
      config->Write(reportingFrequency.getElementName(), tempFreqStr);
  }
