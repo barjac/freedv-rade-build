@@ -1,0 +1,1143 @@
+diff --git a/po/freedv.pot b/po/freedv.pot
+index 9b6f5324..df589e51 100644
+--- a/po/freedv.pot
++++ b/po/freedv.pot
+@@ -8,7 +8,7 @@ msgid ""
+ msgstr ""
+ "Project-Id-Version: FreeDV 3.0.0\n"
+ "Report-Msgid-Bugs-To: https://github.com/freedv/freedv-gui/issues\n"
+-"POT-Creation-Date: 2026-10-11 15:56-0700\n"
++"POT-Creation-Date: 2026-10-20 10:06+0100\n"
+ "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+ "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+ "Language-Team: LANGUAGE <LL@li.org>\n"
+@@ -578,14 +578,6 @@ msgstr ""
+ msgid "Remove"
+ msgstr ""
+ 
+-#: src/gui/dialogs/dlg_options.cpp
+-msgid "Move Up"
+-msgstr ""
+-
+-#: src/gui/dialogs/dlg_options.cpp
+-msgid "Move Down"
+-msgstr ""
+-
+ #: src/gui/dialogs/dlg_options.cpp
+ msgid "Enter frequency (kHz):"
+ msgstr ""
+@@ -1983,6 +1975,32 @@ msgstr ""
+ msgid "Switch to A&nalog"
+ msgstr ""
+ 
++#: src/ongui.cpp
++#, c-format
++msgid "&Add %s%s to list"
++msgstr ""
++
++#: src/ongui.cpp
++msgid "&Add frequency to list"
++msgstr ""
++
++#: src/ongui.cpp
++msgid "&Cut"
++msgstr ""
++
++#: src/ongui.cpp
++msgid "C&opy"
++msgstr ""
++
++#: src/ongui.cpp
++msgid "&Paste"
++msgstr ""
++
++#: src/ongui.cpp
++#, c-format
++msgid "&Delete %s%s from list"
++msgstr ""
++
+ #: src/ongui.cpp
+ msgid "Export FreeDV Configuration"
+ msgstr ""
+@@ -2392,11 +2410,7 @@ msgid "Couldn't open PTT input port: %s"
+ msgstr ""
+ 
+ #: src/voicekeyer.cpp
+-msgid "Start Voice Keyer"
+-msgstr ""
+-
+-#: src/voicekeyer.cpp
+-msgid "Stop Voice Keyer"
++msgid "Stop Voice &Keyer"
+ msgstr ""
+ 
+ #: src/voicekeyer.cpp
+@@ -2446,7 +2460,3 @@ msgstr ""
+ #, c-format
+ msgid "Voice Keyer: Playing file %s to mic input"
+ msgstr ""
+-
+-#: src/voicekeyer.cpp
+-msgid "Stop Voice &Keyer"
+-msgstr ""
+diff --git a/po/pt_BR.po b/po/pt_BR.po
+index 80c6e6ad..1e9ac7a3 100644
+--- a/po/pt_BR.po
++++ b/po/pt_BR.po
+@@ -8,7 +8,7 @@ msgid ""
+ msgstr ""
+ "Project-Id-Version: FreeDV 3.0.0\n"
+ "Report-Msgid-Bugs-To: https://github.com/freedv/freedv-gui/issues\n"
+-"POT-Creation-Date: 2026-10-11 15:56-0700\n"
++"POT-Creation-Date: 2026-10-20 10:06+0100\n"
+ "PO-Revision-Date: 2026-10-06 14:00+ZONE\n"
+ "Last-Translator: manotroll <manotroll@gmail.com>\n"
+ "Language-Team: pt-br <LL@li.org>\n"
+@@ -600,14 +600,6 @@ msgstr "Adicionar"
+ msgid "Remove"
+ msgstr "Remover"
+ 
+-#: src/gui/dialogs/dlg_options.cpp
+-msgid "Move Up"
+-msgstr "Para cima"
+-
+-#: src/gui/dialogs/dlg_options.cpp
+-msgid "Move Down"
+-msgstr "Para baixo"
+-
+ #: src/gui/dialogs/dlg_options.cpp
+ msgid "Enter frequency (kHz):"
+ msgstr "Insira a frequência (kHz):"
+@@ -2070,6 +2062,32 @@ msgstr "Mude para o digital."
+ msgid "Switch to A&nalog"
+ msgstr "Mudar para analógico"
+ 
++#: src/ongui.cpp
++#, c-format
++msgid "&Add %s%s to list"
++msgstr ""
++
++#: src/ongui.cpp
++msgid "&Add frequency to list"
++msgstr ""
++
++#: src/ongui.cpp
++msgid "&Cut"
++msgstr ""
++
++#: src/ongui.cpp
++msgid "C&opy"
++msgstr ""
++
++#: src/ongui.cpp
++msgid "&Paste"
++msgstr ""
++
++#: src/ongui.cpp
++#, fuzzy, c-format
++msgid "&Delete %s%s from list"
++msgstr "Remover os selecionados da lista"
++
+ #: src/ongui.cpp
+ msgid "Export FreeDV Configuration"
+ msgstr ""
+@@ -2499,11 +2517,7 @@ msgid "Couldn't open PTT input port: %s"
+ msgstr "Não foi possível abrir a porta de entrada PTT: %s"
+ 
+ #: src/voicekeyer.cpp
+-msgid "Start Voice Keyer"
+-msgstr "Iniciar o Voice Keyer"
+-
+-#: src/voicekeyer.cpp
+-msgid "Stop Voice Keyer"
++msgid "Stop Voice &Keyer"
+ msgstr "Parar o Voice Keyer"
+ 
+ #: src/voicekeyer.cpp
+@@ -2559,6 +2573,14 @@ msgstr "Canais demais"
+ msgid "Voice Keyer: Playing file %s to mic input"
+ msgstr "Voice Keyer: Reproduzindo o arquivo %s na entrada do microfone"
+ 
+-#: src/voicekeyer.cpp
+-msgid "Stop Voice &Keyer"
+-msgstr "Parar o Voice Keyer"
++#~ msgid "Move Up"
++#~ msgstr "Para cima"
++
++#~ msgid "Move Down"
++#~ msgstr "Para baixo"
++
++#~ msgid "Start Voice Keyer"
++#~ msgstr "Iniciar o Voice Keyer"
++
++#~ msgid "Stop Voice Keyer"
++#~ msgstr "Parar o Voice Keyer"
+diff --git a/src/config/ReportingConfiguration.cpp b/src/config/ReportingConfiguration.cpp
+index b74617ea..9539eb54 100644
+--- a/src/config/ReportingConfiguration.cpp
++++ b/src/config/ReportingConfiguration.cpp
+@@ -24,6 +24,7 @@
+ #include <wx/stdpaths.h>
+ #include <wx/filename.h>
+ #include <inttypes.h>
++#include <algorithm>
+ #include <cmath>
+ 
+ #include "../defines.h"
+@@ -105,7 +106,7 @@ ReportingConfiguration::ReportingConfiguration()
+ {
+     // Special handling for the frequency list to properly handle locales
+     reportingFrequencyList.setLoadProcessor([this](std::vector<wxString> const& list) {
+-        std::vector<wxString> newList;
++        std::vector<uint64_t> freqs;
+         for (auto& val : list)
+         {
+             // Frequencies are unfortunately saved in US format (legacy behavior). We need 
+@@ -128,8 +129,15 @@ ReportingConfiguration::ReportingConfiguration()
+             long long mhz = 0;
+             wholeNumber.ToLongLong(&mhz);
+             fraction.ToLongLong(&hz);
+-            uint64_t freq = mhz * 1000000 + hz;
++            freqs.push_back(mhz * 1000000 + hz);
++        }
++
++        // Shown in ascending order, whatever order an older config has them in.
++        std::sort(freqs.begin(), freqs.end());
+ 
++        std::vector<wxString> newList;
++        for (auto freq : freqs)
++        {
+             if (reportingFrequencyAsKhz)
+             {
+                 double khzFloat = freq / 1000.0;
+@@ -330,3 +338,18 @@ void ReportingConfiguration::save(wxConfigBase* config)
+     wxString tempFreqStr = wxString::Format(wxT("%" PRIu64), reportingFrequency.getWithoutProcessing());
+     config->Write(reportingFrequency.getElementName(), tempFreqStr);
+ }
++
++size_t ReportingConfiguration::SortedFrequencyIndex(std::vector<wxString> const& list, double freq)
++{
++    size_t index = 0;
++    for (; index < list.size(); index++)
++    {
++        double existing = 0;
++        wxNumberFormatter::FromString(list[index], &existing);
++        if (existing > freq)
++        {
++            break;
++        }
++    }
++    return index;
++}
+diff --git a/src/config/ReportingConfiguration.h b/src/config/ReportingConfiguration.h
+index bd80a5b6..645378cd 100644
+--- a/src/config/ReportingConfiguration.h
++++ b/src/config/ReportingConfiguration.h
+@@ -91,6 +91,10 @@ public:
+ 
+     virtual void load(wxConfigBase* config) override;
+     virtual void save(wxConfigBase* config) override;
++
++    // Where a frequency (in the list's units, MHz or kHz) belongs in a
++    // list kept in ascending order: the index of the first entry above it.
++    static size_t SortedFrequencyIndex(std::vector<wxString> const& list, double freq);
+ };
+ 
+ #endif // REPORTING_CONFIGURATION_H
+diff --git a/src/config/test/ReportingFrequencyListTest.cpp b/src/config/test/ReportingFrequencyListTest.cpp
+index a536e2ab..d2ef7a55 100644
+--- a/src/config/test/ReportingFrequencyListTest.cpp
++++ b/src/config/test/ReportingFrequencyListTest.cpp
+@@ -40,7 +40,7 @@ bool loadConvertsToMHz()
+     ReportingConfiguration config;
+     config.reportingFrequencyAsKhz = false;
+     config.reportingFrequencyList.setWithoutProcessing({ "14.236000", "7.177000", "3.625", "50", "1.997500" });
+-    return listIs(config.reportingFrequencyList.get(), { "14.2360", "7.1770", "3.6250", "50.0000", "1.9975" });
++    return listIs(config.reportingFrequencyList.get(), { "1.9975", "3.6250", "7.1770", "14.2360", "50.0000" });
+ }
+ 
+ bool loadConvertsToKHz()
+@@ -48,7 +48,7 @@ bool loadConvertsToKHz()
+     ReportingConfiguration config;
+     config.reportingFrequencyAsKhz = true;
+     config.reportingFrequencyList.setWithoutProcessing({ "14.236000", "7.177000", "3.625", "50", "1.997500" });
+-    return listIs(config.reportingFrequencyList.get(), { "14236.0", "7177.0", "3625.0", "50000.0", "1997.5" });
++    return listIs(config.reportingFrequencyList.get(), { "1997.5", "3625.0", "7177.0", "14236.0", "50000.0" });
+ }
+ 
+ bool saveConvertsFromMHz()
+@@ -130,12 +130,22 @@ bool savedThenLoadedIsUnchanged(bool asKhz)
+ 
+     StringList displayed = 
+         asKhz ? 
+-        StringList { "14236.0", "2002.0", "7177.5", "50313.0" } :
+-        StringList { "14.2360", "2.0020", "7.1775", "50.3130" };
++        StringList { "2002.0", "7177.5", "14236.0", "50313.0" } :
++        StringList { "2.0020", "7.1775", "14.2360", "50.3130" };
+     config.reportingFrequencyList = displayed;
+     return listIs(config.reportingFrequencyList.get(), displayed);
+ }
+ 
++// A frequency added to the list goes before the first one above it.
++bool sortedFrequencyIndex()
++{
++    StringList list { "3.6250", "7.1770", "14.2360" };
++    return ReportingConfiguration::SortedFrequencyIndex(list, 1.9975) == 0 &&
++           ReportingConfiguration::SortedFrequencyIndex(list, 10.136) == 2 &&
++           ReportingConfiguration::SortedFrequencyIndex(list, 28.33) == 3 &&
++           ReportingConfiguration::SortedFrequencyIndex(StringList {}, 7.0) == 0;
++}
++
+ }
+ 
+ int main()
+@@ -155,5 +165,6 @@ int main()
+     executeTestCase("savedFrequencyIsExact (kHz)", []() { return savedFrequencyIsExact(true); });
+     executeTestCase("savedThenLoadedIsUnchanged (MHz)", []() { return savedThenLoadedIsUnchanged(false); });
+     executeTestCase("savedThenLoadedIsUnchanged (kHz)", []() { return savedThenLoadedIsUnchanged(true); });
++    executeTestCase("sortedFrequencyIndex", sortedFrequencyIndex);
+     return testResult();
+ }
+diff --git a/src/gui/controls/MsgListPopup.cpp b/src/gui/controls/MsgListPopup.cpp
+index 06d9e2a1..1353eca0 100644
+--- a/src/gui/controls/MsgListPopup.cpp
++++ b/src/gui/controls/MsgListPopup.cpp
+@@ -24,20 +24,27 @@
+ #include <wx/textctrl.h>
+ 
+ MsgListPopup::MsgListPopup(ContextMenuCallback onRightClick)
+-    : onRightClick_(std::move(onRightClick)), deselTimer_(this)
++    : MsgListPopup(std::move(onRightClick), Options())
++{
++}
++
++MsgListPopup::MsgListPopup(ContextMenuCallback onRightClick, Options const& options)
++    : onRightClick_(std::move(onRightClick)), options_(options), deselTimer_(this)
+ {
+     Bind(wxEVT_TIMER, &MsgListPopup::OnDeselect, this, deselTimer_.GetId());
+ }
+ 
+ bool MsgListPopup::Create(wxWindow* parent)
+ {
+-    if (!wxListBox::Create(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxLB_SORT))
++    if (!wxListBox::Create(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, 0, nullptr,
++                           options_.sorted ? wxLB_SORT : 0))
+         return false;
+     Connect(wxEVT_LEFT_DOWN,  wxMouseEventHandler(MsgListPopup::OnLeftDown),  nullptr, this);
+     Connect(wxEVT_LEFT_UP,    wxMouseEventHandler(MsgListPopup::OnLeftUp),    nullptr, this);
+     Connect(wxEVT_MOTION,     wxMouseEventHandler(MsgListPopup::OnMouseMove), nullptr, this);
+     Connect(wxEVT_RIGHT_DOWN, wxMouseEventHandler(MsgListPopup::OnRightDown), nullptr, this);
+     Connect(wxEVT_RIGHT_UP,   wxMouseEventHandler(MsgListPopup::OnRightUp),   nullptr, this);
++    Connect(wxEVT_KEY_DOWN,   wxKeyEventHandler(MsgListPopup::OnKeyDown),     nullptr, this);
+     SetToolTip(_("Right click for more options"));
+     return true;
+ }
+@@ -50,14 +57,23 @@ void MsgListPopup::SetStringValue(const wxString& s)
+ 
+ wxString MsgListPopup::GetStringValue() const
+ {
++    // The combo takes this whenever the list closes. Without hoverPicks,
++    // only an item actually clicked counts, not one just passed over.
++    if (!options_.hoverPicks && !picked_)
++        return GetComboCtrl()->GetValue();
++
+     int sel = GetSelection();
+     return sel != wxNOT_FOUND ? GetString(sel) : wxString();
+ }
+ 
+ void MsgListPopup::OnPopup()
+ {
++    picked_ = false;
+     SetStringValue(GetComboCtrl()->GetValue());
+ 
++    if (!options_.openAbove)
++        return;
++
+     // Reposition popup above the combo: it sits near the bottom of the
+     // dialog so there is more room upward.  OnPopup() is called before
+     // the popup window is made visible, so there is no flicker.
+@@ -104,6 +120,7 @@ void MsgListPopup::OnLeftUp(wxMouseEvent& event)
+     if (item != wxNOT_FOUND)
+     {
+         SetSelection(item);
++        picked_ = true;
+         Dismiss();
+         deselTimer_.StartOnce(20);
+     }
+@@ -149,6 +166,72 @@ void MsgListPopup::OnRightUp(wxMouseEvent& event)
+     onRightClick_(item);
+ }
+ 
++void MsgListPopup::OnKeyDown(wxKeyEvent& event)
++{
++    int key = event.GetKeyCode();
++    int item = GetSelection();
++    if (onDeleteKey_ && (key == WXK_DELETE || key == WXK_NUMPAD_DELETE) && item != wxNOT_FOUND)
++    {
++        onDeleteKey_(item);
++        // Highlight whatever is now under the pointer, as hovering does.
++        SetSelection(HitTest(ScreenToClient(wxGetMousePosition())));
++        return;
++    }
++
++    // While the list is open, wxComboCtrl passes its key events here rather
++    // than to the native list box, so moving the highlight is done here.
++    int count = (int)GetCount();
++    int page = std::max(1, GetClientSize().GetHeight() / (GetCharHeight() + 8) - 1);
++    int next = wxNOT_FOUND;
++    switch (key)
++    {
++        case WXK_UP:
++        case WXK_NUMPAD_UP:
++            next = item == wxNOT_FOUND ? count - 1 : item - 1;
++            break;
++        case WXK_DOWN:
++        case WXK_NUMPAD_DOWN:
++            next = item == wxNOT_FOUND ? 0 : item + 1;
++            break;
++        case WXK_PAGEUP:
++        case WXK_NUMPAD_PAGEUP:
++            next = item == wxNOT_FOUND ? 0 : item - page;
++            break;
++        case WXK_PAGEDOWN:
++        case WXK_NUMPAD_PAGEDOWN:
++            next = item == wxNOT_FOUND ? count - 1 : item + page;
++            break;
++        case WXK_HOME:
++        case WXK_NUMPAD_HOME:
++            next = 0;
++            break;
++        case WXK_END:
++        case WXK_NUMPAD_END:
++            next = count - 1;
++            break;
++        case WXK_RETURN:
++        case WXK_NUMPAD_ENTER:
++            // Enter takes the highlighted item, as a click on it does.
++            if (item != wxNOT_FOUND)
++            {
++                picked_ = true;
++                Dismiss();
++                deselTimer_.StartOnce(20);
++                return;
++            }
++            break;
++        default:
++            break;
++    }
++    if (next != wxNOT_FOUND && count > 0)
++    {
++        next = std::clamp(next, 0, count - 1);
++        SetSelection(next);
++        EnsureVisible(next);
++        return;
++    }
++    event.Skip();
++}
+ 
+ void MsgListPopup::OnDeselect(wxTimerEvent&)
+ {
+diff --git a/src/gui/controls/MsgListPopup.h b/src/gui/controls/MsgListPopup.h
+index 566f50c0..8433e487 100644
+--- a/src/gui/controls/MsgListPopup.h
++++ b/src/gui/controls/MsgListPopup.h
+@@ -31,8 +31,22 @@ class MsgListPopup : public wxListBox, public wxComboPopup
+ {
+ public:
+     using ContextMenuCallback = std::function<void(int)>;
++    using DeleteKeyCallback = std::function<void(int)>;
++
++    struct Options
++    {
++        bool sorted = true;      // keep the items in alphabetical order
++        bool openAbove = true;   // open above the combo rather than below it
++        bool hoverPicks = true;  // closing the list in any way takes the
++                                 // highlighted item, not only a click on it
++    };
+ 
+     explicit MsgListPopup(ContextMenuCallback onRightClick);
++    MsgListPopup(ContextMenuCallback onRightClick, Options const& options);
++
++    // Called with the highlighted item when Del is pressed while the list
++    // is open. The list stays open.
++    void SetDeleteKeyCallback(DeleteKeyCallback onDeleteKey) { onDeleteKey_ = std::move(onDeleteKey); }
+ 
+     bool Create(wxWindow* parent) override;
+     wxWindow* GetControl() override { return this; }
+@@ -47,9 +61,13 @@ private:
+     void OnMouseMove(wxMouseEvent& event);
+     void OnRightDown(wxMouseEvent& event);
+     void OnRightUp(wxMouseEvent& event);
++    void OnKeyDown(wxKeyEvent& event);
+     void OnDeselect(wxTimerEvent& event);
+ 
+     ContextMenuCallback onRightClick_;
++    DeleteKeyCallback onDeleteKey_;
++    Options options_;
++    bool picked_ = false;
+     int pendingContextItem_ = wxNOT_FOUND;
+     wxTimer deselTimer_;
+     wxPoint mouseDownPos_ = wxDefaultPosition;
+diff --git a/src/gui/dialogs/dlg_options.cpp b/src/gui/dialogs/dlg_options.cpp
+index 70ab046a..2b25e910 100644
+--- a/src/gui/dialogs/dlg_options.cpp
++++ b/src/gui/dialogs/dlg_options.cpp
+@@ -572,18 +572,18 @@ OptionsDlg::OptionsDlg(wxWindow* parent, wxWindowID id, const wxString& title, c
+     wxGridBagSizer* gridSizer = new wxGridBagSizer(5, 5);
+     
+     m_freqList = new wxListBox(sb_freqList, wxID_ANY, wxDefaultPosition, wxSize(350,150), 0, NULL, wxLB_SINGLE | wxLB_NEEDED_SB);
+-    gridSizer->Add(m_freqList, wxGBPosition(0, 0), wxGBSpan(5, 2), static_cast<int>(wxEXPAND));
++    gridSizer->Add(m_freqList, wxGBPosition(0, 0), wxGBSpan(1, 2), static_cast<int>(wxEXPAND));
+ 
++    // Add and Remove stacked at the top beside the list, rather than spread
++    // over its height.
+     const int FREQ_LIST_BUTTON_WIDTH = 100; 
+     const int FREQ_LIST_BUTTON_HEIGHT = -1;
++    wxBoxSizer* freqListButtons = new wxBoxSizer(wxVERTICAL);
+     m_freqListAdd = new wxButton(sb_freqList, wxID_ANY, _("Add"), wxDefaultPosition, wxSize(FREQ_LIST_BUTTON_WIDTH,FREQ_LIST_BUTTON_HEIGHT), 0);
+-    gridSizer->Add(m_freqListAdd, wxGBPosition(0, 2), wxDefaultSpan, static_cast<int>(wxEXPAND));
++    freqListButtons->Add(m_freqListAdd, 0, static_cast<int>(wxEXPAND) | wxBOTTOM, 5);
+     m_freqListRemove = new wxButton(sb_freqList, wxID_ANY, _("Remove"), wxDefaultPosition, wxSize(FREQ_LIST_BUTTON_WIDTH,FREQ_LIST_BUTTON_HEIGHT), 0);
+-    gridSizer->Add(m_freqListRemove, wxGBPosition(1, 2), wxDefaultSpan, static_cast<int>(wxEXPAND));
+-    m_freqListMoveUp = new wxButton(sb_freqList, wxID_ANY, _("Move Up"), wxDefaultPosition, wxSize(FREQ_LIST_BUTTON_WIDTH,FREQ_LIST_BUTTON_HEIGHT), 0);
+-    gridSizer->Add(m_freqListMoveUp, wxGBPosition(2, 2), wxDefaultSpan, static_cast<int>(wxEXPAND));
+-    m_freqListMoveDown = new wxButton(sb_freqList, wxID_ANY, _("Move Down"), wxDefaultPosition, wxSize(FREQ_LIST_BUTTON_WIDTH,FREQ_LIST_BUTTON_HEIGHT), 0);
+-    gridSizer->Add(m_freqListMoveDown, wxGBPosition(3, 2), wxDefaultSpan, static_cast<int>(wxEXPAND));
++    freqListButtons->Add(m_freqListRemove, 0, static_cast<int>(wxEXPAND));
++    gridSizer->Add(freqListButtons, wxGBPosition(0, 2), wxDefaultSpan, wxALIGN_TOP);
+     
+     if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
+     {
+@@ -593,10 +593,10 @@ OptionsDlg::OptionsDlg(wxWindow* parent, wxWindowID id, const wxString& title, c
+     {
+         m_labelEnterFreq = new wxStaticText(sb_freqList, wxID_ANY, _("Enter frequency (MHz):"), wxDefaultPosition, wxDefaultSize, 0);
+     }
+-    gridSizer->Add(m_labelEnterFreq, wxGBPosition(5, 0), wxDefaultSpan, wxALIGN_CENTER_VERTICAL);
++    gridSizer->Add(m_labelEnterFreq, wxGBPosition(1, 0), wxDefaultSpan, wxALIGN_CENTER_VERTICAL);
+     
+     m_txtCtrlNewFrequency = new wxTextCtrl(sb_freqList, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0);
+-    gridSizer->Add(m_txtCtrlNewFrequency, wxGBPosition(5, 1), wxGBSpan(1, 2), static_cast<int>(wxEXPAND));
++    gridSizer->Add(m_txtCtrlNewFrequency, wxGBPosition(1, 1), wxGBSpan(1, 2), static_cast<int>(wxEXPAND));
+     
+     sbSizer_freqList->Add(gridSizer, 0, static_cast<int>(wxALL), 5);
+     
+@@ -1257,8 +1257,6 @@ OptionsDlg::OptionsDlg(wxWindow* parent, wxWindowID id, const wxString& title, c
+     m_txtCtrlNewFrequency->SetName("settings.txtCtrlNewFrequency");
+     m_freqListAdd->SetName("settings.freqListAdd");
+     m_freqListRemove->SetName("settings.freqListRemove");
+-    m_freqListMoveUp->SetName("settings.freqListMoveUp");
+-    m_freqListMoveDown->SetName("settings.freqListMoveDown");
+     m_textFifos->SetName("settings.textFifos");
+     m_labelEnterFreq->SetName("settings.labelEnterFreq");
+     m_stIcomCIVHex->SetName("settings.stIcomCIVHex");
+@@ -1305,8 +1303,6 @@ OptionsDlg::OptionsDlg(wxWindow* parent, wxWindowID id, const wxString& title, c
+     m_txtCtrlNewFrequency->Connect(wxEVT_TEXT, wxCommandEventHandler(OptionsDlg::OnReportingFreqTextChange), NULL, this);
+     m_freqListAdd->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(OptionsDlg::OnReportingFreqAdd), NULL, this);
+     m_freqListRemove->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(OptionsDlg::OnReportingFreqRemove), NULL, this);
+-    m_freqListMoveUp->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(OptionsDlg::OnReportingFreqMoveUp), NULL, this);
+-    m_freqListMoveDown->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(OptionsDlg::OnReportingFreqMoveDown), NULL, this);
+ 
+     // Radio tab events
+     m_ckUseHamlibPTT->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(OptionsDlg::PTTUseHamLibClicked), NULL, this);
+@@ -1382,8 +1378,6 @@ OptionsDlg::~OptionsDlg()
+     m_txtCtrlNewFrequency->Disconnect(wxEVT_TEXT, wxCommandEventHandler(OptionsDlg::OnReportingFreqTextChange), NULL, this);
+     m_freqListAdd->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(OptionsDlg::OnReportingFreqAdd), NULL, this);
+     m_freqListRemove->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(OptionsDlg::OnReportingFreqRemove), NULL, this);
+-    m_freqListMoveUp->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(OptionsDlg::OnReportingFreqMoveUp), NULL, this);
+-    m_freqListMoveDown->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(OptionsDlg::OnReportingFreqMoveDown), NULL, this);
+ 
+     // Radio tab events
+     m_ckUseHamlibPTT->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(OptionsDlg::PTTUseHamLibClicked), NULL, this);
+@@ -2346,36 +2340,16 @@ void OptionsDlg::OnReportingFreqTextChange(wxCommandEvent&)
+     {
+         m_freqListAdd->Enable(false);
+         m_freqListRemove->Enable(true);
+-        
+-        if (idx == 0)
+-        {
+-            m_freqListMoveUp->Enable(false);
+-            m_freqListMoveDown->Enable(true);
+-        }
+-        else if ((unsigned)idx == m_freqList->GetCount() - 1)
+-        {
+-            m_freqListMoveUp->Enable(true);
+-            m_freqListMoveDown->Enable(false);
+-        }
+-        else
+-        {
+-            m_freqListMoveUp->Enable(true);
+-            m_freqListMoveDown->Enable(true);
+-        }
+     }
+     else if (validNumber && tmpValue > 0)
+     {
+         m_freqListAdd->Enable(true);
+         m_freqListRemove->Enable(false);
+-        m_freqListMoveUp->Enable(false);
+-        m_freqListMoveDown->Enable(false);
+     }
+     else
+     {
+         m_freqListAdd->Enable(false);
+         m_freqListRemove->Enable(false);
+-        m_freqListMoveUp->Enable(false);
+-        m_freqListMoveDown->Enable(false);
+     }
+ }
+ 
+@@ -2393,7 +2367,11 @@ void OptionsDlg::OnReportingFreqAdd(wxCommandEvent&)
+     {
+         val = wxNumberFormatter::ToString(dVal, 4);
+     }
+-    m_freqList->Append(val);
++    // Keep the list in ascending order: a new entry goes straight into its
++    // place rather than at the end.
++    auto strings = m_freqList->GetStrings();
++    std::vector<wxString> list(strings.begin(), strings.end());
++    m_freqList->Insert(val, ReportingConfiguration::SortedFrequencyIndex(list, dVal));
+     m_txtCtrlNewFrequency->SetValue("");
+ }
+ 
+@@ -2407,36 +2385,6 @@ void OptionsDlg::OnReportingFreqRemove(wxCommandEvent&)
+     m_txtCtrlNewFrequency->SetValue("");
+ }
+ 
+-void OptionsDlg::OnReportingFreqMoveUp(wxCommandEvent&)
+-{
+-    auto prevStr = m_txtCtrlNewFrequency->GetValue();
+-    auto idx = m_freqList->FindString(m_txtCtrlNewFrequency->GetValue());
+-    if (idx != wxNOT_FOUND && idx > 0)
+-    {
+-        m_freqList->Delete(idx);
+-        m_freqList->Insert(prevStr, idx - 1);
+-        m_freqList->SetSelection(idx - 1);
+-    }
+-    
+-    // Refresh button status
+-    m_txtCtrlNewFrequency->SetValue(prevStr);
+-}
+-
+-void OptionsDlg::OnReportingFreqMoveDown(wxCommandEvent&)
+-{
+-    auto prevStr = m_txtCtrlNewFrequency->GetValue();
+-    auto idx = m_freqList->FindString(m_txtCtrlNewFrequency->GetValue());
+-    if (idx != wxNOT_FOUND && (unsigned int)idx < m_freqList->GetCount() - 1)
+-    {
+-        m_freqList->Delete(idx);
+-        m_freqList->Insert(prevStr, idx + 1);
+-        m_freqList->SetSelection(idx + 1);
+-    }
+-
+-    // Refresh button status
+-    m_txtCtrlNewFrequency->SetValue(prevStr);
+-}
+-
+ //-------------------------------------------------------------------------
+ // Radio tab helper methods
+ //-------------------------------------------------------------------------
+diff --git a/src/gui/dialogs/dlg_options.h b/src/gui/dialogs/dlg_options.h
+index ec2205a8..477d59ec 100644
+--- a/src/gui/dialogs/dlg_options.h
++++ b/src/gui/dialogs/dlg_options.h
+@@ -280,8 +280,6 @@ class OptionsDlg : public wxDialog
+         wxTextCtrl* m_txtCtrlNewFrequency;
+         wxButton*   m_freqListAdd;
+         wxButton*   m_freqListRemove;
+-        wxButton*   m_freqListMoveUp;
+-        wxButton*   m_freqListMoveDown;
+         
+         unsigned int  event_in_serial, event_out_serial;
+ 
+@@ -306,8 +304,6 @@ class OptionsDlg : public wxDialog
+         void OnReportingFreqTextChange(wxCommandEvent& event);
+         void OnReportingFreqAdd(wxCommandEvent& event);
+         void OnReportingFreqRemove(wxCommandEvent& event);
+-        void OnReportingFreqMoveUp(wxCommandEvent& event);
+-        void OnReportingFreqMoveDown(wxCommandEvent& event);
+         
+      private:
+          void updateReportingState();
+diff --git a/src/main.h b/src/main.h
+index 13e4c69a..422b2dfb 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -499,6 +499,9 @@ class MainFrame : public TopFrame
+         
+         void OnReportFrequencySetFocus(wxFocusEvent& event) override;
+         void OnReportFrequencyKillFocus(wxFocusEvent& event) override;
++        void OnReportFrequencyContextMenu(wxContextMenuEvent& event) override;
++        void OnReportFrequencyItemMenu(int item) override;
++        void OnReportFrequencyItemDelete(int item) override;
+ 
+         void OnSystemColorChanged(wxSysColourChangedEvent& event) override;
+         
+@@ -651,6 +654,8 @@ class MainFrame : public TopFrame
+         void executeOnUiThreadAndWait_(std::function<void()> fn);
+         
+         void updateReportingFreqList_();
++        wxString reportFrequencyListString_(wxString const& text);
++        void addReportFrequencyToList_(wxString const& freq);
+         
+         void initializeFreeDVReporter_();
+         void updateVoiceKeyerButtonLabel_();
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index b07ea512..f46a827b 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -2097,6 +2097,134 @@ void MainFrame::OnCenterRx(wxCommandEvent&)
+     clickTune(FDMDV_FCENTRE);
+ }
+ 
++// The frequency typed or shown in the box as the predefined list shows it
++// (rounded to 100 Hz, as it's used), or empty if it isn't a frequency.
++wxString MainFrame::reportFrequencyListString_(wxString const& text)
++{
++    double value = 0;
++    if (!wxNumberFormatter::FromString(text, &value) || value <= 0)
++    {
++        return wxEmptyString;
++    }
++
++    bool asKhz = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz;
++    uint64_t hz = round(value * (asKhz ? 1000.0 : 1000.0 * 1000.0));
++    hz = (hz + 50) / 100 * 100;
++    if (hz == 0)
++    {
++        return wxEmptyString;
++    }
++    return asKhz ? wxNumberFormatter::ToString(hz / 1000.0, 1) : wxNumberFormatter::ToString(hz / 1000.0 / 1000.0, 4);
++}
++
++// Adds a frequency (as reportFrequencyListString_() gives it) to the
++// predefined list in its place in ascending order, and saves the list.
++void MainFrame::addReportFrequencyToList_(wxString const& freq)
++{
++    double value = 0;
++    wxNumberFormatter::FromString(freq, &value);
++
++    auto list = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyList.get();
++    if (std::find(list.begin(), list.end(), freq) != list.end())
++    {
++        return;
++    }
++    size_t index = ReportingConfiguration::SortedFrequencyIndex(list, value);
++    list.insert(list.begin() + index, freq);
++    wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyList = list;
++    wxGetApp().appConfiguration.save(pConfig);
++
++    m_reportFrequencyList->Insert(freq, index);
++}
++
++// Right-click on the frequency box: add what's in it to the predefined
++// list. The entry's own menu is replaced, so its editing items are here too.
++void MainFrame::OnReportFrequencyContextMenu(wxContextMenuEvent&)
++{
++    if (!m_cboReportFrequency->IsEnabled())
++    {
++        return;
++    }
++
++    wxString freq = reportFrequencyListString_(m_cboReportFrequency->GetValue());
++    auto const& list = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyList.get();
++    bool listed = std::find(list.begin(), list.end(), freq) != list.end();
++    wxString units = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz ? _("kHz") : _("MHz");
++
++    wxMenu menu;
++    wxMenuItem* addItem = menu.Append(wxID_ANY,
++        freq.IsEmpty() ? _("&Add frequency to list") : wxString::Format(_("&Add %s%s to list"), freq, units));
++    addItem->Enable(!freq.IsEmpty() && !listed);
++    menu.Bind(wxEVT_MENU, [this, freq](wxCommandEvent&) { addReportFrequencyToList_(freq); }, addItem->GetId());
++
++    wxTextCtrl* text = m_cboReportFrequency->GetTextCtrl();
++    menu.AppendSeparator();
++    menu.Append(wxID_CUT, _("&Cut"))->Enable(text->CanCut());
++    menu.Append(wxID_COPY, _("C&opy"))->Enable(text->CanCopy());
++    menu.Append(wxID_PASTE, _("&Paste"))->Enable(text->CanPaste());
++    menu.Bind(wxEVT_MENU, [text](wxCommandEvent&) { text->Cut(); }, wxID_CUT);
++    menu.Bind(wxEVT_MENU, [text](wxCommandEvent&) { text->Copy(); }, wxID_COPY);
++    menu.Bind(wxEVT_MENU, [text](wxCommandEvent&) { text->Paste(); }, wxID_PASTE);
++
++    ShowPopupMenu(m_cboReportFrequency, &menu);
++}
++
++// Right-click on a frequency in the open list: delete it. The list closes
++// for the menu, so open it again afterwards where it was, ready for the
++// next one.
++void MainFrame::OnReportFrequencyItemMenu(int item)
++{
++    if (item < 0 || (unsigned)item >= m_reportFrequencyList->GetCount())
++    {
++        return;
++    }
++
++    wxString units = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz ? _("kHz") : _("MHz");
++    int top = m_reportFrequencyList->GetTopItem();
++
++    wxMenu menu;
++    wxMenuItem* deleteItem = menu.Append(wxID_ANY,
++        wxString::Format(_("&Delete %s%s from list"), m_reportFrequencyList->GetString(item), units));
++    menu.Bind(wxEVT_MENU, [this, item, top](wxCommandEvent&) {
++        OnReportFrequencyItemDelete(item);
++        CallAfter([this, top]() {
++            if (m_reportFrequencyList->GetCount() == 0)
++            {
++                return;
++            }
++            m_cboReportFrequency->Popup();
++            if (top != wxNOT_FOUND)
++            {
++                m_reportFrequencyList->SetFirstItem(std::min(top, (int)m_reportFrequencyList->GetCount() - 1));
++            }
++        });
++    }, deleteItem->GetId());
++
++    ShowPopupMenu(m_cboReportFrequency, &menu);
++}
++
++// Deletes a frequency from the predefined list (Del on it in the open list,
++// or its right-click menu), and saves the list.
++void MainFrame::OnReportFrequencyItemDelete(int item)
++{
++    if (item < 0 || (unsigned)item >= m_reportFrequencyList->GetCount())
++    {
++        return;
++    }
++
++    wxString freq = m_reportFrequencyList->GetString(item);
++    auto list = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyList.get();
++    auto it = std::find(list.begin(), list.end(), freq);
++    if (it != list.end())
++    {
++        list.erase(it);
++        wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyList = list;
++        wxGetApp().appConfiguration.save(pConfig);
++    }
++
++    m_reportFrequencyList->Delete(item);
++}
++
+ void MainFrame::updateReportingFreqList_()
+ {
+     uint64_t prevFreqInt = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency;
+@@ -2116,18 +2244,14 @@ void MainFrame::updateReportingFreqList_()
+     {
+         prevSelected = wxNumberFormatter::ToString(freq, 4);
+     }
+-    m_cboReportFrequency->Clear();
+-    
++    m_reportFrequencyList->Clear();
++
+     for (auto& item : wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyList.get())
+     {
+-        m_cboReportFrequency->Append(item);
+-    }
+-    
+-    auto idx = m_cboReportFrequency->FindString(prevSelected);
+-    if (idx >= 0)
+-    {
+-        m_cboReportFrequency->SetSelection(idx);
++        m_reportFrequencyList->Append(item);
+     }
++
++    m_reportFrequencyList->SetStringValue(prevSelected);
+     m_cboReportFrequency->SetValue(prevSelected);
+     
+     // Update associated label if the units have changed
+diff --git a/src/topFrame.cpp b/src/topFrame.cpp
+index 3fe2a278..a6bf7bd7 100644
+--- a/src/topFrame.cpp
++++ b/src/topFrame.cpp
+@@ -824,7 +824,20 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     //wxStaticText* reportFrequencyUnits = new wxStaticText(m_freqBox, wxID_ANY, wxT(" MHz"), wxDefaultPosition, wxDefaultSize, wxALIGN_LEFT);
+     wxBoxSizer* txtReportFreqSizer = new wxBoxSizer(wxVERTICAL);
+     
+-    m_cboReportFrequency = new wxComboBox(m_freqBox, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0, NULL, wxCB_DROPDOWN | wxTE_PROCESS_ENTER);
++    // A wxComboCtrl with our own list (rather than a native wxComboBox), so
++    // that a frequency can be deleted from the open list: with Del on the
++    // highlighted one, or from its right-click menu. The list keeps the
++    // configured (ascending) order, and only an item actually clicked
++    // changes the frequency -- not one the pointer just passed over.
++    m_cboReportFrequency = new wxComboCtrl(m_freqBox, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
++    MsgListPopup::Options freqListOptions;
++    freqListOptions.sorted = false;
++    freqListOptions.openAbove = false;
++    freqListOptions.hoverPicks = false;
++    m_reportFrequencyList = new MsgListPopup([this](int item) { OnReportFrequencyItemMenu(item); }, freqListOptions);
++    m_cboReportFrequency->SetPopupControl(m_reportFrequencyList);
++    m_reportFrequencyList->SetDeleteKeyCallback([this](int item) { OnReportFrequencyItemDelete(item); });
++    m_cboReportFrequency->SetPopupMaxHeight(300);
+     m_cboReportFrequency->SetMinSize(wxSize(150,-1));
+     txtReportFreqSizer->Add(m_cboReportFrequency, 1, static_cast<int>(wxALL), 5);
+     
+@@ -928,6 +941,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     m_sliderMicSpkrLevel->SetName("main.sliderMicSpkrLevel");
+     m_txtMicSpkrLevelNum->SetName("main.textMicSpkrLevel");
+     m_cboReportFrequency->SetName("main.cboReportFrequency");
++    m_reportFrequencyList->SetName("main.lbReportFrequencies");
+     m_togBtnOnOff->SetName("main.btnOnOff");
+     m_togBtnAnalog->SetName("main.btnAnalog");
+     m_btnTogTune->SetName("main.btnTune");
+@@ -1026,6 +1040,20 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     m_btnTxLevelPP->Connect(wxEVT_MOUSEWHEEL, wxMouseEventHandler(TopFrame::OnTxLevelMouseWheel), NULL, this);
+     m_btnTogTune->Connect(wxEVT_MOUSEWHEEL, wxMouseEventHandler(TopFrame::OnTxLevelMouseWheel), NULL, this);
+ 
++    // Right-click menu on the frequency box (adding it to the list), in
++    // place of the text entry's own. GTK opens the entry's menu on
++    // button-press, so take the press and show ours on release.
++    for (wxWindow* window : { static_cast<wxWindow*>(m_cboReportFrequency),
++                              static_cast<wxWindow*>(m_cboReportFrequency->GetTextCtrl()) })
++    {
++#if defined(__WXGTK__)
++        window->Bind(wxEVT_RIGHT_DOWN, [](wxMouseEvent&) { });
++        window->Bind(wxEVT_RIGHT_UP, [this](wxMouseEvent&) { wxContextMenuEvent ctx; OnReportFrequencyContextMenu(ctx); });
++#else
++        window->Bind(wxEVT_CONTEXT_MENU, [this](wxContextMenuEvent& ctx) { OnReportFrequencyContextMenu(ctx); });
++#endif
++    }
++
+ #if wxCHECK_VERSION(3, 3, 0) && defined(__WXGTK__)
+     // wxGTK 3.3+ fires wxEVT_CONTEXT_MENU on button-press for these widget types,
+     // causing GTK to dismiss PopupMenu on button release; use RIGHT_UP instead.
+@@ -1059,7 +1087,9 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+ 
+     m_cboReportFrequency->Connect(wxEVT_TEXT_ENTER, wxCommandEventHandler(TopFrame::OnChangeReportFrequency), NULL, this);
+     m_cboReportFrequency->Connect(wxEVT_TEXT, wxCommandEventHandler(TopFrame::OnChangeReportFrequencyVerify), NULL, this);
+-    m_cboReportFrequency->Connect(wxEVT_COMBOBOX, wxCommandEventHandler(TopFrame::OnChangeReportFrequency), NULL, this);
++    // A frequency picked from the list applies at once, as wxEVT_COMBOBOX
++    // did for the native combo (typing waits for Enter or leaving the box).
++    m_cboReportFrequency->Connect(wxEVT_COMBOBOX_CLOSEUP, wxCommandEventHandler(TopFrame::OnChangeReportFrequency), NULL, this);
+     m_cboReportFrequency->Connect(wxEVT_SET_FOCUS, wxFocusEventHandler(TopFrame::OnReportFrequencySetFocus), NULL, this);
+     m_cboReportFrequency->Connect(wxEVT_KILL_FOCUS, wxFocusEventHandler(TopFrame::OnReportFrequencyKillFocus), NULL, this);
+     
+@@ -1145,7 +1175,7 @@ TopFrame::~TopFrame()
+     
+     m_cboReportFrequency->Disconnect(wxEVT_TEXT_ENTER, wxCommandEventHandler(TopFrame::OnChangeReportFrequency), NULL, this);
+     m_cboReportFrequency->Disconnect(wxEVT_TEXT, wxCommandEventHandler(TopFrame::OnChangeReportFrequencyVerify), NULL, this);
+-    m_cboReportFrequency->Disconnect(wxEVT_COMBOBOX, wxCommandEventHandler(TopFrame::OnChangeReportFrequency), NULL, this);
++    m_cboReportFrequency->Disconnect(wxEVT_COMBOBOX_CLOSEUP, wxCommandEventHandler(TopFrame::OnChangeReportFrequency), NULL, this);
+     
+     m_cboReportFrequency->Disconnect(wxEVT_SET_FOCUS, wxFocusEventHandler(TopFrame::OnReportFrequencySetFocus), NULL, this);
+     m_cboReportFrequency->Disconnect(wxEVT_KILL_FOCUS, wxFocusEventHandler(TopFrame::OnReportFrequencyKillFocus), NULL, this);
+diff --git a/src/topFrame.h b/src/topFrame.h
+index f70f2376..4f5b34bc 100644
+--- a/src/topFrame.h
++++ b/src/topFrame.h
+@@ -59,6 +59,7 @@
+ #include <wx/combo.h>
+ 
+ #include "gui/util/wxListViewComboPopup.h"
++#include "gui/controls/MsgListPopup.h"
+ 
+ ///////////////////////////////////////////////////////////////////////////
+ 
+@@ -225,6 +226,9 @@ class TopFrame : public wxFrame
+                 
+         virtual void OnReportFrequencySetFocus(wxFocusEvent& event) { event.Skip(); }
+         virtual void OnReportFrequencyKillFocus(wxFocusEvent& event) { event.Skip(); }
++        virtual void OnReportFrequencyContextMenu(wxContextMenuEvent& event) { event.Skip(); }
++        virtual void OnReportFrequencyItemMenu(int) { }
++        virtual void OnReportFrequencyItemDelete(int) { }
+ 
+         virtual void OnSystemColorChanged(wxSysColourChangedEvent& event) { event.Skip(); }
+                 
+@@ -248,7 +252,8 @@ class TopFrame : public wxFrame
+         wxToggleButton* m_btnTogPTT;
+         wxToggleButton* m_btnTogTune;
+         wxAuiNotebook* m_auiNbookCtrl;
+-        wxComboBox*   m_cboReportFrequency;
++        wxComboCtrl*  m_cboReportFrequency;
++        MsgListPopup* m_reportFrequencyList;   // m_cboReportFrequency's drop-down list
+         wxStaticBox*  m_freqBox;
+         wxStaticBox*  m_txLevelBox;
+         wxStaticBox* micSpeakerBox;
+diff --git a/test/gui/test_settings.py b/test/gui/test_settings.py
+index 2c27b990..5bafc8be 100644
+--- a/test/gui/test_settings.py
++++ b/test/gui/test_settings.py
+@@ -747,7 +747,7 @@ def test_rig_control():
+ 
+ def test_frequency_list():
+     """The Rig Control tab's list of predefined frequencies."""
+-    buttons = ["freqListAdd", "freqListRemove", "freqListMoveUp", "freqListMoveDown"]
++    buttons = ["freqListAdd", "freqListRemove"]
+ 
+     # Thousands are grouped as the user's region has them on macOS (where
+     # LC_ALL doesn't apply), e.g. "3,625.0" in the US: left out here.
+@@ -758,10 +758,10 @@ def test_frequency_list():
+         return [ungrouped(item["label"]) for item in app.get(name("freqList"))["items"]]
+ 
+     def offered(app):
+-        return [ungrouped(item["label"]) for item in app.get("main.cboReportFrequency")["items"]]
++        return [ungrouped(item["label"]) for item in app.get("main.lbReportFrequencies")["items"]]
+ 
+-    def check_buttons(app, add, remove, up, down):
+-        for button, expected in zip(buttons, [add, remove, up, down]):
++    def check_buttons(app, add, remove):
++        for button, expected in zip(buttons, [add, remove]):
+             check_equal(app.get(name(button))["enabled"], expected, button + " enabled")
+ 
+     settings = {"/Reporting/FrequencyList": "3.625000,7.177000,14.236000"}
+@@ -770,70 +770,63 @@ def test_frequency_list():
+         check_equal(frequencies(app), ["3.6250", "7.1770", "14.2360"], "Frequencies listed")
+         check_equal(label(app, "labelEnterFreq"), "Enter frequency (MHz):", "Frequency entry label")
+         check_values(app, {"txtCtrlNewFrequency": ""})
+-        check_buttons(app, False, False, False, False)
++        check_buttons(app, False, False)
+ 
+         # Something that isn't a frequency can't be added.
+         for text in ["abc", "0", "-5"]:
+             set_value(app, "txtCtrlNewFrequency", text)
+-            check_buttons(app, False, False, False, False)
++            check_buttons(app, False, False)
+ 
+-        # A new frequency
+-        set_value(app, "txtCtrlNewFrequency", "28.33")
+-        check_buttons(app, True, False, False, False)
++        # A new frequency goes into its place in ascending order...
++        set_value(app, "txtCtrlNewFrequency", "10.136")
++        check_buttons(app, True, False)
+         app.click(name("freqListAdd"))
+-        check_equal(frequencies(app), ["3.6250", "7.1770", "14.2360", "28.3300"], "Frequencies listed")
++        check_equal(frequencies(app), ["3.6250", "7.1770", "10.1360", "14.2360"], "Frequencies listed")
+         check_values(app, {"txtCtrlNewFrequency": ""})
+ 
+-        # One that's already listed can be removed or moved, depending on
+-        # where it is, whether it's typed in...
++        # ...including at the end.
++        set_value(app, "txtCtrlNewFrequency", "28.33")
++        app.click(name("freqListAdd"))
++        check_equal(frequencies(app), ["3.6250", "7.1770", "10.1360", "14.2360", "28.3300"],
++                    "Frequencies listed")
++
++        # One that's already listed can be removed, whether it's typed in...
+         set_value(app, "txtCtrlNewFrequency", "3.6250")
+-        check_buttons(app, False, True, False, True)
+-        set_value(app, "txtCtrlNewFrequency", "28.3300")
+-        check_buttons(app, False, True, True, False)
++        check_buttons(app, False, True)
+ 
+         # ...or picked from the list.
+         set_value(app, "freqList", "7.1770")
+         check_values(app, {"txtCtrlNewFrequency": "7.1770"})
+-        check_buttons(app, False, True, True, True)
+-
+-        app.click(name("freqListMoveUp"))
+-        check_equal(frequencies(app), ["7.1770", "3.6250", "14.2360", "28.3300"], "Frequencies listed")
+-        check_values(app, {"txtCtrlNewFrequency": "7.1770", "freqList": "7.1770"})
+-        check_buttons(app, False, True, False, True)
+-        app.click(name("freqListMoveDown"))
+-        app.click(name("freqListMoveDown"))
+-        check_equal(frequencies(app), ["3.6250", "14.2360", "7.1770", "28.3300"], "Frequencies listed")
+-        check_buttons(app, False, True, True, True)
+-        app.click(name("freqListMoveDown"))
+-        check_equal(frequencies(app), ["3.6250", "14.2360", "28.3300", "7.1770"], "Frequencies listed")
+-        check_buttons(app, False, True, True, False)
++        check_buttons(app, False, True)
+ 
+         set_value(app, "freqList", "14.2360")
+         app.click(name("freqListRemove"))
+-        check_equal(frequencies(app), ["3.6250", "28.3300", "7.1770"], "Frequencies listed")
++        check_equal(frequencies(app), ["3.6250", "7.1770", "10.1360", "28.3300"], "Frequencies listed")
+         check_values(app, {"txtCtrlNewFrequency": ""})
+-        check_buttons(app, False, False, False, False)
++        check_buttons(app, False, False)
+ 
+         # They're what's offered in the main window once saved.
+         press_ok(app)
+-        check_equal([item["label"] for item in app.get("main.cboReportFrequency")["items"]],
+-                    ["3.6250", "28.3300", "7.1770"], "Frequencies offered in the main window")
++        check_equal([item["label"] for item in app.get("main.lbReportFrequencies")["items"]],
++                    ["3.6250", "7.1770", "10.1360", "28.3300"], "Frequencies offered in the main window")
+ 
+         # Frequencies can be worked with in kHz instead.
+         open_settings(app, "Rig Control")
+-        check_equal(frequencies(app), ["3.6250", "28.3300", "7.1770"], "Frequencies listed")
++        check_equal(frequencies(app), ["3.6250", "7.1770", "10.1360", "28.3300"], "Frequencies listed")
+         set_value(app, "txtCtrlNewFrequency", "14.236")
+         set_value(app, "ckboxFrequencyEntryAsKHz", True)
+         press_apply(app)
+-        check_equal(frequencies(app), ["3625.0", "28330.0", "7177.0"], "Frequencies listed in kHz")
++        check_equal(frequencies(app), ["3625.0", "7177.0", "10136.0", "28330.0"], "Frequencies listed in kHz")
+         check_equal(label(app, "labelEnterFreq"), "Enter frequency (kHz):", "Frequency entry label")
+         check_equal(ungrouped(value(app, "txtCtrlNewFrequency")), "14236.0", "txtCtrlNewFrequency")
+-        check_buttons(app, True, False, False, False)
++        check_buttons(app, True, False)
+         app.click(name("freqListAdd"))
+-        check_equal(frequencies(app), ["3625.0", "28330.0", "7177.0", "14236.0"], "Frequencies listed in kHz")
++        check_equal(frequencies(app), ["3625.0", "7177.0", "10136.0", "14236.0", "28330.0"],
++                    "Frequencies listed in kHz")
+         press_ok(app)
+         check_saved(app, {"/Reporting/FrequencyAsKHz": 1})
+-        check_equal(offered(app), ["3625.0", "28330.0", "7177.0", "14236.0"], "Frequencies offered in the main window")
++        check_equal(offered(app), ["3625.0", "7177.0", "10136.0", "14236.0", "28330.0"],
++                    "Frequencies offered in the main window")
+ 
+         # And back again, along with what's been typed in so far.
+         open_settings(app, "Rig Control")
+@@ -845,8 +838,64 @@ def test_frequency_list():
+         check_values(app, {"txtCtrlNewFrequency": "21.3135"})
+         set_value(app, "txtCtrlNewFrequency", "")
+         press_ok(app)
+-        check_equal([item["label"] for item in app.get("main.cboReportFrequency")["items"]],
+-                    ["3.6250", "28.3300", "7.1770", "14.2360"], "Frequencies offered in the main window")
++        check_equal([item["label"] for item in app.get("main.lbReportFrequencies")["items"]],
++                    ["3.6250", "7.1770", "10.1360", "14.2360", "28.3300"],
++                    "Frequencies offered in the main window")
++
++        quit_and_check_log(app)
++
++
++def test_frequency_list_from_main_window():
++    """The predefined frequencies can be added to and deleted from the main
++    window's frequency box."""
++    def offered(app):
++        return [item["label"] for item in app.get("main.lbReportFrequencies")["items"]]
++
++    def list_shown(app):
++        return app.get("main.lbReportFrequencies")["shown"]
++
++    settings = {"/Reporting/FrequencyList": "3.625000,7.177000,14.236000",
++                "/Reporting/Frequency": "14236000"}
++    with freedvtest.start(settings=settings) as app:
++        check_equal(offered(app), ["3.6250", "7.1770", "14.2360"], "Frequencies offered")
++
++        # The frequency in the box can be added, into its place in the list.
++        app.set_value("main.cboReportFrequency", "10.136")
++        items = app.context_menu("main.cboReportFrequency", choose="Add 10.1360MHz to list")
++        check_equal([(item["label"], item["enabled"]) for item in items][0],
++                    ("Add 10.1360MHz to list", True), "Frequency box's menu")
++        check_equal(offered(app), ["3.6250", "7.1770", "10.1360", "14.2360"], "Frequencies offered")
++
++        # ...but only once.
++        items = app.context_menu("main.cboReportFrequency")
++        check_equal([(item["label"], item["enabled"]) for item in items][0],
++                    ("Add 10.1360MHz to list", False), "Frequency box's menu when it's listed")
++
++        # One in the open list can be deleted from its menu, and the list
++        # opens again for the next.
++        app.combo_popup("main.cboReportFrequency", True)
++        app.wait_until(lambda: list_shown(app), description="the frequencies to be listed")
++        app.context_menu("main.lbReportFrequencies", item=0, choose="Delete 3.6250MHz from list")
++        check_equal(offered(app), ["7.1770", "10.1360", "14.2360"], "Frequencies offered")
++        app.wait_until(lambda: list_shown(app), description="the list to open again")
++
++        # Or with Del on the highlighted one, which leaves the list open.
++        app.set_value("main.lbReportFrequencies", "14.2360")
++        app.key("main.lbReportFrequencies", "Delete")
++        check_equal(offered(app), ["7.1770", "10.1360"], "Frequencies offered")
++        check(list_shown(app), "The list closed")
++
++        # Closing the list doesn't take what was highlighted.
++        before = app.get("main.cboReportFrequency")["value"]
++        app.set_value("main.lbReportFrequencies", "7.1770")
++        app.combo_popup("main.cboReportFrequency", False)
++        check_equal(app.get("main.cboReportFrequency")["value"], before, "Frequency after closing the list")
++
++        # The changes are kept, as Tools > Options shows.
++        open_settings(app, "Rig Control")
++        check_equal([item["label"] for item in app.get(name("freqList"))["items"]],
++                    ["7.1770", "10.1360"], "Frequencies listed in Options")
++        press_cancel(app)
+ 
+         quit_and_check_log(app)
+ 
