@@ -1,0 +1,1568 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 31b01ff1..273fb9bf 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -941,6 +941,12 @@ foreach(scenario tuning tuned_away drawing waterfall_colours)
+     freedv_set_test_pass_criteria(gui_plots_${scenario})
+ endforeach(scenario)
+ 
++foreach(scenario meter agc agc_off saved_gain)
++    add_test(NAME gui_level_meter_agc_${scenario}
++             COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/test/gui/test_level_meter_agc.py ${scenario})
++    set_tests_properties(gui_level_meter_agc_${scenario} PROPERTIES LABELS gui RUN_SERIAL TRUE)
++endforeach(scenario)
++
+ # These use Hamlib's rigctld as the radio, and are skipped without it.
+ foreach(scenario control frequency_only mode_display analog_sideband editing_frequency unreachable lost)
+     add_test(NAME gui_rig_control_${scenario}
+diff --git a/build_linux.sh b/build_linux.sh
+index 802b48f6..a6c5e66d 100755
+--- a/build_linux.sh
++++ b/build_linux.sh
+@@ -19,6 +19,7 @@ ENABLE_LTO=${ENABLE_LTO:-0}
+ PGO_INSTRUMENT=${PGO_INSTRUMENT:-0}
+ PGO_USE_PROFILE=${PGO_USE_PROFILE:-}
+ USE_CCACHE=${USE_CCACHE:-0}
++ENABLE_AUDIO_DIAG_LOGGING=${ENABLE_AUDIO_DIAG_LOGGING:-0}
+ WITH_COVERAGE=${WITH_COVERAGE:-0}
+ 
+ export FREEDVGUIDIR=${PWD}
+@@ -45,5 +46,5 @@ if [ -d .git ]; then
+      git pull
+ fi
+ mkdir  -p build_linux && cd build_linux && rm -Rf *
+-cmake ${CCACHE_ARGS} ${COVERAGE_ARGS} -DPGO_INSTRUMENT=${PGO_INSTRUMENT} -DPGO_USE_PROFILE=${PGO_USE_PROFILE} -DENABLE_LTO=${ENABLE_LTO} -DSTATIC_LIBGCC=${STATIC_LIBGCC} -DENABLE_UBSAN=${WITH_UBSAN} -DENABLE_TSAN=${WITH_TSAN} -DENABLE_RTSAN=${WITH_RTSAN} -DENABLE_ASAN=${WITH_ASAN} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DUSE_NATIVE_AUDIO=$USE_NATIVE_AUDIO -DUNITTEST=$UT_ENABLE ..
++cmake ${CCACHE_ARGS} ${COVERAGE_ARGS} -DPGO_INSTRUMENT=${PGO_INSTRUMENT} -DPGO_USE_PROFILE=${PGO_USE_PROFILE} -DENABLE_LTO=${ENABLE_LTO} -DSTATIC_LIBGCC=${STATIC_LIBGCC} -DENABLE_UBSAN=${WITH_UBSAN} -DENABLE_TSAN=${WITH_TSAN} -DENABLE_RTSAN=${WITH_RTSAN} -DENABLE_ASAN=${WITH_ASAN} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DUSE_NATIVE_AUDIO=$USE_NATIVE_AUDIO -DUNITTEST=$UT_ENABLE -DENABLE_AUDIO_DIAG_LOGGING=${ENABLE_AUDIO_DIAG_LOGGING} ..
+ make -j$(nproc)
+diff --git a/cmake/BuildFreeDVBackend.cmake b/cmake/BuildFreeDVBackend.cmake
+index 0f4611ac..eb8c0fb6 100644
+--- a/cmake/BuildFreeDVBackend.cmake
++++ b/cmake/BuildFreeDVBackend.cmake
+@@ -2,8 +2,10 @@ include(FetchContent)
+ 
+ FetchContent_Declare(
+     freedv_backend
+-    GIT_REPOSITORY https://github.com/freedv/freedv-backend
+-    GIT_TAG main
++    # TEMPORARY: points at the matching freedv-backend PR branch for review
++    # and testing. Revert to freedv/freedv-backend main once that PR merges.
++    GIT_REPOSITORY https://github.com/barjac/freedv-backend
++    GIT_TAG bcj-leveler-limiter
+ )
+ 
+ FetchContent_MakeAvailable(freedv_backend)
+diff --git a/src/config/FilterConfiguration.cpp b/src/config/FilterConfiguration.cpp
+index b3df987c..4680adfb 100644
+--- a/src/config/FilterConfiguration.cpp
++++ b/src/config/FilterConfiguration.cpp
+@@ -30,6 +30,10 @@ FilterConfiguration::FilterConfiguration()
+     : noiseReductionEnable("/Filter/speexpp_enable", true)
+     , agcEnabled("/Filter/agcEnable", true)
+     , bwExpandEnabled("/Filter/bwExpandEnable", true)
++    , levelerGainDb("/Filter/levelerGainDb", 0.0f)
++    , levelerIntegralErrorDb("/Filter/levelerIntegralErrorDb", 0.0f)
++    , levelerMicDeviceName("/Filter/levelerMicDeviceName", "")
++    , levelerTargetLufs("/Filter/levelerTargetLufs", -26.0f)
+ {
+     // empty
+ }
+@@ -42,6 +46,10 @@ void FilterConfiguration::load(wxConfigBase* config)
+     load_(config, noiseReductionEnable);
+     load_(config, agcEnabled);
+     load_(config, bwExpandEnabled);
++    load_(config, levelerGainDb);
++    load_(config, levelerIntegralErrorDb);
++    load_(config, levelerMicDeviceName);
++    load_(config, levelerTargetLufs);
+ }
+ 
+ void FilterConfiguration::save(wxConfigBase* config)
+@@ -52,4 +60,8 @@ void FilterConfiguration::save(wxConfigBase* config)
+     save_(config, noiseReductionEnable);
+     save_(config, agcEnabled);
+     save_(config, bwExpandEnabled);
++    save_(config, levelerGainDb);
++    save_(config, levelerIntegralErrorDb);
++    save_(config, levelerMicDeviceName);
++    save_(config, levelerTargetLufs);
+ }
+diff --git a/src/config/FilterConfiguration.h b/src/config/FilterConfiguration.h
+index 26322efc..59e23247 100644
+--- a/src/config/FilterConfiguration.h
++++ b/src/config/FilterConfiguration.h
+@@ -86,7 +86,22 @@ public:
+     ConfigurationDataElement<bool> noiseReductionEnable;
+     ConfigurationDataElement<bool> agcEnabled;
+     ConfigurationDataElement<bool> bwExpandEnabled;
+-    
++
++    // Leveler gain state, saved at the end of each session and restored at
++    // the start of the next so it doesn't re-climb from 0dB.
++    ConfigurationDataElement<float> levelerGainDb;
++    ConfigurationDataElement<float> levelerIntegralErrorDb;
++    // TX input device (as selected in FreeDV's audio settings) the state
++    // above was saved with. If a different device is selected since, the
++    // leveler starts from 0dB instead. A different microphone on the same
++    // device, or a mixer gain change, can't be detected this way; the
++    // leveler corrects for those within a few seconds of speech.
++    ConfigurationDataElement<wxString> levelerMicDeviceName;
++
++    // Leveler loudness target. -26 LUFS rather than EBU R128's -23 leaves
++    // more headroom ahead of the limiter. Not exposed in the UI.
++    ConfigurationDataElement<float> levelerTargetLufs;
++
+     virtual void load(wxConfigBase* config) override;
+     virtual void save(wxConfigBase* config) override;
+ };
+diff --git a/src/defines.h b/src/defines.h
+index 34babaf7..fa07a614 100644
+--- a/src/defines.h
++++ b/src/defines.h
+@@ -21,6 +21,8 @@
+ #ifndef __FDMDV2_DEFINES__
+ #define __FDMDV2_DEFINES__
+ 
++#include <cmath>
++
+ #include "wx/wx.h"
+ #include "logging/ulog.h"
+ #include "pipeline/modem_stats.h"
+@@ -32,19 +34,14 @@
+ // Minimum level for the Level gauge, negated.
+ #define LEVEL_GAUGE_MIN_DB 30
+ 
+-// Level meter: Percentage threshold of samples above the current maximum
+-// before we adopt a new maximum sample level. This is intended to filter
+-// out brief spikes and prevent overadjustment of input levels downward
+-// by the user.
+-#define LEVEL_METER_MAX_THRESHOLD_PERCENT (0.05f)
+-
+-// Acceptable-range marker drawn as a thin green strip below the level
+-// meter's gauge, in % of the gauge's own 0-100 scale. Centred on the
+-// ~50% mid-scale target from LEVEL_METER_REFERENCE_DB above. Also used
+-// as the inner edge of the adaptive time-constant ramp above, so the
+-// meter's slowest ballistics line up exactly with the visible green zone.
+-#define LEVEL_METER_TARGET_LOW_PCT  30
+-#define LEVEL_METER_TARGET_HIGH_PCT 85
++// Level meter LED segments: 10 x 3dB across -30..0dBFS. During TX, green
++// up to -9dBFS, amber from -9dBFS, red from -3dBFS (the top segment, which
++// is centred on the limiter's -1.5dBFS ceiling). During RX all segments are
++// blue: the right radio audio level is low on this scale and is better
++// judged from the spectrum display, so TX's zones don't apply.
++#define LEVEL_METER_SEGMENT_DB        3.0f
++#define LEVEL_METER_AMBER_START_DBFS (-9.0f)
++#define LEVEL_METER_RED_START_DBFS   (-3.0f)
+ 
+ // Spectrogram and Waterfall
+ 
+@@ -82,6 +79,16 @@
+ #define SNR_PLOT_SECOND_SEGMENTS (6)
+ #define SNR_PLOT_DT (0.1)
+ 
++// "AGC dB" plot: the leveler's applied gain, updated during TX on the TX
++// level meter's 25ms tick. EVALUATION AID for the leveler/limiter work --
++// not intended to be needed in normal use now that the Level meter shows
++// TX level directly, and can be dropped from a final implementation.
++// Y range matches the leveler's +/-12dB gain limit.
++#define AGC_GAIN_PLOT_SECONDS (10)
++#define AGC_GAIN_PLOT_SECOND_SEGMENTS (5)
++#define MIN_AGC_GAIN_PLOT_VAL (-12)
++#define MAX_AGC_GAIN_PLOT_VAL (12)
++
+ // sample rate I/O & conversion constants
+ 
+ #define SAMPLE_RATE         48000                          // 48 kHz sampling rate rec. as we can trust accuracy of sound card
+@@ -107,14 +114,28 @@
+ #define FROM_RADIO_MAX       0.8
+ #define FROM_MIC_MAX         0.8
+ 
+-// Decay rate for the Level meter, applied once per GUI update (every DT sec).
+-// Target: -12 dB/sec.
+-//   20*log10(LEVEL_BETA) = -12 * DT
+-//   LEVEL_BETA = 10^(-12*DT/20) = 10^(-0.06) ≈ 0.871   (for DT = 0.10)
+-// => -1.20 dB per timer fire; the 30 dB gauge range fully decays in 2.5 s.
+-#define LEVEL_DECAY_DB_PER_SEC 12.0
++// RX level meter decay, applied once per GUI update (every DT sec).
++// Target: -6 dB/sec.
++//   20*log10(LEVEL_BETA) = -6 * DT
++//   LEVEL_BETA = 10^(-6*DT/20) = 10^(-0.03) ≈ 0.933   (for DT = 0.10)
++// => -0.60 dB per timer fire; the 30 dB meter range fully decays in 5 s.
++#define LEVEL_DECAY_DB_PER_SEC 6.0
+ #define LEVEL_BETA (std::pow(10.0, -LEVEL_DECAY_DB_PER_SEC * DT / 20.0))
+ 
++// TX level meter: its own 25ms refresh timer, reading raw mic samples from
++// the sound card callback (see g_levelMeterTxRawFifo in main.cpp) rather
++// than the TX pipeline, whose input arrives in bursts paced by the modem's
++// frame size. LEVEL_METER_TX_RAW_BUF_MAX bounds one tick's read and must
++// exceed one tick's worth of samples at the highest sound card rate
++// (16384 covers 100ms at 96kHz), or the FIFO backs up and drops samples.
++#define LEVEL_METER_TX_REFRESH_PERIOD_SEC 0.025
++#define LEVEL_METER_TX_REFRESH_TIMER_PERIOD ((int)(LEVEL_METER_TX_REFRESH_PERIOD_SEC*1000))
++#define LEVEL_METER_TX_RAW_BUF_MAX 16384
++
++// TX level meter decay: constant dB/sec, matching BBC/IEC 60268-10 Type I
++// PPM ballistics (24dB in 2.8s). Attack is instant at this refresh rate.
++#define LEVEL_METER_TX_DECAY_DB_PER_SEC 8.7
++
+ // TX Attenuation (0.1 dB increments)
+ #define TX_ATTENUATION_MIN (-300) /* -30 dB */
+ #define TX_ATTENUATION_MAX (0)
+diff --git a/src/gui/controls/CMakeLists.txt b/src/gui/controls/CMakeLists.txt
+index eecc3a0d..dc89f598 100644
+--- a/src/gui/controls/CMakeLists.txt
++++ b/src/gui/controls/CMakeLists.txt
+@@ -4,7 +4,8 @@ add_library(fdv_gui_controls STATIC
+     plot_spectrum.cpp
+     plot_waterfall.cpp
+     ReportMessageRenderer.cpp
+-    MsgListPopup.cpp)
++    MsgListPopup.cpp
++    LevelMeterLed.cpp)
+ 
+ if(APPLE)
+     target_sources(fdv_gui_controls PRIVATE plot_osx.mm plot_waterfall_osx.mm)
+diff --git a/src/gui/controls/LevelMeterLed.cpp b/src/gui/controls/LevelMeterLed.cpp
+new file mode 100644
+index 00000000..138792cf
+--- /dev/null
++++ b/src/gui/controls/LevelMeterLed.cpp
+@@ -0,0 +1,137 @@
++//==========================================================================
++// Name:            LevelMeterLed.cpp
++// Purpose:         A compact, custom-drawn LED-style level meter.
++// Authors:         Claude Code (for Barry Jackson, G4MKT)
++//
++// License:
++//
++//  This program is free software; you can redistribute it and/or modify
++//  it under the terms of the GNU General Public License version 2.1,
++//  as published by the Free Software Foundation.  This program is
++//  distributed in the hope that it will be useful, but WITHOUT ANY
++//  WARRANTY; without even the implied warranty of MERCHANTABILITY or
++//  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
++//  License for more details.
++//
++//  You should have received a copy of the GNU General Public License
++//  along with this program; if not, see <http://www.gnu.org/licenses/>.
++//
++//==========================================================================
++
++#include <cmath>
++#include <algorithm>
++
++#include <wx/dcbuffer.h>
++#include <wx/settings.h>
++
++#include "LevelMeterLed.h"
++
++LevelMeterLed::LevelMeterLed(
++    wxWindow* parent, wxWindowID id,
++    float minDb, float maxDb, float segmentDb,
++    float amberStartDb, float redStartDb,
++    int segmentWidthPx, int segmentHeightPx,
++    const wxPoint& pos)
++    : wxWindow()
++    , minDb_(minDb)
++    , maxDb_(maxDb)
++    , segmentDb_(segmentDb)
++    , amberStartDb_(amberStartDb)
++    , redStartDb_(redStartDb)
++    , segmentWidthPx_(segmentWidthPx)
++    , segmentHeightPx_(segmentHeightPx)
++    , currentDb_(minDb)
++    , litSegments_(0)
++    , zoneColours_(false)
++{
++    numSegments_ = (int)std::lround((maxDb_ - minDb_) / segmentDb_);
++
++    Create(parent, id, pos, wxSize(segmentWidthPx_ * numSegments_, segmentHeightPx_));
++    SetBackgroundStyle(wxBG_STYLE_PAINT); // we draw every pixel ourselves
++    Bind(wxEVT_PAINT, &LevelMeterLed::OnPaint, this);
++}
++
++wxSize LevelMeterLed::DoGetBestSize() const
++{
++    return wxSize(segmentWidthPx_ * numSegments_, segmentHeightPx_);
++}
++
++void LevelMeterLed::Reset()
++{
++    SetLevelDb(minDb_);
++}
++
++void LevelMeterLed::SetZoneColours(bool enabled)
++{
++    if (enabled != zoneColours_)
++    {
++        zoneColours_ = enabled;
++        Refresh(false);
++    }
++}
++
++void LevelMeterLed::SetLevelDb(float db)
++{
++    if (db < minDb_) db = minDb_;
++    if (db > maxDb_) db = maxDb_;
++    currentDb_ = db;
++
++    // Segment i lights as soon as the level rises above its lower bound
++    // (minDb_ + i*segmentDb_); ceil() so that exactly minDb_ lights none.
++    int newLit = (int)std::ceil((currentDb_ - minDb_) / segmentDb_);
++    newLit = std::max(0, std::min(numSegments_, newLit));
++
++    if (newLit != litSegments_)
++    {
++        litSegments_ = newLit;
++        Refresh(false); // false: we repaint every pixel ourselves, no need to erase first
++    }
++}
++
++void LevelMeterLed::OnPaint(wxPaintEvent&)
++{
++    wxAutoBufferedPaintDC dc(this);
++
++    // Normally fully covered by segments; the clear only matters if the
++    // widget is ever given more space than DoGetBestSize(). Unstyled
++    // parents (e.g. a wxStaticBox on GTK) don't report a usable colour.
++    wxWindow* parent = GetParent();
++    wxColour background = parent->UseBackgroundColour() ? parent->GetBackgroundColour() : wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE);
++    dc.SetBackground(wxBrush(background));
++    dc.Clear();
++
++    static const wxColour GREEN(0, 200, 0);
++    static const wxColour AMBER(230, 160, 0);
++    static const wxColour RED(220, 30, 30);
++    static const wxColour BLUE(60, 145, 240);
++    static const wxColour UNLIT(128, 128, 128); // mid grey, visible on light and dark themes
++
++    dc.SetPen(*wxTRANSPARENT_PEN);
++
++    for (int i = 0; i < numSegments_; i++)
++    {
++        float lowerDb = minDb_ + i * segmentDb_;
++        wxColour zoneColour = !zoneColours_ ? BLUE :
++            (lowerDb >= redStartDb_) ? RED : (lowerDb >= amberStartDb_) ? AMBER : GREEN;
++
++        wxColour fillColour = (i < litSegments_) ? zoneColour : UNLIT;
++
++        dc.SetBrush(wxBrush(fillColour));
++        dc.DrawRectangle(i * segmentWidthPx_, 0, segmentWidthPx_, segmentHeightPx_);
++    }
++
++    // A fine ladder over the segments, an outline plus a rung at each joint,
++    // so they read as separate LEDs rather than one bar. Black or white to
++    // suit the system theme (not the window's own colours, which change
++    // when it loses focus). Drawn after the segments so it is always on top.
++    wxColour ladder = wxSystemSettings::GetAppearance().IsDark() ? *wxWHITE : *wxBLACK;
++    dc.SetPen(wxPen(ladder, 1));
++    dc.SetBrush(*wxTRANSPARENT_BRUSH);
++    int width = segmentWidthPx_ * numSegments_;
++    dc.DrawRectangle(0, 0, width, segmentHeightPx_);
++    for (int i = 1; i < numSegments_; i++)
++    {
++        int x = i * segmentWidthPx_;
++        dc.DrawLine(x, 0, x, segmentHeightPx_);
++    }
++}
+diff --git a/src/gui/controls/LevelMeterLed.h b/src/gui/controls/LevelMeterLed.h
+new file mode 100644
+index 00000000..464e2449
+--- /dev/null
++++ b/src/gui/controls/LevelMeterLed.h
+@@ -0,0 +1,84 @@
++//==========================================================================
++// Name:            LevelMeterLed.h
++// Purpose:         A compact, custom-drawn LED-style level meter.
++// Authors:         Claude Code (for Barry Jackson, G4MKT)
++//
++// License:
++//
++//  This program is free software; you can redistribute it and/or modify
++//  it under the terms of the GNU General Public License version 2.1,
++//  as published by the Free Software Foundation.  This program is
++//  distributed in the hope that it will be useful, but WITHOUT ANY
++//  WARRANTY; without even the implied warranty of MERCHANTABILITY or
++//  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
++//  License for more details.
++//
++//  You should have received a copy of the GNU General Public License
++//  along with this program; if not, see <http://www.gnu.org/licenses/>.
++//
++//==========================================================================
++#ifndef __FREEDV_LEVEL_METER_LED__
++#define __FREEDV_LEVEL_METER_LED__
++
++#include <wx/wx.h>
++
++// LED bargraph level meter. A wxGauge has only integer resolution across a
++// narrow width and no smoothing of its own, so a steady dB/sec decay looks
++// jittery on it; discrete LED steps are the expected look for a peak meter.
++// Custom-drawn so it looks and behaves the same on every platform.
++//
++// Segments are segmentDb wide, spanning minDb..maxDb, butted together with
++// no gaps. With zone colours on, segments are green, then amber from
++// amberStartDb, then red from redStartDb. With zone colours off, every
++// segment is the same fixed blue. Fixed colours (not theme colours) keep
++// the meter readable when the window is unfocused. Unlit segments are a
++// neutral mid grey, which stays visible on both light and dark themes.
++class LevelMeterLed : public wxWindow
++{
++    public:
++        LevelMeterLed(
++            wxWindow* parent, wxWindowID id,
++            float minDb, float maxDb, float segmentDb,
++            float amberStartDb, float redStartDb,
++            int segmentWidthPx, int segmentHeightPx,
++            const wxPoint& pos = wxDefaultPosition);
++        virtual ~LevelMeterLed() = default;
++
++        // Sets the displayed level, clamped to [minDb, maxDb]. Only
++        // repaints if the number of lit segments changes.
++        void SetLevelDb(float db);
++
++        // Equivalent to SetLevelDb(minDb) -- all segments off.
++        void Reset();
++
++        // true: green/amber/red zones. false (default): all segments blue.
++        void SetZoneColours(bool enabled);
++
++        // For automated testing: the level last set (after clamping), the
++        // meter's range and where its amber and red zones start, all in dB.
++        float GetLevelDb() const { return currentDb_; }
++        float GetMinDb() const { return minDb_; }
++        float GetMaxDb() const { return maxDb_; }
++        float GetAmberStartDb() const { return amberStartDb_; }
++        float GetRedStartDb() const { return redStartDb_; }
++        bool GetZoneColours() const { return zoneColours_; }
++
++        virtual wxSize DoGetBestSize() const override;
++
++    private:
++        void OnPaint(wxPaintEvent& event);
++
++        float minDb_;
++        float maxDb_;
++        float segmentDb_;
++        float amberStartDb_;
++        float redStartDb_;
++        int segmentWidthPx_;
++        int segmentHeightPx_;
++        int numSegments_;
++        float currentDb_;
++        int litSegments_;
++        bool zoneColours_;
++};
++
++#endif // __FREEDV_LEVEL_METER_LED__
+diff --git a/src/gui/controls/plot_scalar.cpp b/src/gui/controls/plot_scalar.cpp
+index fdf26b5e..6261eaae 100644
+--- a/src/gui/controls/plot_scalar.cpp
++++ b/src/gui/controls/plot_scalar.cpp
+@@ -179,6 +179,7 @@ PlotScalar::PlotScalar(wxWindow* parent,
+     plotSurface_ = nullptr;
+     addedPoints_ = 0;
+     halfPlot_ = halfPlot;
++    lineWidth_ = 1;
+     disableFirstLastLabels_ = disableFirstLastLabels;
+ 
+     int i;
+@@ -459,7 +460,7 @@ void PlotScalar::draw(wxGraphicsContext* ctx, bool repaintDataOnly)
+ 
+     wxPen pen;
+     pen.SetColour(DARK_GREEN_COLOR);
+-    pen.SetWidth(1);
++    pen.SetWidth(lineWidth_);
+     if (!DRAW_DIRECTLY && !useSurface)
+     {
+         plotAreaDC_->SetPen(pen);
+diff --git a/src/gui/controls/plot_scalar.h b/src/gui/controls/plot_scalar.h
+index 85d8fad3..32698670 100644
+--- a/src/gui/controls/plot_scalar.h
++++ b/src/gui/controls/plot_scalar.h
+@@ -53,6 +53,9 @@ class PlotScalar: public PlotPanel
+ 
+          virtual void refreshData() override;
+ 
++         // Width of the trace in pixels (default 1).
++         void setLineWidth(int width) { lineWidth_ = width; }
++
+     private:
+         struct MinMaxPoints
+         {
+@@ -77,6 +80,7 @@ class PlotScalar: public PlotPanel
+          int      leftOffset_;
+          int      bottomOffset_;
+          bool halfPlot_;
++         int lineWidth_;
+          bool disableFirstLastLabels_;
+ 
+          wxBitmap* plotArea_;
+diff --git a/src/gui/dialogs/dlg_filter.cpp b/src/gui/dialogs/dlg_filter.cpp
+index ea831181..a5af070c 100644
+--- a/src/gui/dialogs/dlg_filter.cpp
++++ b/src/gui/dialogs/dlg_filter.cpp
+@@ -92,7 +92,7 @@ FilterDlg::FilterDlg(wxWindow* parent, bool running, bool *newMicInFilter, bool
+     
+     m_ckboxAgcEnabled = new wxCheckBox(sb_rnnoise, wxID_ANY, _("AGC"), wxDefaultPosition, wxDefaultSize, wxCHK_2STATE);
+     sbSizer_rnnoise->Add(m_ckboxAgcEnabled, 0, static_cast<int>(wxALL) | wxALIGN_LEFT, 5);
+-    m_ckboxAgcEnabled->SetToolTip(_("Automatic gain control for microphone"));
++    m_ckboxAgcEnabled->SetToolTip(_("Automatic level control for microphone. Peak limiting stays on when this is off."));
+     
+     bSizer30->Add(sbSizer_rnnoise, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);   
+ 
+diff --git a/src/main.cpp b/src/main.cpp
+index 29e182be..4695ae97 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -129,6 +129,7 @@ float g_snr;
+ std::atomic<bool>  g_half_duplex;
+ std::atomic<bool>  g_voice_keyer_tx;
+ std::atomic<bool>  g_agcEnabled;
++std::atomic<float> g_agcAppliedGainDb;
+ 
+ // In half duplex, RX (including the waterfall/spectrum) stays muted until this
+ // steady_clock time (in ns) after TX ends, so that we don't display or decode
+@@ -160,9 +161,12 @@ time_t              g_sync_time;
+ constexpr int PLOT_BUF_MULTIPLIER=8;
+ GenericFIFO<short>  g_plotDemodInFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
+ GenericFIFO<short>  g_plotSpeechOutFifo(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
+-GenericFIFO<short>  g_plotSpeechInFifoBeforeEQ(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
+ GenericFIFO<short>  g_plotSpeechInFifoAfterAGC(PLOT_BUF_MULTIPLIER*WAVEFORM_PLOT_BUF);
+ 
++// Raw mic samples for the TX level meter, written directly from the sound
++// card callback (OnTxInAudioData_()) alongside the TX pipeline's own input.
++GenericFIFO<short>  g_levelMeterTxRawFifo(8*LEVEL_METER_TX_RAW_BUF_MAX);
++
+ // Soundcard config
+ int                 g_nSoundCards;
+ 
+@@ -1432,6 +1436,11 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, wxT("FreeDV
+     m_panelSNR = new PlotScalar(m_auiNbookCtrl, SNR_PLOT_SECONDS, DT, NO_SNR_VAL, MAX_SNR_VAL, SNR_PLOT_SECONDS / SNR_PLOT_SECOND_SEGMENTS, 5, "%.0f", 0, "", true, NO_SNR_VAL, false);
+     m_auiNbookCtrl->AddPage(m_panelSNR, _("SNR"), false, wxNullBitmap);
+ 
++    // AGC gain plot -- evaluation aid only, see AGC_GAIN_PLOT_* in defines.h.
++    m_panelAgcGain = new PlotScalar(m_auiNbookCtrl, AGC_GAIN_PLOT_SECONDS, LEVEL_METER_TX_REFRESH_PERIOD_SEC, MIN_AGC_GAIN_PLOT_VAL, MAX_AGC_GAIN_PLOT_VAL, AGC_GAIN_PLOT_SECONDS / AGC_GAIN_PLOT_SECOND_SEGMENTS, 3, "%.1f", 0, "", true, 0, false);
++    m_panelAgcGain->setLineWidth(2); // easier to see on the dark background
++    m_auiNbookCtrl->AddPage(m_panelAgcGain, _("AGC dB"), false, wxNullBitmap);
++
+     // Names for automated GUI testing.
+     m_panelWaterfall->SetName("main.plotWaterfall");
+     m_panelSpectrum->SetName("main.plotSpectrum");
+@@ -1439,6 +1448,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, wxT("FreeDV
+     m_panelSpeechIn->SetName("main.plotFromMic");
+     m_panelSpeechOut->SetName("main.plotFromDecoder");
+     m_panelSNR->SetName("main.plotSNR");
++    m_panelAgcGain->SetName("main.plotAgcGain");
+ 
+     m_togBtnOnOff->Connect(wxEVT_UPDATE_UI, wxUpdateUIEventHandler(MainFrame::OnTogBtnOnOffUI), NULL, this);
+     m_togBtnAnalog->Connect(wxEVT_UPDATE_UI, wxUpdateUIEventHandler(MainFrame::OnTogBtnAnalogClickUI), NULL, this);
+@@ -1453,6 +1463,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, wxT("FreeDV
+     m_plotWaterfallTimer.SetOwner(this, ID_TIMER_WATERFALL);
+     m_plotSpectrumTimer.SetOwner(this, ID_TIMER_SPECTRUM);
+     m_plotSpeechInTimer.SetOwner(this, ID_TIMER_SPEECH_IN);
++    m_levelMeterTxTimer.SetOwner(this, ID_TIMER_LEVEL_METER_TX);
+     m_plotSpeechOutTimer.SetOwner(this, ID_TIMER_SPEECH_OUT);
+     m_plotDemodInTimer.SetOwner(this, ID_TIMER_DEMOD_IN);
+     m_plotSNRTimer.SetOwner(this, ID_TIMER_SNR);
+@@ -1861,6 +1872,7 @@ MainFrame::~MainFrame()
+         m_plotWaterfallTimer.Stop();
+         m_plotSpectrumTimer.Stop();
+         m_plotSpeechInTimer.Stop();
++        m_levelMeterTxTimer.Stop();
+         m_plotSpeechOutTimer.Stop();
+         m_plotDemodInTimer.Stop();
+         m_plotSNRTimer.Stop();
+@@ -1920,7 +1932,7 @@ int MainFrame::getIdealStationsHeardColumnLength_(int col)
+ //----------------------------------------------------------------
+ void MainFrame::OnTimer(wxTimerEvent &evt)
+ {
+-    short speechInPlotSamplesBeforeEQ[WAVEFORM_PLOT_BUF];
++    short speechInRawSamplesTxLevel[LEVEL_METER_TX_RAW_BUF_MAX];
+     short speechInPlotSamplesAfterAGC[WAVEFORM_PLOT_BUF];
+     short speechOutPlotSamples[WAVEFORM_PLOT_BUF];
+     short demodInPlotSamples[WAVEFORM_PLOT_BUF];
+@@ -1936,7 +1948,8 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+     }
+     
+     // Most plots don't need TX/sync state.
+-    if (timerId == ID_TIMER_UPDATE_OTHER || timerId == ID_TIMER_SNR || timerId == ID_TIMER_DEMOD_IN)
++    if (timerId == ID_TIMER_UPDATE_OTHER || timerId == ID_TIMER_SNR || timerId == ID_TIMER_DEMOD_IN ||
++        timerId == ID_TIMER_LEVEL_METER_TX)
+     {
+         txState = g_tx.load(std::memory_order_relaxed);
+         halfDuplexState = g_half_duplex.load(std::memory_order_relaxed);
+@@ -1991,11 +2004,6 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+           }
+           m_panelSpeechIn->add_new_short_samples(speechInPlotSamplesAfterAGC, WAVEFORM_PLOT_BUF, 32767);
+           m_panelSpeechIn->refreshData();
+-          
+-          if (g_plotSpeechInFifoBeforeEQ.read(speechInPlotSamplesBeforeEQ, WAVEFORM_PLOT_BUF))
+-          {
+-              memset(speechInPlotSamplesBeforeEQ, 0, WAVEFORM_PLOT_BUF*sizeof(short));
+-          }
+       }
+       else if (timerId == ID_TIMER_SPEECH_OUT)
+       {
+@@ -2012,6 +2020,11 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+           m_panelDemodIn->add_new_short_samples(demodInPlotSamples, WAVEFORM_PLOT_BUF, 32767);
+           m_panelDemodIn->refreshData();
+       }
++      else if (timerId == ID_TIMER_LEVEL_METER_TX)
++      {
++          // Level meter only, handled below. Kept out of the branch below,
++          // which (e.g. the voice keyer) expects to run once per DT.
++      }
+       else if (timerId == ID_TIMER_SNR)
+       {
+           // Only the SNR plot here: everything below goes by time passing
+@@ -2361,59 +2374,73 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+         VoiceKeyerProcessEvent(VK_DT);
+     }
+     
+-    if (timerId == ID_TIMER_SPEECH_IN ||
+-        timerId == ID_TIMER_DEMOD_IN)
++    if (timerId == ID_TIMER_DEMOD_IN && !txState && m_RxRunning)
+     {
+-        // Level Gauge -----------------------------------------------------------------------
+-
+-        bool updated = false;
+-        if (timerId == ID_TIMER_DEMOD_IN && !txState && m_RxRunning)
++        // Level meter, RX: peak level of the radio's audio. Peak reading,
++        // instant attack, then decays the linear peak by LEVEL_BETA per tick.
++        int maxDemodIn = 0;
++        for(int i=0; i<WAVEFORM_PLOT_BUF; i++)
+         {
+-            // receive mode - display From Radio peaks
+-            // peak from this DT sampling period
+-            int maxDemodIn = 0;
+-            for(int i=0; i<WAVEFORM_PLOT_BUF; i++)
++            if (maxDemodIn < abs(demodInPlotSamples[i]))
+             {
+-                if (maxDemodIn < abs(demodInPlotSamples[i]))
+-                {
+-                    maxDemodIn = abs(demodInPlotSamples[i]);
+-                }
++                maxDemodIn = abs(demodInPlotSamples[i]);
+             }
++        }
+ 
+-            // peak from last second
+-            if (maxDemodIn > m_maxLevel)
+-                m_maxLevel = maxDemodIn;
++        if (maxDemodIn > m_maxLevel)
++            m_maxLevel = maxDemodIn;
+ 
+-            updated = true;
+-        }
+-        else if (timerId == ID_TIMER_SPEECH_IN)
++        float maxScaled = m_maxLevel == 0 ? -LEVEL_GAUGE_MIN_DB : 20.0f * std::log10((float)m_maxLevel/32767.0f); // log(0) is undefined
++        m_gaugeLevel->SetZoneColours(false);
++        m_gaugeLevel->SetLevelDb(maxScaled);
++        m_maxLevel *= LEVEL_BETA;
++    }
++    else if (timerId == ID_TIMER_LEVEL_METER_TX && txState)
++    {
++        // Level meter, TX: peak level of the raw mic audio, read from the
++        // sound card callback rather than the TX pipeline (whose input
++        // arrives in bursts paced by the modem's frame size). PPM-style
++        // ballistics: instant attack, constant dB/sec decay.
++        int available = g_levelMeterTxRawFifo.numUsed();
++        int toRead = std::min(available, LEVEL_METER_TX_RAW_BUF_MAX);
++        int maxSpeechIn = 0;
++        if (toRead > 0 && g_levelMeterTxRawFifo.read(speechInRawSamplesTxLevel, toRead) == 0)
+         {
+-            // transmit mode - display From Mic peaks
+-
+-            // peak from this DT sampling period
+-            int maxSpeechIn = 0;
+-            for(int i=0; i<WAVEFORM_PLOT_BUF; i++)
++            for (int i = 0; i < toRead; i++)
+             {
+-                if (maxSpeechIn < abs(speechInPlotSamplesBeforeEQ[i]))
++                if (maxSpeechIn < abs(speechInRawSamplesTxLevel[i]))
+                 {
+-                    maxSpeechIn = abs(speechInPlotSamplesBeforeEQ[i]);
++                    maxSpeechIn = abs(speechInRawSamplesTxLevel[i]);
+                 }
+             }
+-
+-            // peak from last second
+-            if (maxSpeechIn > m_maxLevel)
+-                m_maxLevel = maxSpeechIn;
+-
+-           updated = true;
+         }
+ 
+-        if (updated)
++        float instantDb = maxSpeechIn == 0 ? -LEVEL_GAUGE_MIN_DB : 20.0f * std::log10((float)maxSpeechIn/32767.0f); // log(0) is undefined
++        if (instantDb > m_maxLevelDbTx)
++        {
++            m_maxLevelDbTx = instantDb;
++        }
++        else
+         {
+-            // Peak Reading meter: updates peaks immediately, then slowly decays
+-            int maxScaled = m_maxLevel == 0 ? -LEVEL_GAUGE_MIN_DB : 20 * std::log10((float)m_maxLevel/32767.0); // log(0) is undefined
+-            m_gaugeLevel->SetValue(std::max(-LEVEL_GAUGE_MIN_DB, maxScaled) + LEVEL_GAUGE_MIN_DB); // 1/32767 -> -30dB
+-            m_maxLevel *= LEVEL_BETA;
++            m_maxLevelDbTx -= LEVEL_METER_TX_DECAY_DB_PER_SEC * LEVEL_METER_TX_REFRESH_PERIOD_SEC;
++            if (m_maxLevelDbTx < -LEVEL_GAUGE_MIN_DB)
++            {
++                m_maxLevelDbTx = -LEVEL_GAUGE_MIN_DB;
++            }
+         }
++
++        m_gaugeLevel->SetZoneColours(true);
++        m_gaugeLevel->SetLevelDb(m_maxLevelDbTx);
++
++        // AGC gain plot (evaluation aid, see AGC_GAIN_PLOT_* in defines.h).
++        m_panelAgcGain->add_new_sample(g_agcAppliedGainDb.load(std::memory_order_relaxed));
++        m_panelAgcGain->refreshData();
++    }
++    else if (timerId == ID_TIMER_LEVEL_METER_TX)
++    {
++        // Not transmitting: discard what the mic callback captured so the
++        // next transmission doesn't start by displaying stale audio.
++        g_levelMeterTxRawFifo.reset();
+     }
+ }
+ #endif
+@@ -2542,7 +2569,7 @@ void MainFrame::performFreeDVOn_()
+         // Reset plot FIFOs
+         g_plotDemodInFifo.reset();
+         g_plotSpeechOutFifo.reset();
+-        g_plotSpeechInFifoBeforeEQ.reset();
++        g_levelMeterTxRawFifo.reset();
+         g_plotSpeechInFifoAfterAGC.reset();
+ 
+         m_txtCtrlCallSign->SetValue(wxT(""));
+@@ -2620,9 +2647,10 @@ void MainFrame::performFreeDVOn_()
+     memset(m_callsign, 0, sizeof(m_callsign));
+ 
+     m_maxLevel = 0;
++    m_maxLevelDbTx = -LEVEL_GAUGE_MIN_DB;
+     executeOnUiThreadAndWait_([&]() 
+     {
+-        m_gaugeLevel->SetValue(0);
++        m_gaugeLevel->Reset();
+         
+         if (wxGetApp().logger != nullptr)
+         {
+@@ -2788,6 +2816,7 @@ void MainFrame::performFreeDVOn_()
+                     m_plotWaterfallTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
+                     m_plotSpectrumTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
+                     m_plotSpeechInTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
++                    m_levelMeterTxTimer.Start(LEVEL_METER_TX_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
+                     m_plotSpeechOutTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
+                     m_plotDemodInTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
+                     m_plotSNRTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
+@@ -2839,6 +2868,7 @@ void MainFrame::performFreeDVOff_()
+         m_plotWaterfallTimer.Stop();
+         m_plotSpectrumTimer.Stop();
+         m_plotSpeechInTimer.Stop();
++        m_levelMeterTxTimer.Stop();
+         m_plotSpeechOutTimer.Stop();
+         m_plotDemodInTimer.Stop();
+         m_plotSNRTimer.Stop();
+@@ -3071,6 +3101,12 @@ void MainFrame::stopRxStream()
+             }
+             
+             m_txThread = nullptr;
++
++            // The TX thread saved the leveler's final gain state into the
++            // in-memory config as it exited; write it out now. Flush() so
++            // it reaches disk on every Stop, not only at app exit.
++            wxGetApp().appConfiguration.save(pConfig);
++            pConfig->Flush();
+         }
+ 
+         if (m_rxThread)
+@@ -3150,6 +3186,29 @@ static TxRxThreadUiHooks MakeTxRxUiHooks()
+         FREEDV_END_VERIFIED_SAFE
+         return value;
+     };
++
++    // The saved leveler state only applies to the TX input device it was
++    // saved with (see FilterConfiguration::levelerMicDeviceName). No device
++    // name saved means state from before this was recorded, which is kept.
++    auto& filterConfig = wxGetApp().appConfiguration.filterConfiguration;
++    wxString micDeviceName = wxGetApp().appConfiguration.audioConfiguration.soundCard2In.deviceName.get();
++    wxString savedMicDeviceName = filterConfig.levelerMicDeviceName.get();
++    if (savedMicDeviceName.IsEmpty() || savedMicDeviceName == micDeviceName)
++    {
++        hooks.levelerGainDb = filterConfig.levelerGainDb.getWithoutProcessing();
++        hooks.levelerIntegralErrorDb = filterConfig.levelerIntegralErrorDb.getWithoutProcessing();
++    }
++    else
++    {
++        log_info("TX input device changed from %s, leveler starting from 0dB", (const char*)savedMicDeviceName.ToUTF8());
++    }
++    hooks.levelerTargetLufs = filterConfig.levelerTargetLufs.getWithoutProcessing();
++    hooks.saveLevelerState = [micDeviceName](float gainDb, float integralErrorDb) {
++        auto& filterConfig = wxGetApp().appConfiguration.filterConfiguration;
++        filterConfig.levelerGainDb.setWithoutProcessing(gainDb);
++        filterConfig.levelerIntegralErrorDb.setWithoutProcessing(integralErrorDb);
++        filterConfig.levelerMicDeviceName.setWithoutProcessing(micDeviceName);
++    };
+     return hooks;
+ }
+ 
+@@ -4011,6 +4070,9 @@ void MainFrame::OnTxInAudioData_(IAudioDevice& dev, void* data, size_t size, voi
+         {
+             g_infifo2_full.fetch_add(1, std::memory_order_relaxed);
+         }
++
++        // Separate copy for the TX level meter (see g_levelMeterTxRawFifo).
++        g_levelMeterTxRawFifo.write(tmpInput, size);
+     }
+ }
+ 
+diff --git a/src/main.h b/src/main.h
+index 13e4c69a..576a301e 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -116,6 +116,7 @@ enum {
+         ID_TIMER_WATERFALL,
+         ID_TIMER_SPECTRUM,
+         ID_TIMER_SPEECH_IN,
++        ID_TIMER_LEVEL_METER_TX,
+         ID_TIMER_SPEECH_OUT,
+         ID_TIMER_DEMOD_IN,
+         ID_TIMER_SNR,
+@@ -318,6 +319,7 @@ class MainFrame : public TopFrame
+         PlotScalar*             m_panelSpeechOut;
+         PlotScalar*             m_panelDemodIn;
+         PlotScalar*             m_panelSNR;
++        PlotScalar*             m_panelAgcGain; // evaluation aid, see AGC_GAIN_PLOT_* in defines.h
+ 
+         bool                    m_RxRunning;
+         bool                    txChangeoverOccurring_;
+@@ -343,6 +345,7 @@ class MainFrame : public TopFrame
+         wxTimer                 m_plotSpectrumTimer;
+         wxTimer                 m_plotScatterTimer;
+         wxTimer                 m_plotSpeechInTimer;
++        wxTimer                 m_levelMeterTxTimer;
+         wxTimer                 m_plotSpeechOutTimer;
+         wxTimer                 m_plotDemodInTimer;
+         wxTimer                 m_plotSNRTimer;
+@@ -577,7 +580,8 @@ class MainFrame : public TopFrame
+         class OptionsDlg *optionsDlg;
+ 
+         // level Gauge
+-        float       m_maxLevel;
++        float       m_maxLevel;      // RX: linear peak amplitude
++        float       m_maxLevelDbTx;  // TX: peak level in dBFS
+ 
+         // flags to indicate when new EQ filters need to be designed
+ 
+diff --git a/src/ongui.cpp b/src/ongui.cpp
+index b07ea512..c1c1927c 100644
+--- a/src/ongui.cpp
++++ b/src/ongui.cpp
+@@ -1562,7 +1562,9 @@ void MainFrame::togglePTT(void) {
+     // reset level gauge
+ 
+     m_maxLevel = 0;
+-    m_gaugeLevel->SetValue(0);
++    m_maxLevelDbTx = -LEVEL_GAUGE_MIN_DB;
++    m_gaugeLevel->Reset();
++    m_gaugeLevel->SetZoneColours(newTx);
+     
+     // Report TX change to registered reporters
+     for (auto& obj : wxGetApp().m_reporters)
+diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
+index 3aa3b69e..4bc38adb 100644
+--- a/src/pipeline/TxRxThread.cpp
++++ b/src/pipeline/TxRxThread.cpp
+@@ -39,10 +39,6 @@ using namespace std::chrono_literals;
+ 
+ #include "freedv_sanitizers.h"
+ 
+-// WebRTC uses FS, which is defined in defines.h. Thus, it needs to be included
+-// first.
+-#include "AgcStep.h"
+-
+ // This forces us to use freedv-gui's version rather than another one.
+ // TBD -- may not be needed once we fully switch over to the audio pipeline.
+ #include "../defines.h"
+@@ -54,6 +50,7 @@ using namespace std::chrono_literals;
+ #include "EitherOrStep.h"
+ #include "RNNoiseStep.h"
+ #include "EqualizerStep.h"
++#include "AgcStep.h"
+ #include "ResamplePlotStep.h"
+ #include "ResampleStep.h"
+ #include "TapStep.h"
+@@ -66,6 +63,7 @@ using namespace std::chrono_literals;
+ #include "BeepStep.h"
+ #include "MixStep.h"
+ 
++#include "util/DiagnosticCsvLogger.h"
+ #include "util/logging/ulog.h"
+ #include "os/os_interface.h"
+ 
+@@ -93,7 +91,6 @@ extern std::atomic<int> g_sfTxFs;
+ extern std::atomic<bool> g_loopPlayFileToMicIn;
+ extern std::atomic<bool> g_loopPlayFileFromRadio;
+ extern std::atomic<float> g_TxFreqOffsetHz;
+-extern GenericFIFO<short> g_plotSpeechInFifoBeforeEQ;
+ extern GenericFIFO<short> g_plotSpeechInFifoAfterAGC;
+ extern GenericFIFO<short> g_plotDemodInFifo;
+ extern GenericFIFO<short> g_plotSpeechOutFifo;
+@@ -121,6 +118,7 @@ extern float g_sig_pwr_av;
+ extern std::atomic<bool> g_voice_keyer_tx;
+ extern std::atomic<bool> g_eoo_enqueued;
+ extern std::atomic<bool> g_agcEnabled;
++extern std::atomic<float> g_agcAppliedGainDb;
+ extern std::atomic<float> g_tone_phase;
+ extern std::atomic<int64_t> g_rxMutedUntilNs;
+ extern std::atomic<bool> g_noiseReductionEnabled;
+@@ -194,18 +192,6 @@ void TxRxThread::initializePipeline_()
+             eitherOrBypassPlay);
+         pipeline_->appendPipelineStep(eitherOrPlayStep);
+         
+-        // Resample for plot step (before equalization)
+-        auto resampleForPlotStepBeforeEQ = new ResampleForPlotStep(&g_plotSpeechInFifoBeforeEQ);
+-        auto resampleForPlotPipelineBeforeEQ = new AudioPipeline(inputSampleRate_, resampleForPlotStepBeforeEQ->getOutputSampleRate());
+-#if defined(ENABLE_FASTER_PLOTS)
+-        auto resampleForPlotResamplerBeforeEQ = new ResampleStep(inputSampleRate_, resampleForPlotStepBeforeEQ->getInputSampleRate(), true); // need to create manually to get access to "plot only" optimizations
+-        resampleForPlotPipelineBeforeEQ->appendPipelineStep(resampleForPlotResamplerBeforeEQ);
+-#endif // defined(ENABLE_FASTER_PLOTS)
+-        resampleForPlotPipelineBeforeEQ->appendPipelineStep(resampleForPlotStepBeforeEQ);
+-
+-        auto resampleForPlotTapBeforeEQ = new TapStep(inputSampleRate_, resampleForPlotPipelineBeforeEQ);
+-        pipeline_->appendPipelineStep(resampleForPlotTapBeforeEQ);
+-
+         // RNNoise step (optional)
+         auto eitherOrProcessRNNoise = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+         auto eitherOrBypassRNNoise = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+@@ -230,18 +216,21 @@ void TxRxThread::initializePipeline_()
+             g_rxUserdata->micEqLock);
+         pipeline_->appendPipelineStep(equalizerStep);
+ 
+-        // AGC step (optional)
+-        auto eitherOrProcessAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+-        auto eitherOrBypassAgc = new AudioPipeline(inputSampleRate_, inputSampleRate_);
+-
+-        auto agcStep = new AgcStep(inputSampleRate_);
+-        eitherOrProcessAgc->appendPipelineStep(agcStep);
+-
+-        auto eitherOrAgcStep = new EitherOrStep(
+-            +[]() FREEDV_NONBLOCKING { return g_agcEnabled.load(std::memory_order_acquire); },
+-            eitherOrProcessAgc,
+-            eitherOrBypassAgc);
+-        pipeline_->appendPipelineStep(eitherOrAgcStep); 
++        // AGC: loudness leveler (switchable) followed by a peak limiter
++        // (always on), in one step. The AGC setting only switches the
++        // leveler; the limiter is always in circuit for peak protection.
++        // The DiagnosticCsvLogger is a no-op unless the backend is built
++        // with -DENABLE_AUDIO_DIAG_LOGGING=ON. Gain state is restored from
++        // the previous session (saved at the end of Entry()).
++        agcStep_ = new AgcStep(
++            inputSampleRate_,
++            std::make_shared<DiagnosticCsvLogger>(),
++            uiHooks_.levelerGainDb,
++            uiHooks_.levelerIntegralErrorDb,
++            uiHooks_.levelerTargetLufs,
++            +[]() FREEDV_NONBLOCKING { return g_noiseReductionEnabled.load(std::memory_order_acquire); },
++            +[]() FREEDV_NONBLOCKING { return g_agcEnabled.load(std::memory_order_acquire); });
++        pipeline_->appendPipelineStep(agcStep_);
+ 
+         // Resample for plot step (after AGC)
+         auto resampleForPlotStepAfterAGC = new ResampleForPlotStep(&g_plotSpeechInFifoAfterAGC);
+@@ -635,6 +624,19 @@ void* TxRxThread::Entry() noexcept
+     waitStats_.report(m_tx, "wait");
+ #endif // defined(ENABLE_PROCESSING_STATS)
+ 
++    // Save the leveler's gain state so the next session resumes from it
++    // rather than from 0dB. Safe without synchronization: execute() ran on
++    // this thread and has stopped. MainFrame::stopRxStream() writes the
++    // config to disk once this thread has been joined.
++    if (agcStep_ != nullptr)
++    {
++        if (uiHooks_.saveLevelerState)
++        {
++            uiHooks_.saveLevelerState(agcStep_->getCurrentGainDb(), agcStep_->getIntegralErrorDb());
++        }
++        agcStep_ = nullptr;
++    }
++
+     // Force pipeline to delete itself when we're done with the thread.
+     pipeline_ = nullptr;
+     
+@@ -937,6 +939,12 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
+             }
+ 
+             auto outputSamples = pipeline_->execute(inputPtr, nsam_in_48, &nout);
++
++            // For the AGC gain plot (polled by the GUI thread).
++            if (agcStep_ != nullptr)
++            {
++                g_agcAppliedGainDb.store(agcStep_->getLiveAppliedGainDb(), std::memory_order_relaxed);
++            }
+             
+             if (g_dump_fifo_state) {
+                 FREEDV_BEGIN_VERIFIED_SAFE
+diff --git a/src/pipeline/TxRxThread.h b/src/pipeline/TxRxThread.h
+index bf30de8f..8f56ded5 100644
+--- a/src/pipeline/TxRxThread.h
++++ b/src/pipeline/TxRxThread.h
+@@ -53,6 +53,7 @@
+ // Forward declarations
+ class LinkStep;
+ class BeepStep;
++class AgcStep;
+ 
+ //#define ENABLE_PROCESSING_STATS
+ 
+@@ -76,6 +77,14 @@ struct TxRxThreadUiHooks
+     realtime_fp<float()> toneFreqHz;
+     realtime_fp<float()> toneAmplitude;
+     realtime_fp<bool()> toneEnabled;
++
++    // Leveler state from the previous session and the loudness target,
++    // read when the thread is created. saveLevelerState is called at the
++    // end of Entry() so the next session resumes from the current gain.
++    float levelerGainDb = 0.0f;
++    float levelerIntegralErrorDb = 0.0f;
++    float levelerTargetLufs = -26.0f;
++    std::function<void(float gainDb, float integralErrorDb)> saveLevelerState;
+ };
+ 
+ class TxRxThread
+@@ -90,6 +99,7 @@ public:
+         , equalizedMicAudioLink_(std::move(micAudioLink))
+         , uiHooks_(std::move(uiHooks))
+         , beepStep_(nullptr)
++        , agcStep_(nullptr)
+         , hasEooBeenSent_(false)
+         , pendingEooCount_(0)
+         , helper_(std::move(helper))
+@@ -152,6 +162,10 @@ private:
+     std::shared_ptr<LinkStep> equalizedMicAudioLink_;
+     TxRxThreadUiHooks uiHooks_;
+     BeepStep* beepStep_;
++    // Non-owning (pipeline_ owns it), TX side only. Polled for the AGC
++    // gain plot, and used at the end of Entry() to save the leveler's gain
++    // state to config.
++    AgcStep* agcStep_;
+     bool hasEooBeenSent_;
+     std::unique_ptr<short[]> pendingEooSamples_;
+     int pendingEooCount_;
+diff --git a/src/pipeline/test/TxRxThreadTest.cpp b/src/pipeline/test/TxRxThreadTest.cpp
+index f70b49e8..46aedb27 100644
+--- a/src/pipeline/test/TxRxThreadTest.cpp
++++ b/src/pipeline/test/TxRxThreadTest.cpp
+@@ -82,6 +82,7 @@ std::atomic<int>    g_outfifo1_empty(0);
+ std::atomic<int64_t> g_rxMutedUntilNs(0);
+ std::atomic<float>  g_txLevelScale(1.0f);
+ std::atomic<float>  g_monitorTxAudioVol(0.0f);
++std::atomic<float>  g_agcAppliedGainDb(0.0f);
+ std::atomic<float>  g_monitorVoiceKeyerAudioVol(0.0f);
+ std::atomic<float>  g_tone_phase(0.0f);
+ 
+@@ -394,13 +395,27 @@ double rms(std::vector<short> const& samples)
+     return std::sqrt(sum / samples.size());
+ }
+ 
++// The AGC step's limiter looks 4ms ahead, so it holds back this many
++// samples until more audio arrives (or the pipeline is reset at the end of
++// an over).
++constexpr int AGC_LOOKAHEAD_SAMPLES = TEST_SAMPLE_RATE * 4 / 1000 - 1;
++
+ // Returns the frequency of a tone from how often it crosses zero.
+ double toneFrequency(std::vector<short> const& samples, int sampleRate)
+ {
++    // Samples within a few counts of zero are ignored: the leveler/limiter's
++    // look-ahead delay starts the output with a few ms of near-silence, and
++    // resampling rings briefly (by a few tens of counts) where the tone
++    // then starts.
++    constexpr int NEAR_ZERO = 64;
+     int crossings = 0;
+-    for (size_t i = 1; i < samples.size(); i++)
++    int lastSign = 0;
++    for (auto sample : samples)
+     {
+-        if ((samples[i - 1] < 0) != (samples[i] < 0)) crossings++;
++        if (std::abs(sample) < NEAR_ZERO) continue;
++        int sign = sample < 0 ? -1 : 1;
++        if (lastSign != 0 && sign != lastSign) crossings++;
++        lastSign = sign;
+     }
+     return samples.empty() ? 0.0 : crossings / 2.0 * sampleRate / samples.size();
+ }
+@@ -1819,7 +1834,10 @@ public:
+ 
+     static bool automaticGainControlRaisesQuietMicrophone()
+     {
+-        auto quietSpeech = sine(TEST_SAMPLE_RATE, 440.0, 300.0);
++        // About -30 LUFS: quiet, but above the leveler's pause threshold
++        // (anything at or below that is treated as a pause and the gain is
++        // held), and below its target.
++        auto quietSpeech = sine(TEST_SAMPLE_RATE, 440.0, 1500.0);
+ 
+         resetGlobals();
+         g_tx = true;
+@@ -1833,7 +1851,7 @@ public:
+         double with = rms(lastSecondSentToRadio(quietSpeech));
+ 
+         bool result = true;
+-        result &= checkBetween("level sent without gain control", (int)without, 400, 450); // 300 peak, doubled
++        result &= checkBetween("level sent without gain control", (int)without, 2000, 2250); // 1500 peak, doubled
+         if (with < without * 1.15)
+         {
+             std::cout << "[level sent with gain control was " << with << ", expected well above " << without << "] ";
+@@ -2636,7 +2654,8 @@ public:
+         // nothing but the tone's own crossing of zero for its first
+         // second's worth, no filled-in silence anywhere in it.
+         int run = 0;
+-        for (size_t i = firstTone; i < firstTone + (size_t)TEST_SAMPLE_RATE && i < sent.size(); i++)
++        // (Less the AGC's look-ahead, which still holds the end of it.)
++        for (size_t i = firstTone; i < firstTone + (size_t)(TEST_SAMPLE_RATE - AGC_LOOKAHEAD_SAMPLES) && i < sent.size(); i++)
+         {
+             run = (sent[i] == 0) ? run + 1 : 0;
+             if (run == 2)
+@@ -2698,7 +2717,8 @@ public:
+         size_t first = 0, last = sent.size();
+         while (first < sent.size() && sent[first] == 0) first++;
+         while (last > first && sent[last - 1] == 0) last--;
+-        long expected = (long)SPEAKING_TURNS * BLOCK;
++        // Less the AGC's look-ahead, which holds the last few ms of it.
++        long expected = (long)SPEAKING_TURNS * BLOCK - AGC_LOOKAHEAD_SAMPLES;
+         if ((long)(last - first) != expected)
+         {
+             std::cout << "[" << (last - first) << " samples of signal sent for " << expected
+diff --git a/src/test_agent.cpp b/src/test_agent.cpp
+index 44c66360..a187c04b 100644
+--- a/src/test_agent.cpp
++++ b/src/test_agent.cpp
+@@ -40,6 +40,7 @@
+ #include "test_agent.h"
+ #include "main.h"
+ #include "freedv_interface.h"
++#include "gui/controls/LevelMeterLed.h"
+ 
+ extern std::atomic<bool> g_tx;
+ extern std::atomic<int> g_analog;
+@@ -47,6 +48,7 @@ extern std::atomic<float> g_RxFreqOffsetHz;
+ extern std::atomic<float> g_TxFreqOffsetHz;
+ extern std::atomic<bool> g_loopPlayFileFromRadio;
+ extern std::atomic<bool> isModemRunning;
++extern std::atomic<float> g_agcAppliedGainDb;
+ extern FreeDVInterface freedvInterface;
+ 
+ #if defined(__APPLE__)
+@@ -796,6 +798,15 @@ yyjson_mut_val* TestAgent::describeWindow_(yyjson_mut_doc* doc, wxWindow* window
+     {
+         yyjson_mut_obj_add_int(doc, obj, "value", gauge->GetValue());
+     }
++    else if (auto meter = dynamic_cast<LevelMeterLed*>(window))
++    {
++        yyjson_mut_obj_add_real(doc, obj, "value", meter->GetLevelDb());
++        yyjson_mut_obj_add_real(doc, obj, "minDb", meter->GetMinDb());
++        yyjson_mut_obj_add_real(doc, obj, "maxDb", meter->GetMaxDb());
++        yyjson_mut_obj_add_real(doc, obj, "amberStartDb", meter->GetAmberStartDb());
++        yyjson_mut_obj_add_real(doc, obj, "redStartDb", meter->GetRedStartDb());
++        yyjson_mut_obj_add_bool(doc, obj, "zoneColours", meter->GetZoneColours());
++    }
+     else if (auto slider = wxDynamicCast(window, wxSlider))
+     {
+         yyjson_mut_obj_add_int(doc, obj, "value", slider->GetValue());
+@@ -1869,6 +1880,7 @@ void TestAgent::commandGetState_(yyjson_val* id)
+     yyjson_mut_obj_add_bool(doc, state, "loopPlayFileFromRadio", g_loopPlayFileFromRadio.load(std::memory_order_relaxed));
+     yyjson_mut_obj_add_real(doc, state, "monitorTxAudioVol", config.monitorTxAudioVol.get());
+     yyjson_mut_obj_add_real(doc, state, "monitorVoiceKeyerAudioVol", config.monitorVoiceKeyerAudioVol.get());
++    yyjson_mut_obj_add_real(doc, state, "agcAppliedGainDb", g_agcAppliedGainDb.load(std::memory_order_relaxed));
+ 
+     yyjson_mut_val* audio = yyjson_mut_obj(doc);
+     yyjson_mut_obj_add_val(doc, audio, "soundCard1In", DescribeSoundDevice_(doc, config.audioConfiguration.soundCard1In));
+@@ -1910,6 +1922,7 @@ void TestAgent::commandGetState_(yyjson_val* id)
+     yyjson_mut_val* filter = yyjson_mut_obj(doc);
+     yyjson_mut_obj_add_bool(doc, filter, "noiseReductionEnable", filterConfig.noiseReductionEnable.get());
+     yyjson_mut_obj_add_bool(doc, filter, "agcEnabled", filterConfig.agcEnabled.get());
++    yyjson_mut_obj_add_real(doc, filter, "levelerTargetLufs", filterConfig.levelerTargetLufs.get());
+     yyjson_mut_obj_add_bool(doc, filter, "bwExpandEnabled", filterConfig.bwExpandEnabled.get());
+     auto describeChannel = [&](auto& channel) {
+         yyjson_mut_val* obj = yyjson_mut_obj(doc);
+diff --git a/src/topFrame.cpp b/src/topFrame.cpp
+index 3fe2a278..23e28414 100644
+--- a/src/topFrame.cpp
++++ b/src/topFrame.cpp
+@@ -564,37 +564,12 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+     wxStaticBox* levelBox = new wxStaticBox(m_panel, wxID_ANY, _("Level"), wxDefaultPosition, wxSize(100,-1));
+     levelSizer = new wxStaticBoxSizer(levelBox, wxVERTICAL);
+ 
+-    // Thin static strip marking the acceptable range (LEVEL_METER_TARGET_LOW_PCT
+-    // to LEVEL_METER_TARGET_HIGH_PCT) just above the gauge -- a plain painted
+-    // panel rather than a custom meter widget. Always visible (never
+-    // Show()/Hide()'d) -- GTK doesn't finish allocating a widget's real
+-    // on-screen position until it's been shown once, and reading its
+-    // geometry immediately after a first Show()+Layout() during TX
+-    // confirmed it was still stuck at (0,0) regardless (2026-08-24
+-    // diagnostic). 
+-    m_levelTargetMarker = new wxPanel(levelBox, wxID_ANY, wxDefaultPosition, wxSize(135,3));
+-    m_levelTargetMarker->SetToolTip(_("Acceptable level range (amber = too low, green = target, red = too high)"));
+-    m_levelTargetMarker->Bind(wxEVT_PAINT, [this](wxPaintEvent&) {
+-        wxPaintDC dc(m_levelTargetMarker);
+-        wxSize sz = m_levelTargetMarker->GetClientSize();
+-        dc.SetBackground(wxBrush(m_levelTargetMarker->GetParent()->GetBackgroundColour()));
+-        dc.Clear();
+-
+-        int loX = sz.GetWidth() * LEVEL_METER_TARGET_LOW_PCT / 100;
+-        int hiX = sz.GetWidth() * LEVEL_METER_TARGET_HIGH_PCT / 100;
+-        dc.SetPen(*wxTRANSPARENT_PEN);
+-        dc.SetBrush(wxBrush(wxColour(255, 165, 0)));
+-        dc.DrawRectangle(0, 0, loX, sz.GetHeight());
+-        dc.SetBrush(wxBrush(wxColour(0, 200, 0)));
+-        dc.DrawRectangle(loX, 0, hiX - loX, sz.GetHeight());
+-        dc.SetBrush(wxBrush(*wxRED));
+-        dc.DrawRectangle(hiX, 0, sz.GetWidth() - hiX, sz.GetHeight());
+-    });
+-    levelSizer->Add(m_levelTargetMarker, 0, static_cast<int>(wxALIGN_CENTER_HORIZONTAL));
+-
+-    m_gaugeLevel = new wxGauge(levelBox, wxID_ANY, LEVEL_GAUGE_MIN_DB, wxDefaultPosition, wxSize(135,15), wxGA_SMOOTH); // log scale, -30 dB to 0 dB
+-    m_gaugeLevel->SetToolTip(_("RX: Peak level of radio's audio output, TX: Peak level of microphone audio as recorded by FreeDV (before AGC/level settings)."));
+-    levelSizer->Add(m_gaugeLevel, 1, static_cast<int>(wxALIGN_CENTER_HORIZONTAL)|static_cast<int>(wxALL), 10);
++    // LED-style meter, 13x8px segments (see LEVEL_METER_* in defines.h).
++    m_gaugeLevel = new LevelMeterLed(
++        levelBox, wxID_ANY, -LEVEL_GAUGE_MIN_DB, 0.0f, LEVEL_METER_SEGMENT_DB,
++        LEVEL_METER_AMBER_START_DBFS, LEVEL_METER_RED_START_DBFS, 13, 8);
++    m_gaugeLevel->SetToolTip(_("RX: Peak level of radio's audio output, TX: Peak level of microphone audio from the sound card (before noise reduction/AGC/level settings)."));
++    levelSizer->Add(m_gaugeLevel, 0, static_cast<int>(wxALIGN_CENTER_HORIZONTAL)|static_cast<int>(wxALL), 10);
+     
+     leftSizer->Add(levelSizer ,0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
+ 
+diff --git a/src/topFrame.h b/src/topFrame.h
+index f70f2376..b4755a03 100644
+--- a/src/topFrame.h
++++ b/src/topFrame.h
+@@ -36,6 +36,7 @@
+ #include <wx/colour.h>
+ #include <wx/settings.h>
+ #include <wx/gauge.h>
++#include "gui/controls/LevelMeterLed.h"
+ #include <wx/textctrl.h>
+ #include <wx/sizer.h>
+ #include <wx/statbox.h>
+@@ -100,8 +101,7 @@ class TopFrame : public wxFrame
+         wxGauge* m_gaugeSNR;
+         wxStaticText* m_textSNR;
+         wxCheckBox* m_ckboxSNR;
+-        wxGauge* m_gaugeLevel;
+-        wxPanel* m_levelTargetMarker;
++        LevelMeterLed* m_gaugeLevel;
+ 
+         wxButton*     m_BtnCallSignReset;
+         wxTextCtrl*   m_txtCtrlCallSign;
+diff --git a/test/gui/freedvtest/audio.py b/test/gui/freedvtest/audio.py
+index 1f82a185..5002a769 100644
+--- a/test/gui/freedvtest/audio.py
++++ b/test/gui/freedvtest/audio.py
+@@ -298,11 +298,12 @@ def play(device, path):
+ 
+ class Tone:
+     """Plays a tone into an output device for the duration of a "with" block
+-    (at most max_seconds)."""
++    (at most max_seconds). amplitude is its peak, in 16 bit samples."""
+ 
+-    def __init__(self, device, frequency=1000.0, max_seconds=30):
++    def __init__(self, device, frequency=1000.0, max_seconds=30, amplitude=16000):
+         self._device = device
+         self._frequency = frequency
++        self._amplitude = amplitude
+         self._seconds = max_seconds
+         self._folder = None
+         self._player = None
+@@ -312,7 +313,7 @@ class Tone:
+         path = os.path.join(self._folder.name, "tone.wav")
+         rate = 8000
+         samples = array.array("h", (
+-            int(16000 * math.sin(2 * math.pi * self._frequency * n / rate)) for n in range(rate * self._seconds)))
++            int(self._amplitude * math.sin(2 * math.pi * self._frequency * n / rate)) for n in range(rate * self._seconds)))
+         with wave.open(path, "wb") as f:
+             f.setnchannels(1)
+             f.setsampwidth(2)
+diff --git a/test/gui/test_level_meter_agc.py b/test/gui/test_level_meter_agc.py
+new file mode 100755
+index 00000000..4f723118
+--- /dev/null
++++ b/test/gui/test_level_meter_agc.py
+@@ -0,0 +1,253 @@
++#!/usr/bin/env python3
++"""Tests the level meter in FreeDV's main window and the TX AGC (leveler and
++limiter): the meter reading what's heard from the radio and the microphone,
++and the AGC bringing quiet and loud microphones to the same level.
++
++Each scenario below launches its own copy of FreeDV. With no arguments all of
++them are run; otherwise, only those named:
++
++    python3 test_level_meter_agc.py [scenario...]
++
++Run from the build folder (or set FREEDV_BINARY) with a window manager
++running. Linux only for now, as it relies on PulseAudio/PipeWire for the audio
++devices that FreeDV is set up with.
++"""
++
++import math
++import os
++import sys
++import time
++
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++
++import freedvtest
++from freedvtest.audio import Tone, VirtualAudioDevices
++from test_main_window import (MICROPHONE, RADIO_RX, RADIO_TX_MONITOR, audio_devices, check, check_equal, level,
++                              quit_and_check_log, settings, start_modem, stop_modem, wait_for_transmit)
++
++METER = "main.gaugeLevel"
++FULL_SCALE = 32767
++
++# What the AGC aims for unless told otherwise (/Filter/levelerTargetLufs).
++TARGET_LUFS = -26.0
++# Furthest the leveler's gain goes either way.
++GAIN_LIMIT_DB = 12.0
++# Below this, what's coming from the microphone counts as a pause and the
++# leveler's gain is held (noise reduction off, as settings() has it).
++PAUSE_LUFS = -33.0
++# Analog mode sends the microphone to the radio at twice its level.
++ANALOG_GAIN_DB = 6.0
++
++
++def amplitude(dbfs):
++    """The peak, in 16 bit samples, of a tone that peaks at dbfs."""
++    return int(round(FULL_SCALE * 10 ** (dbfs / 20.0)))
++
++
++def tone_lufs(peak_dbfs):
++    """How loud a 1 kHz tone is, by its peak: a full scale one is -3 LUFS."""
++    return peak_dbfs - 3.01
++
++
++def tone_peak_for_lufs(lufs):
++    return lufs + 3.01
++
++
++def rms_dbfs(rms):
++    return 20 * math.log10(rms / FULL_SCALE) if rms > 0 else -120.0
++
++
++def meter(app):
++    return app.get(METER)
++
++
++def gain(app):
++    return app.state()["agcAppliedGainDb"]
++
++
++def check_near(actual, expected, tolerance, what):
++    check(abs(actual - expected) <= tolerance, "%s is %.2f, expected %.2f (+/- %.1f)" % (what, actual, expected, tolerance))
++
++
++def wait_for_meter(app, expected_db, what, tolerance_db=1.0, timeout=10):
++    try:
++        app.wait_until(lambda: abs(meter(app)["value"] - expected_db) <= tolerance_db, timeout=timeout,
++                       description="the level meter to read %.1f dB (%s)" % (expected_db, what))
++    except freedvtest.FreeDVError:
++        check_near(meter(app)["value"], expected_db, tolerance_db, "The level meter (%s)" % what)
++
++
++def wait_for_gain(app, expected_db, what, tolerance_db=1.5, timeout=40):
++    """Waits for the leveler to settle on a gain, then checks that it stays
++    there."""
++    try:
++        app.wait_until(lambda: abs(gain(app) - expected_db) <= tolerance_db, timeout=timeout,
++                       description="the AGC gain to reach %+.1f dB (%s)" % (expected_db, what))
++    except freedvtest.FreeDVError:
++        check_near(gain(app), expected_db, tolerance_db, "AGC gain (%s)" % what)
++    time.sleep(3)
++    check_near(gain(app), expected_db, tolerance_db, "AGC gain a few seconds later (%s)" % what)
++
++
++def output_lufs(analog=True):
++    """How loud the tone sent to the radio is, as the microphone would have
++    to be to sound like it."""
++    measured = rms_dbfs(level(RADIO_TX_MONITOR, 1.5))
++    # A tone's RMS is 3 dB below its peak, and so the same as its loudness.
++    return measured - (ANALOG_GAIN_DB if analog else 0.0)
++
++
++def start_analog_transmit(app):
++    start_modem(app)
++    app.click("main.btnAnalog")
++    app.wait_until(lambda: app.state()["analog"], timeout=5, description="analog mode")
++    app.click("main.btnPTT")
++    wait_for_transmit(app)
++
++
++def stop_transmit(app):
++    app.click("main.btnPTT")
++    wait_for_transmit(app, False)
++    stop_modem(app)
++
++
++# ---------------------------------------------------------------------------
++# Scenarios
++# ---------------------------------------------------------------------------
++
++def test_meter():
++    """The level meter's scale, and its readings of the radio (receiving) and
++    the microphone (transmitting)."""
++    with audio_devices():
++        with freedvtest.start(settings=settings()) as app:
++            app.wait_for_window("main")
++            described = meter(app)
++            check_equal((described["minDb"], described["maxDb"]), (-30.0, 0.0), "The level meter's range")
++            check_equal((described["amberStartDb"], described["redStartDb"]), (-9.0, -3.0),
++                        "Where the level meter turns amber and red")
++            check_equal(described["value"], -30.0, "The level meter before starting")
++
++            start_modem(app)
++
++            # Receiving, it shows what comes from the radio, peak reading.
++            # Louder each time, as it takes a while to fall back.
++            for peak in [-24.0, -12.0, -6.0]:
++                with Tone(RADIO_RX, amplitude=amplitude(peak)):
++                    wait_for_meter(app, peak, "radio at %.0f dBFS" % peak)
++            check_equal(meter(app)["zoneColours"], False, "The level meter showing colour zones while receiving")
++            app.wait_until(lambda: meter(app)["value"] < -24.0, timeout=10,
++                           description="the level meter to fall once the radio is quiet")
++
++            # Transmitting, it shows what comes from the microphone, before
++            # anything is done to it (here, the AGC, which would otherwise
++            # make every tone the same level).
++            app.click("main.btnPTT")
++            wait_for_transmit(app)
++            for peak in [-24.0, -12.0, -6.0]:
++                with Tone(MICROPHONE, amplitude=amplitude(peak)):
++                    wait_for_meter(app, peak, "microphone at %.0f dBFS" % peak)
++            check_equal(meter(app)["zoneColours"], True, "The level meter showing colour zones while transmitting")
++            app.wait_until(lambda: meter(app)["value"] < -24.0, timeout=10,
++                           description="the level meter to fall once the microphone is quiet")
++            app.click("main.btnPTT")
++            wait_for_transmit(app, False)
++
++            stop_modem(app)
++            quit_and_check_log(app)
++
++
++def test_agc():
++    """With the AGC on, quiet and loud microphones are sent at the target
++    level, and the gain holds while nothing is said."""
++    with audio_devices():
++        with freedvtest.start(settings=settings(Filter__agcEnable=True)) as app:
++            app.wait_for_window("main")
++            check_equal(app.state()["config"]["filter"]["levelerTargetLufs"], TARGET_LUFS, "The AGC's target")
++            start_analog_transmit(app)
++
++            for name, lufs in [("quiet", -30.0), ("loud", -16.0)]:
++                expected_gain = max(-GAIN_LIMIT_DB, min(GAIN_LIMIT_DB, TARGET_LUFS - lufs))
++                with Tone(MICROPHONE, amplitude=amplitude(tone_peak_for_lufs(lufs)), max_seconds=60):
++                    wait_for_gain(app, expected_gain, "%s microphone at %.0f LUFS" % (name, lufs))
++                    check_near(output_lufs(), TARGET_LUFS, 1.5, "Loudness sent to the radio (%s microphone)" % name)
++                    settled = gain(app)
++
++            # Too quiet to be speech: the gain stays where the loud
++            # microphone left it, rather than climbing on the background.
++            with Tone(MICROPHONE, amplitude=amplitude(tone_peak_for_lufs(PAUSE_LUFS - 9)), max_seconds=30):
++                time.sleep(8)
++                check_near(gain(app), settled, 0.5, "AGC gain during a pause")
++
++            stop_transmit(app)
++            quit_and_check_log(app)
++
++
++def test_agc_off():
++    """With the AGC off, the gain stays at 0 dB and what's sent to the radio
++    follows the microphone."""
++    with audio_devices():
++        with freedvtest.start(settings=settings()) as app:
++            app.wait_for_window("main")
++            check_equal(app.state()["config"]["filter"]["agcEnabled"], False, "AGC enabled")
++            start_analog_transmit(app)
++
++            sent = []
++            for lufs in [-30.0, -18.0]:
++                with Tone(MICROPHONE, amplitude=amplitude(tone_peak_for_lufs(lufs))):
++                    time.sleep(3)
++                    check_near(gain(app), 0.0, 0.1, "AGC gain with the AGC off")
++                    sent.append(output_lufs())
++                    check_near(sent[-1], lufs, 1.5, "Loudness sent to the radio with the AGC off")
++            check_near(sent[1] - sent[0], 12.0, 1.0, "Change in loudness sent to the radio")
++
++            stop_transmit(app)
++            quit_and_check_log(app)
++
++
++def test_saved_gain():
++    """The AGC carries on from the gain it had last time, unless the
++    microphone has changed since."""
++    microphone = VirtualAudioDevices.input_name(MICROPHONE)
++    saved = 8.0
++    for saved_with, expected in [(microphone, saved), ("Some other microphone", 0.0), (None, saved)]:
++        what = "saved with %s" % (saved_with or "no microphone recorded")
++        extra = dict(Filter__agcEnable=True, Filter__levelerGainDb=saved)
++        if saved_with is not None:
++            extra["Filter__levelerMicDeviceName"] = saved_with
++        with audio_devices():
++            with freedvtest.start(settings=settings(**extra)) as app:
++                app.wait_for_window("main")
++                start_analog_transmit(app)
++                # Nothing's being said, so the gain stays where it starts.
++                time.sleep(2)
++                check_near(gain(app), expected, 0.3, "AGC gain at the start (%s)" % what)
++                stop_transmit(app)
++                quit_and_check_log(app)
++
++                config = freedvtest.read_config(app.config_path)
++                check_equal(config.get("/Filter/levelerMicDeviceName"), microphone,
++                            "Microphone saved with the AGC's gain (%s)" % what)
++                check_near(float(config["/Filter/levelerGainDb"]), expected, 0.3, "AGC gain saved (%s)" % what)
++
++
++SCENARIOS = {
++    "meter": test_meter,
++    "agc": test_agc,
++    "agc_off": test_agc_off,
++    "saved_gain": test_saved_gain,
++}
++
++
++def main():
++    names = sys.argv[1:] or list(SCENARIOS)
++    for scenario in names:
++        if scenario not in SCENARIOS:
++            sys.exit("Unknown scenario '%s' (available: %s)" % (scenario, ", ".join(SCENARIOS)))
++    for scenario in names:
++        print("=== %s ===" % scenario, flush=True)
++        SCENARIOS[scenario]()
++        print("PASS: %s" % scenario, flush=True)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/test/gui/test_main_window.py b/test/gui/test_main_window.py
+index 9a5966ea..cd79d41b 100644
+--- a/test/gui/test_main_window.py
++++ b/test/gui/test_main_window.py
+@@ -42,7 +42,7 @@ SPEAKER = device("FreeDVGuiTest_Computer_To_Speaker")
+ RADIO_TX_MONITOR = VirtualAudioDevices.input_name(RADIO_TX)
+ SPEAKER_MONITOR = VirtualAudioDevices.input_name(SPEAKER)
+ 
+-TABS = ["Waterfall", "Spectrum", "Frm Radio", "Frm Mic", "Frm Decoder", "SNR"]
++TABS = ["Waterfall", "Spectrum", "Frm Radio", "Frm Mic", "Frm Decoder", "SNR", "AGC dB"]
+ 
+ # File > Exit: on macOS, Quit FreeDV, in the menu named after it.
+ EXIT_MENU_ITEM = "FreeDV/Quit FreeDV" if sys.platform == "darwin" else "File/Exit"
+diff --git a/test/gui/test_plots.py b/test/gui/test_plots.py
+index a04b690f..7f492583 100644
+--- a/test/gui/test_plots.py
++++ b/test/gui/test_plots.py
+@@ -37,6 +37,7 @@ PLOTS = {
+     "Frm Mic": "main.plotFromMic",
+     "Frm Decoder": "main.plotFromDecoder",
+     "SNR": "main.plotSNR",
++    "AGC dB": "main.plotAgcGain",
+ }
+ 
+ 
