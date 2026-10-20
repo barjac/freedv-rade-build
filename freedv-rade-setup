@@ -1745,15 +1745,25 @@ rig_step() {
     fi
 
     # 2. rigctld already running here (e.g. started at boot)
-    local running tport
+    local running tport boot_units
     running=$(ps -o args= -C rigctld 2>/dev/null | head -1)
+    boot_units=$(boot_rigctld_units)
     if [[ -n $running ]]; then
         say "rigctld is already running on this computer:\n  $running"
         tport=$(sed -n 's/.*-t *\([0-9]\+\).*/\1/p; s/.*--port[= ]\([0-9]\+\).*/\1/p' <<<"$running" | head -1)
         tport=${tport:-4532}
         if yesno "Use this rigctld for FreeDV?" y; then
             rig_test "localhost:$tport" 2 || yesno "Use it anyway?" y || return
-            RIG_MODE=existing; RIG_HOST="localhost:$tport"
+            # With its settings known, FreeDV can start its own copy whenever
+            # this one isn't running (e.g. hung with the radio off, or stopped).
+            if adopt_rigctld_args "$running" && [[ $tport == 4532 ]]; then
+                RIG_MODE=ondemand
+                say "FreeDV will use this rigctld when it is running, and otherwise start"
+                say "its own with the same settings ($RIG_MODEL_NAME on $RIG_PORT) while FreeDV runs."
+            else
+                RIG_MODE=existing; RIG_HOST="localhost:$tport"
+            fi
+            remove_old_rig_service
             return
         fi
         say "Only one program can use the radio's serial port, so stop that rigctld"
@@ -1840,12 +1850,23 @@ rig_step() {
         esac
     done
 
-    say "When should rigctld run?"
-    say "  (W)hile FreeDV is running only (recommended)"
-    say "  (A)ll the time, started when the computer boots (for logging programs etc.)"
-    confirm "While FreeDV runs, or All the time?" "[W/a]" "Ww" "Aa"
-    CHOICE=$(($? + 1))
-    ((CHOICE == 1)) && RIG_MODE=ondemand || RIG_MODE=boot
+    if [[ -n $boot_units ]]; then
+        # Another service already starts rigctld at boot (e.g. the distro's
+        # rigctld.service, shared with other radio programs): never add a
+        # second one, which would fight it for the serial port and port 4532.
+        say "rigctld is already started at boot by: $boot_units"
+        say "(not running at the moment - radio off, or stopped?)"
+        say "FreeDV will use it when it is running, and otherwise start its own"
+        say "while FreeDV runs."
+        RIG_MODE=ondemand
+    else
+        say "When should rigctld run?"
+        say "  (W)hile FreeDV is running only (recommended)"
+        say "  (A)ll the time, started when the computer boots (for logging programs etc.)"
+        confirm "While FreeDV runs, or All the time?" "[W/a]" "Ww" "Aa"
+        CHOICE=$(($? + 1))
+        ((CHOICE == 1)) && RIG_MODE=ondemand || RIG_MODE=boot
+    fi
 
     if yesno "Allow other computers on your network to use this rigctld?" n; then
         RIG_LISTEN=0.0.0.0
@@ -1853,7 +1874,70 @@ rig_step() {
     fi
     RIG_HOST=localhost:4532
 
-    [[ $RIG_MODE == boot ]] && install_rig_service
+    if [[ $RIG_MODE == boot ]]; then
+        install_rig_service
+    else
+        remove_old_rig_service
+    fi
+}
+
+# boot_rigctld_units -> enabled services, other than this setup's own, that
+# start rigctld (e.g. the distro's rigctld.service), space separated
+boot_rigctld_units() {
+    local f u found=""
+    for f in /etc/systemd/system/*.service /usr/lib/systemd/system/*.service /lib/systemd/system/*.service; do
+        [[ -f $f ]] || continue
+        u=${f##*/}
+        [[ $u == freedv-rigctld.service ]] && continue
+        grep -qE '^[[:space:]]*ExecStart=.*rigctld' "$f" 2>/dev/null || continue
+        systemctl is-enabled --quiet "$u" 2>/dev/null || continue
+        [[ " $found " == *" $u "* ]] || found+=" $u"
+    done
+    echo "${found# }"
+}
+
+# adopt_rigctld_args "ARGS" -> RIG_MODEL/RIG_MODEL_NAME/RIG_PORT/RIG_SETCONF/
+# RIG_LISTEN from a running rigctld's command line, so FreeDV can start the
+# same rigctld itself when that one isn't running. Fails if they can't be read.
+adopt_rigctld_args() {
+    local -a a
+    read -r -a a <<<"$1"
+    local i w next model="" port="" conf="" speed="" listen=""
+    for ((i = 1; i < ${#a[@]}; i++)); do
+        w=${a[i]}; next=${a[i+1]:-}
+        case $w in
+            -m|--model) model=$next; ((i++)) ;;
+            -m*) model=${w#-m} ;;
+            --model=*) model=${w#*=} ;;
+            -r|--rig-file) port=$next; ((i++)) ;;
+            -r*) port=${w#-r} ;;
+            --rig-file=*) port=${w#*=} ;;
+            -s|--serial-speed) speed=$next; ((i++)) ;;
+            --serial-speed=*) speed=${w#*=} ;;
+            -C|--set-conf) conf+=${conf:+,}$next; ((i++)) ;;
+            --set-conf=*) conf+=${conf:+,}${w#*=} ;;
+            -T|--listen-addr) listen=$next; ((i++)) ;;
+            --listen-addr=*) listen=${w#*=} ;;
+        esac
+    done
+    [[ $model =~ ^[0-9]+$ && -n $port ]] || return 1
+    [[ -n $speed ]] && conf+=${conf:+,}serial_speed=$speed
+    RIG_MODEL=$model; RIG_PORT=$port; RIG_SETCONF=$(fix_setconf "$conf")
+    RIG_LISTEN=${listen:-127.0.0.1}; RIG_HOST=localhost:4532
+    RIG_MODEL_NAME=$("$RIGCTL_BIN" -l 2>/dev/null | awk -v m="$model" '$1 == m { for (i = 2; i <= NF - 3; i++) printf "%s%s", (i > 2 ? " " : ""), $i; exit }')
+    RIG_MODEL_NAME=${RIG_MODEL_NAME:-model $model}
+    return 0
+}
+
+# A rigctld boot service left by an earlier run of this setup fights any other
+# rigctld for the serial port (retrying every 10s), so offer to remove it.
+remove_old_rig_service() {
+    local unit=/etc/systemd/system/freedv-rigctld.service
+    [[ -f $unit ]] || return 0
+    say "An earlier run of this setup installed $unit,"
+    say "which starts its own rigctld at boot. It isn't needed now."
+    yesno "Remove it?" y || return 0
+    root_quiet "Removing the old rigctld service" "systemctl disable --now freedv-rigctld.service; rm -f '$unit' && systemctl daemon-reload && systemctl reset-failed freedv-rigctld.service 2>/dev/null; true"
 }
 
 install_rig_service() {
