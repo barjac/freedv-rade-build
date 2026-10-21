@@ -503,7 +503,7 @@ index ea831181..a5af070c 100644
      bSizer30->Add(sbSizer_rnnoise, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);   
  
 diff --git a/src/main.cpp b/src/main.cpp
-index 29e182be..4695ae97 100644
+index 3a75a0da..cc4a1b30 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -129,6 +129,7 @@ float g_snr;
@@ -613,12 +613,12 @@ index 29e182be..4695ae97 100644
      
 -    if (timerId == ID_TIMER_SPEECH_IN ||
 -        timerId == ID_TIMER_DEMOD_IN)
-+    if (timerId == ID_TIMER_DEMOD_IN && !txState && m_RxRunning)
++    if (timerId == ID_TIMER_DEMOD_IN && !txState && m_RxRunning.load(std::memory_order_acquire))
      {
 -        // Level Gauge -----------------------------------------------------------------------
 -
 -        bool updated = false;
--        if (timerId == ID_TIMER_DEMOD_IN && !txState && m_RxRunning)
+-        if (timerId == ID_TIMER_DEMOD_IN && !txState && m_RxRunning.load(std::memory_order_acquire))
 +        // Level meter, RX: peak level of the radio's audio. Peak reading,
 +        // instant attack, then decays the linear peak by LEVEL_BETA per tick.
 +        int maxDemodIn = 0;
@@ -810,7 +810,7 @@ index 29e182be..4695ae97 100644
  }
  
 diff --git a/src/main.h b/src/main.h
-index 13e4c69a..576a301e 100644
+index 2ea7c904..da2bc98c 100644
 --- a/src/main.h
 +++ b/src/main.h
 @@ -116,6 +116,7 @@ enum {
@@ -827,9 +827,9 @@ index 13e4c69a..576a301e 100644
          PlotScalar*             m_panelSNR;
 +        PlotScalar*             m_panelAgcGain; // evaluation aid, see AGC_GAIN_PLOT_* in defines.h
  
-         bool                    m_RxRunning;
-         bool                    txChangeoverOccurring_;
-@@ -343,6 +345,7 @@ class MainFrame : public TopFrame
+         // Set by startRxStream()/stopRxStream(), mostly on the thread that
+         // starts and stops FreeDV (see OnTogBtnOnOff()), and read all over
+@@ -346,6 +348,7 @@ class MainFrame : public TopFrame
          wxTimer                 m_plotSpectrumTimer;
          wxTimer                 m_plotScatterTimer;
          wxTimer                 m_plotSpeechInTimer;
@@ -837,7 +837,7 @@ index 13e4c69a..576a301e 100644
          wxTimer                 m_plotSpeechOutTimer;
          wxTimer                 m_plotDemodInTimer;
          wxTimer                 m_plotSNRTimer;
-@@ -577,7 +580,8 @@ class MainFrame : public TopFrame
+@@ -580,7 +583,8 @@ class MainFrame : public TopFrame
          class OptionsDlg *optionsDlg;
  
          // level Gauge
@@ -848,7 +848,7 @@ index 13e4c69a..576a301e 100644
          // flags to indicate when new EQ filters need to be designed
  
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index b07ea512..c1c1927c 100644
+index 24d25ffb..23b3a3b6 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
 @@ -1562,7 +1562,9 @@ void MainFrame::togglePTT(void) {
