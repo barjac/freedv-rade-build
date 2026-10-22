@@ -2185,7 +2185,18 @@ sink_in()  { printf '%s:playback_FL\n%s:playback_FR\n' "$1" "$1"; }
 sink_mon() { printf '%s:monitor_FL\n%s:monitor_FR\n' "$1" "$1"; }
 
 write_links() {
-    local f="$RADIO_DIR/links" tx_src
+    local f="$RADIO_DIR/links" tx_src n
+    local -a nodes=("$RADIO_RX_NODE" "$MIC_NODE" "$RADIO_TX_NODE")
+    [[ $MONITOR == both || $MONITOR == headphones ]] && nodes+=("$PHONES_NODE")
+    [[ $MONITOR == both || $MONITOR == speakers ]] && nodes+=("$SPEAKER_NODE")
+    # A node's links are made from its ports as they are now, so a node that
+    # isn't there yet (WirePlumber just restarted, card unplugged) would
+    # silently get no links: wait for each, then say which are missing.
+    MISSING_NODES=()
+    for n in "${nodes[@]}"; do
+        [[ -n $n ]] || continue
+        wait_node "$n" 10 || MISSING_NODES+=("$n")
+    done
     {
         # From radio -> FreeDV
         [[ -n $RADIO_RX_NODE ]] && make_links "$(node_ports "$RADIO_RX_NODE" out)" "$(sink_in FDV_RX_in)"
@@ -3195,6 +3206,12 @@ finish() {
     write_launchers
     say "Saved for $RADIO_LABEL: the sound links ($(grep -c . "$RADIO_DIR/links" 2>/dev/null)), FreeDV settings, start script and"
     say "$(icons_text). Details are in the log."
+    if ((${#MISSING_NODES[@]})); then
+        warn "These sound devices weren't there, so they have no links yet:"
+        printf '   %s\n' "${MISSING_NODES[@]}"
+        say "Plug them in, then start the radio with:  $RADIO_DIR/start --links"
+        say "then make the missing links in qpwgraph and press Enter in the terminal to save them."
+    fi
 }
 
 test_sound() {
