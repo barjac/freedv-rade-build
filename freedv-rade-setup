@@ -479,6 +479,45 @@ offer_install() {
     fi
 }
 
+# The package with hamlib's rigctl and rigctld
+hamlib_pkg() {
+    if is_apt_distro; then
+        echo libhamlib-utils
+    else
+        case " $ID $ID_LIKE " in
+            *" mageia "*) echo hamlib-utils ;;
+            *)            echo hamlib ;;
+        esac
+    fi
+}
+
+# runs PROGRAM -> 0 if it actually starts. A copy built with FreeDV can be
+# there but unable to load its libraries, e.g. on a card copied to another
+# user's home directory.
+runs() { [[ -x $1 ]] && "$1" --version &>/dev/null; }
+
+# find_hamlib -> sets RIGCTL_BIN and RIGCTLD_BIN: the system package, or the
+# copy built with FreeDV, whichever actually runs
+find_hamlib() {
+    local ext="$FREEDV_DIR/freedv-gui/build_linux/external/dist/bin"
+    RIGCTL_BIN=$(command -v rigctl 2>/dev/null)
+    RIGCTLD_BIN=$(command -v rigctld 2>/dev/null)
+    runs "$RIGCTL_BIN" || RIGCTL_BIN=""
+    runs "$RIGCTLD_BIN" || RIGCTLD_BIN=""
+    [[ -z $RIGCTL_BIN ]] && runs "$ext/rigctl" && RIGCTL_BIN="$ext/rigctl"
+    [[ -z $RIGCTLD_BIN ]] && runs "$ext/rigctld" && RIGCTLD_BIN="$ext/rigctld"
+}
+
+# ensure_hamlib -> 0 if rigctl and rigctld are there, offering to install
+# them if not
+ensure_hamlib() {
+    [[ -n $RIGCTL_BIN && -n $RIGCTLD_BIN ]] && return 0
+    warn "hamlib's rigctl and rigctld are not installed. They are needed to talk to the radio."
+    offer_install "$(hamlib_pkg)" "rig control" || return 1
+    find_hamlib
+    [[ -n $RIGCTL_BIN && -n $RIGCTLD_BIN ]]
+}
+
 # The package with PipeWire's ALSA plugin. Ubuntu 22.04 (and Mint 21) has
 # no pipewire-alsa: the plugin is in pipewire-audio-client-libraries there.
 alsa_plugin_pkg() {
@@ -925,16 +964,12 @@ preflight() {
     ok "qpwgraph ($QPWGRAPH_CMD)"
 
     # hamlib: system package, or the copy built with FreeDV
-    local ext="$FREEDV_DIR/freedv-gui/build_linux/external/dist/bin"
-    RIGCTL_BIN=$(command -v rigctl 2>/dev/null)
-    RIGCTLD_BIN=$(command -v rigctld 2>/dev/null)
-    [[ -z $RIGCTL_BIN && -x $ext/rigctl ]] && RIGCTL_BIN="$ext/rigctl"
-    [[ -z $RIGCTLD_BIN && -x $ext/rigctld ]] && RIGCTLD_BIN="$ext/rigctld"
+    find_hamlib
     if [[ -n $RIGCTL_BIN && -n $RIGCTLD_BIN ]]; then
         ok "hamlib rigctl/rigctld ($RIGCTLD_BIN)"
     else
-        warn "hamlib's rigctl/rigctld were not found (on Mageia they are in hamlib-utils)."
-        say "  Rig control can then only use a rigctld running on another computer."
+        warn "hamlib's rigctl/rigctld were not found (package $(hamlib_pkg))."
+        say "  The rig control step will offer to install them."
     fi
     say ""
 }
@@ -1655,6 +1690,10 @@ rig_data_modes() {
 # rig_test HOST|PORT MODEL [SETCONF] -> 0 if the radio answered
 rig_test() {
     local port=$1 model=$2 setconf=$3 out
+    if ! runs "$RIGCTL_BIN"; then
+        warn "Can't test: hamlib's rigctl is not installed or doesn't run (package $(hamlib_pkg))."
+        return 1
+    fi
     say "Asking the radio for its frequency..."
     out=$(timeout 15 "$RIGCTL_BIN" -m "$model" -r "$port" ${setconf:+--set-conf="$setconf"} f 2>&1)
     if [[ $? -eq 0 && $out =~ ^[0-9]+$ ]]; then
@@ -1705,8 +1744,8 @@ app_rig() {
 # Receive only: rigctld with hamlib's Dummy rig (model 1), started with
 # FreeDV. It just holds a frequency, mode and PTT state.
 dummy_rig() {
-    if [[ -z $RIGCTLD_BIN ]]; then
-        warn "rigctld is not installed, so FreeDV and the panadapter can't share a frequency."
+    if ! ensure_hamlib; then
+        warn "Without rigctld, FreeDV and the panadapter can't share a frequency."
         return
     fi
     RIG_MODE=ondemand; RIG_MODEL=1; RIG_MODEL_NAME="Hamlib Dummy (no radio)"
@@ -1728,8 +1767,8 @@ rig_step() {
         return
     fi
 
-    if [[ -z $RIGCTL_BIN ]]; then
-        warn "hamlib rigctl is not installed, so rig control can't be set up."
+    if ! ensure_hamlib; then
+        warn "Without hamlib, rig control can't be set up."
         say "FreeDV can still be used with VOX or the radio's own PTT."
         return
     fi
@@ -1771,10 +1810,6 @@ rig_step() {
         return
     fi
 
-    if [[ -z $RIGCTLD_BIN ]]; then
-        warn "rigctld is not installed, so it can't be set up here."
-        return
-    fi
 
     say "FreeDV can control your radio (frequency and PTT) through hamlib's rigctld."
     say "Answer No if you use VOX or the radio's own PTT."
@@ -3191,6 +3226,9 @@ else
     load_settings "$RADIO_DIR/start"
     RADIO_LABEL=${RADIO_LABEL:-${RADIO^^}}   # radios made before labels existed
     RIGCTL_BIN=${_rigctl:-$RIGCTL_BIN}; RIGCTLD_BIN=${_rigctld:-$RIGCTLD_BIN}; FREEDV_DIR=$_fdv
+    # a saved path may be from another computer or user, or no longer work
+    runs "$RIGCTL_BIN" || RIGCTL_BIN=""
+    runs "$RIGCTLD_BIN" || RIGCTLD_BIN=""
     QPWGRAPH_CMD=${_qpw:-$QPWGRAPH_CMD}
     while true; do
         heading "Radio $RADIO_LABEL"
