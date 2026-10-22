@@ -2990,6 +2990,26 @@ EOF
 # One desktop icon for the radio, or with build slots one per slot ("FreeDV
 # v1", or "FreeDV radio TS-450S v1" with more radios: see icon_name). Icons
 # for slots that are gone are removed.
+# ensure_desktop FILE NAME EXEC SLOT -> makes this radio's icon for SLOT if
+# there isn't one yet. An icon already there (found by its X-FreeDV-Radio and
+# X-FreeDV-Slot lines, whatever its file is called) is left as it is, so any
+# changes made to it by hand are kept; only its Exec line is corrected if the
+# command has changed.
+ensure_desktop() {
+    local final=$1 name=$2 exec=$3 slot=$4 f found=
+    for f in "$DESKTOP_DIR"/*.desktop "$APPS_DIR"/*.desktop; do
+        [[ -f $f ]] && grep -qxF "X-FreeDV-Radio=$RADIO" "$f" && grep -qxF "X-FreeDV-Slot=$slot" "$f" || continue
+        found=1
+        grep -qxF "Exec=$exec" "$f" && continue
+        sed -i "s|^Exec=.*|Exec=$exec|" "$f"
+        log "Desktop icon $f: command updated to $exec"
+    done
+    if [[ -z $found ]]; then
+        write_desktop "$final" "$name" "$exec" "$slot"
+        log "Desktop icon: $name"
+    fi
+}
+
 write_launchers() {
     local link="$LINK_DIR/freedv-radio-$RADIO" f slot
     local -a slots
@@ -2998,21 +3018,14 @@ write_launchers() {
 
     mapfile -t slots < <(slot_names)
     mkdir -p "$DESKTOP_DIR" "$APPS_DIR"
-    for f in "$DESKTOP_DIR"/freedv-radio-*.desktop "$APPS_DIR"/freedv-radio-*.desktop; do
-        [[ -f $f ]] && grep -qxF "X-FreeDV-Radio=$RADIO" "$f" && rm -f "$f"
-    done
-    # icons made before X-FreeDV-Radio existed
-    rm -f "$DESKTOP_DIR/freedv-radio-$RADIO.desktop" "$APPS_DIR/freedv-radio-$RADIO.desktop"
     if ((${#slots[@]})); then
         for slot in "${slots[@]}"; do
-            write_desktop "$DESKTOP_DIR/freedv-radio-$RADIO-$slot.desktop" \
+            ensure_desktop "$DESKTOP_DIR/freedv-radio-$RADIO-$slot.desktop" \
                 "$(icon_name "$RADIO_LABEL" "$slot")" "$RADIO_DIR/start --slot $slot" "$slot"
-            log "Desktop icon: $(icon_name "$RADIO_LABEL" "$slot")"
         done
     else
-        write_desktop "$DESKTOP_DIR/freedv-radio-$RADIO.desktop" \
+        ensure_desktop "$DESKTOP_DIR/freedv-radio-$RADIO.desktop" \
             "$(icon_name "$RADIO_LABEL" "")" "$RADIO_DIR/start" ""
-        log "Desktop icon: $(icon_name "$RADIO_LABEL" "")"
     fi
     rename_other_icons
     command -v update-desktop-database &>/dev/null && update-desktop-database "$APPS_DIR" 2>/dev/null
@@ -3188,7 +3201,7 @@ else
         say "  Change the band-pass (F)ilter"
         [[ -n $(kiwi_hooks_dir) ]] && say "  KiwiSDR (P)anadapter with FreeDV, on or off"
         say "  Fix the sound links in qpwgraph and (S)ave them"
-        say "  Re(W)rite the start script and desktop icon only"
+        say "  Re(W)rite the start script only (desktop icons are kept)"
         say "  (Q)uit"
         confirm "What would you like to do?" "[T/r/m/c/f/p/s/w/q]" "Tt" "Rr" "Mm" "Cc" "Ff" "Pp" "Ss" "Ww" "Qq"
         CHOICE=$(($? + 1))
@@ -3208,7 +3221,7 @@ else
             6) panadapter_step ;;
             7) edit_links ;;
             8) write_start_script; write_launchers
-               ok "Rewrote the start script and $(icons_text)"
+               ok "Rewrote the start script; $(icons_text) checked"
                sleep 1.5 ;;   # the menu redraw would hide it at once
             9) break ;;
         esac
