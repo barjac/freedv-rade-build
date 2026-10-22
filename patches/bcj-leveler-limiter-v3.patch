@@ -810,7 +810,7 @@ index 3a75a0da..cc4a1b30 100644
  }
  
 diff --git a/src/main.h b/src/main.h
-index 2ea7c904..da2bc98c 100644
+index 61c774c0..00fe0149 100644
 --- a/src/main.h
 +++ b/src/main.h
 @@ -116,6 +116,7 @@ enum {
@@ -837,7 +837,7 @@ index 2ea7c904..da2bc98c 100644
          wxTimer                 m_plotSpeechOutTimer;
          wxTimer                 m_plotDemodInTimer;
          wxTimer                 m_plotSNRTimer;
-@@ -580,7 +583,8 @@ class MainFrame : public TopFrame
+@@ -583,7 +586,8 @@ class MainFrame : public TopFrame
          class OptionsDlg *optionsDlg;
  
          // level Gauge
@@ -848,7 +848,7 @@ index 2ea7c904..da2bc98c 100644
          // flags to indicate when new EQ filters need to be designed
  
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index 24d25ffb..23b3a3b6 100644
+index 31de2ccb..90439e0b 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
 @@ -1562,7 +1562,9 @@ void MainFrame::togglePTT(void) {
@@ -1177,7 +1177,7 @@ index 44c66360..a187c04b 100644
      auto describeChannel = [&](auto& channel) {
          yyjson_mut_val* obj = yyjson_mut_obj(doc);
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 3fe2a278..429afcae 100644
+index a6bf7bd7..3c3f330a 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -564,37 +564,12 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
@@ -1225,7 +1225,7 @@ index 3fe2a278..429afcae 100644
      leftSizer->Add(levelSizer ,0, static_cast<int>(wxALL)|static_cast<int>(wxEXPAND), 2);
  
 diff --git a/src/topFrame.h b/src/topFrame.h
-index f70f2376..b4755a03 100644
+index 4f5b34bc..119cf372 100644
 --- a/src/topFrame.h
 +++ b/src/topFrame.h
 @@ -36,6 +36,7 @@
@@ -1236,7 +1236,7 @@ index f70f2376..b4755a03 100644
  #include <wx/textctrl.h>
  #include <wx/sizer.h>
  #include <wx/statbox.h>
-@@ -100,8 +101,7 @@ class TopFrame : public wxFrame
+@@ -101,8 +102,7 @@ class TopFrame : public wxFrame
          wxGauge* m_gaugeSNR;
          wxStaticText* m_textSNR;
          wxCheckBox* m_ckboxSNR;
