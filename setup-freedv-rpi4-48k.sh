@@ -8,7 +8,7 @@ set -e
 echo "=== FreeDV RPi4 Audio Setup (48000 Hz) ==="
 
 # --- Step 1: PipeWire 48000 Hz ---
-echo "[1/5] Configuring PipeWire for 48000 Hz..."
+echo "[1/6] Configuring PipeWire for 48000 Hz..."
 mkdir -p ~/.config/pipewire/pipewire.conf.d
 cat > ~/.config/pipewire/pipewire.conf.d/10-clock-rate.conf << 'EOF'
 context.properties = {
@@ -19,7 +19,7 @@ EOF
 echo "    Created ~/.config/pipewire/pipewire.conf.d/10-clock-rate.conf"
 
 # --- Step 2: Ensure BCM2835 headphone jack is enabled, HDMI audio stays disabled ---
-echo "[2/5] Checking boot audio config..."
+echo "[2/6] Checking boot audio config..."
 for cfg in /boot/firmware/config.txt /boot/config.txt; do
     if [ -f "$cfg" ]; then
         echo "    Found: $cfg"
@@ -31,7 +31,7 @@ for cfg in /boot/firmware/config.txt /boot/config.txt; do
 done
 
 # --- Step 3: RTKit ---
-echo "[3/5] Enabling RTKit real-time daemon..."
+echo "[3/6] Enabling RTKit real-time daemon..."
 if systemctl list-unit-files rtkit-daemon.service &>/dev/null; then
     sudo systemctl enable rtkit-daemon
     sudo systemctl start rtkit-daemon
@@ -41,7 +41,7 @@ else
 fi
 
 # --- Step 4: FreeDV config ---
-echo "[4/5] Updating FreeDV sample rates to 48000..."
+echo "[4/6] Updating FreeDV sample rates to 48000..."
 freedv_conf="${HOME}/.config/freedv/freedv.conf"
 
 if [ -f "$freedv_conf" ]; then
@@ -60,7 +60,7 @@ else
 fi
 
 # --- Step 5: freedv-main-sinks null sink rate ---
-echo "[5/5] Checking freedv-main-sinks null sink rate..."
+echo "[5/6] Checking freedv-main-sinks null sink rate..."
 main_sinks=/usr/local/bin/freedv-main-sinks
 if [ -f "$main_sinks" ]; then
     sudo sed -i 's/rate=44100/rate=48000/' "$main_sinks"
@@ -68,6 +68,18 @@ if [ -f "$main_sinks" ]; then
 else
     echo "    $main_sinks not found — skipping"
 fi
+
+# Existing FDV_* null sinks were already loaded (possibly at the old rate)
+# and won't be recreated just because the script above changed: it only
+# creates a sink if it's missing. Unload them now so the next FreeDV start
+# recreates them at 48000.
+echo "[6/6] Unloading any already-loaded FreeDV null sinks (will be recreated at 48000 on next FreeDV start)..."
+for sink in FDV_RX_in FDV_RX_out FDV_TX_in FDV_TX_out FDV_PAN; do
+    mod_id=$(pactl list modules short | awk -v s="sink_name=$sink " '$0 ~ s {print $1}')
+    if [ -n "$mod_id" ]; then
+        pactl unload-module "$mod_id" && echo "    Unloaded $sink (module $mod_id)"
+    fi
+done
 
 echo ""
 echo "=== Done ==="
