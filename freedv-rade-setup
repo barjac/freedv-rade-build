@@ -2443,6 +2443,53 @@ radio_label() {
     echo "${l:-${1^^}}"   # radios made before labels existed: upper case
 }
 
+# A new radio's answers are saved after each step, so if the setup stops part
+# way (e.g. no rigctl), the next run with the same name offers them again
+# instead of starting over.
+save_progress() {
+    { settings_block; printf 'STEPS_DONE=%q\nRADIO_SERIAL=%q\n' "$STEPS_DONE" "$RADIO_SERIAL"; } \
+        > "$RADIO_DIR/progress"
+}
+
+# step_summary NAME -> one line describing what an earlier run chose
+step_summary() {
+    local card
+    case $1 in
+        radio)
+            case $RADIO_KIND in
+                none)     echo "Radio: none (receive only)" ;;
+                software) echo "Radio program: $RADIO_APP" ;;
+                *)        card=$(card_label "$RADIO_CARD" 2>/dev/null)
+                          echo "Radio sound card: ${card:-$RADIO_CARD}" ;;
+            esac ;;
+        headset)
+            echo "Microphone: ${MIC_NODE:-none}, headphones: ${PHONES_NODE:-none}${SPEAKER_NODE:+, speakers: $SPEAKER_NODE}" ;;
+        rig)
+            if [[ $RIG_MODE == none ]]; then
+                echo "Rig control: none (VOX or the radio's own PTT)"
+            else
+                echo "Rig control: ${RIG_MODEL_NAME:-rigctld at $RIG_HOST}${RIG_PORT:+ on ${RIG_PORT##*/}}"
+            fi ;;
+        bpf)
+            echo "Band-pass filter: $BPF" ;;
+    esac
+}
+
+# setup_step NAME COMMAND... -> runs the step, unless an earlier run that was
+# stopped finished it and its answers are kept; saves progress after it
+setup_step() {
+    local name=$1
+    shift
+    if [[ " $STEPS_DONE " == *" $name "* ]]; then
+        say ""
+        say "From the setup that was stopped before:  $(step_summary "$name")"
+        yesno "Keep it?" y && return 0
+    fi
+    "$@" || return
+    [[ " $STEPS_DONE " == *" $name "* ]] || STEPS_DONE+=" $name"
+    save_progress
+}
+
 load_settings() {
     # shellcheck disable=SC1090
     source <(sed -n '/^# ==== freedv-rade-setup settings ====/,/^# ==== end of settings ====/p' "$1")
@@ -3269,23 +3316,39 @@ if [[ -z $RADIO ]]; then
         RADIO_LABEL=${RADIO_LABEL%"${RADIO_LABEL##*[![:space:]]}"}
         [[ -e $SETUP_ROOT/$RADIO/start ]] && { say "There is already a radio called $RADIO."; continue; }
         # a folder without a start script is left from a run that was stopped part way
-        [[ -d $SETUP_ROOT/$RADIO ]] && say "(Finishing the setup of $RADIO that was stopped before.)"
+        if [[ -f $SETUP_ROOT/$RADIO/progress ]]; then
+            say "(Carrying on with the setup of $RADIO that was stopped before: the answers"
+            say " already given are offered again.)"
+        elif [[ -d $SETUP_ROOT/$RADIO ]]; then
+            say "(Finishing the setup of $RADIO that was stopped before.)"
+        fi
         break
     done
     RADIO_DIR="$SETUP_ROOT/$RADIO"
     mkdir -p "$RADIO_DIR"
     BPF=none; MONITOR=none; RIG_MODE=none; RADIO_APP=""
     NEW_RADIO=1
-    if ! radio_audio_step; then
+    STEPS_DONE=""
+    if [[ -f $RADIO_DIR/progress ]]; then
+        # Keep the paths found by this run's checks, and the name as typed
+        _rigctl=$RIGCTL_BIN; _rigctld=$RIGCTLD_BIN; _fdv=$FREEDV_DIR; _qpw=$QPWGRAPH_CMD; _label=$RADIO_LABEL
+        load_settings "$RADIO_DIR/progress"
+        source <(grep -E '^(STEPS_DONE|RADIO_SERIAL)=' "$RADIO_DIR/progress")
+        RIGCTL_BIN=$_rigctl; RIGCTLD_BIN=$_rigctld; FREEDV_DIR=$_fdv
+        QPWGRAPH_CMD=${_qpw:-$QPWGRAPH_CMD}; RADIO_LABEL=$_label
+        log "Resuming $RADIO: steps done:$STEPS_DONE"
+    fi
+    if ! setup_step radio radio_audio_step; then
         # (card names belong to the USB socket and may be shared, so they stay)
         rm -rf "$RADIO_DIR"
         die "No radio sound card - nothing written. Run freedv-rade-setup again to retry."
     fi
-    headset_step
-    rig_step
-    bpf_step
+    setup_step headset headset_step
+    setup_step rig rig_step
+    setup_step bpf bpf_step
     panadapter_step
     finish
+    rm -f "$RADIO_DIR/progress"
     test_sound
 else
     RADIO_DIR="$SETUP_ROOT/$RADIO"
