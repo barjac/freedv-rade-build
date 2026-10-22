@@ -533,6 +533,43 @@ alsa_plugin_pkg() {
 list_cards()  { LC_ALL=C pactl list cards short 2>/dev/null | awk '{print $2}' | sort; }
 list_serial() { ls -1 /dev/serial/by-id/ 2>/dev/null | sort; }
 
+# serial_label PATH -> its by-id name with the device it is now, e.g.
+# "usb-Silicon_Labs_..._if01-port0  (ttyUSB1)"
+serial_label() {
+    local dev
+    dev=$(readlink -f "$1" 2>/dev/null)
+    echo "${1##*/}${dev:+  (${dev##*/})}"
+}
+
+# serial_siblings PATH -> all the by-id ports of the same USB device as PATH
+# (one cable can carry two or more, e.g. CAT and PTT on a TS-890 or IC-7300)
+serial_siblings() {
+    local base=${1##*/} p
+    base=${base%-if[0-9][0-9]-port[0-9]*}
+    for p in /dev/serial/by-id/*; do
+        [[ -e $p && ${p##*/} == "$base"* ]] && echo "$p"
+    done
+}
+
+# find_cat_port MODEL SETCONF PORT... -> FOUND_PORT: the first port that
+# answers rigctl, asked for the frequency one at a time
+find_cat_port() {
+    local model=$1 setconf=$2 p out
+    shift 2
+    FOUND_PORT=""
+    say "Asking each port for the radio's frequency (the radio must be ON)..."
+    for p in "$@"; do
+        out=$(timeout 8 "$RIGCTL_BIN" -m "$model" -r "$p" ${setconf:+--set-conf="$setconf"} f 2>/dev/null)
+        if [[ $out =~ ^[0-9]+$ ]]; then
+            say "  $(serial_label "$p"): answered ($out Hz)"
+            FOUND_PORT=$p
+            return 0
+        fi
+        say "  $(serial_label "$p"): no answer"
+    done
+    return 1
+}
+
 # card_prop CARD PROP -> property value from 'pactl list cards'
 card_prop() {
     LC_ALL=C pactl list cards 2>/dev/null | awk -v card="$1" -v prop="$2" '
@@ -1143,8 +1180,12 @@ detect_serial() {
     if ((${#new[@]} == 1)); then
         NEW_SERIAL="/dev/serial/by-id/${new[0]}"
     else
-        say "More than one new serial port appeared:"
-        choose "Which one is the CAT (rig control) port?" 1 "${new[@]}"
+        local -a items=()
+        local s
+        for s in "${new[@]}"; do items+=("$(serial_label "/dev/serial/by-id/$s")"); done
+        say "More than one new serial port appeared (one cable can carry several)."
+        say "If you're not sure, pick any: the rig control step asks each one which answers."
+        choose "Which one is the CAT (rig control) port?" 1 "${items[@]}"
         NEW_SERIAL="/dev/serial/by-id/${new[CHOICE-1]}"
     fi
     say "Found serial port: $NEW_SERIAL"
@@ -1220,8 +1261,9 @@ detect_plugin() {
     elif ((${#new_serial[@]} > 1)); then
         local -a items=()
         local s
-        for s in "${new_serial[@]}"; do items+=("$s"); done
-        say "More than one new serial port appeared:"
+        for s in "${new_serial[@]}"; do items+=("$(serial_label "/dev/serial/by-id/$s")"); done
+        say "More than one new serial port appeared (one cable can carry several)."
+        say "If you're not sure, pick any: the rig control step asks each one which answers."
         choose "Which one is the CAT (rig control) port?" 1 "${items[@]}"
         NEW_SERIAL="/dev/serial/by-id/${new_serial[CHOICE-1]}"
     fi
@@ -1841,10 +1883,26 @@ rig_step() {
     RIG_MODEL_NAME=$(sed 's/^ *[0-9]* *//' <<<"${items[CHOICE-1]}")
 
     # Port
+    local -a ports siblings
     if [[ -n $RADIO_SERIAL ]]; then
-        say "The serial port found with the radio's USB cable is:\n  $RADIO_SERIAL"
+        mapfile -t siblings < <(serial_siblings "$RADIO_SERIAL")
+        ((${#siblings[@]})) || siblings=("$RADIO_SERIAL")
+        if ((${#siblings[@]} > 1)); then
+            # several ports on the radio's cable: find the one that answers
+            say "The radio's USB cable has ${#siblings[@]} serial ports."
+            say "Make sure the radio is switched ON."
+            pause "Press Enter to find which one is CAT... "
+            if find_cat_port "$RIG_MODEL" "" "${siblings[@]}"; then
+                RADIO_SERIAL=$FOUND_PORT
+            else
+                say "None answered. Check the radio is on and its USB/COM settings, or pick one below."
+                RADIO_SERIAL=""
+            fi
+        fi
     fi
-    local -a ports
+    if [[ -n $RADIO_SERIAL ]]; then
+        say "The serial port found with the radio's USB cable is:\n  $(serial_label "$RADIO_SERIAL")"
+    fi
     if [[ -n $RADIO_SERIAL ]] && yesno "Use it for rig control?" y; then
         RIG_PORT=$RADIO_SERIAL
     else
@@ -1854,12 +1912,22 @@ rig_step() {
         while [[ -z $RIG_PORT ]]; do
             mapfile -t ports < <(ls -1 /dev/serial/by-id/* 2>/dev/null)
             ((${#ports[@]})) || say "No USB serial (CAT) port is connected at the moment."
+            local -a labels=() p
+            for p in "${ports[@]}"; do labels+=("$(serial_label "$p")"); done
             choose "Which serial port is the radio's CAT port?" 1 \
-                "Detect the radio's CAT cable by plugging it in (recommended)" "${ports[@]}" "Type a port"
+                "Detect the radio's CAT cable by plugging it in (recommended)" \
+                "Ask each port for the radio's frequency (the radio must be on)" \
+                "${labels[@]}" "Type a port"
             if ((CHOICE == 1)); then
                 detect_serial && RIG_PORT=$NEW_SERIAL
-            elif ((CHOICE <= ${#ports[@]} + 1)); then
-                RIG_PORT=${ports[CHOICE-2]}
+            elif ((CHOICE == 2)); then
+                if ((${#ports[@]})) && find_cat_port "$RIG_MODEL" "" "${ports[@]}"; then
+                    RIG_PORT=$FOUND_PORT
+                else
+                    say "No port answered. Check the radio is on, or pick its port from the list."
+                fi
+            elif ((CHOICE <= ${#ports[@]} + 2)); then
+                RIG_PORT=${ports[CHOICE-3]}
             else
                 ask "Port (e.g. /dev/ttyUSB0)" "/dev/ttyUSB0"
                 RIG_PORT=$REPLY
