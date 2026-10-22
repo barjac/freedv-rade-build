@@ -82,14 +82,30 @@ ping -c3 google.com > /dev/null || { echo "ERROR: Failed to find internet connec
 
 # Self-update check
 echo -e "Checking for any updates to this project...\n"
-if LC_ALL=C git pull --ff-only | grep -q -v "Already up to date"; then
+# Restart only if the pull really moved to a newer commit. A pull that fails
+# (e.g. a file here changed by hand) still prints "Updating ..." first, and
+# must not restart, or it would loop for ever.
+head_before=$(git rev-parse HEAD)
+if ! pull_out=$(LC_ALL=C git pull --ff-only 2>&1); then
+    echo "WARNING: couldn't update this project:"
+    echo "$pull_out" | sed 's/^/    /'
+    changed=$(git status --short --untracked-files=no)
+    if [[ -n $changed ]]; then
+        echo "  These files have been changed here:"
+        echo "$changed" | sed 's/^/    /'
+        echo "  To update, keep a copy of those changes if you want them (or put them"
+        echo "  aside with: git -C $RUN_DIR stash), then run this again."
+    fi
+    echo "Carrying on with the current version."
+    echo
+elif [[ $(git rev-parse HEAD) != "$head_before" ]]; then
     echo "Update to freedv-rade-build project found — restarting..."
     echo "--- Restarting after update: $(date) ---"
     flock -u 8 || { echo "Failed to release lock"; exit 1; }
     exec "$RUN_DIR/freedv-rade-update" --restart "$@"
+else
+    echo "Script is up to date"
 fi
-
-echo "Script is up to date"
 
 # The band-pass filter built by freedv-rade-setup (~/.local/bin/Fdv-bpf and
 # Fdv-bpf-1k): the setup only rebuilds it when its filter step is run again,
