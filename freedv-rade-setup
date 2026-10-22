@@ -1795,6 +1795,52 @@ dummy_rig() {
     ok "rigctld with hamlib's Dummy rig, started with FreeDV (localhost:4532)"
 }
 
+# rig_speeds MODEL -> the standard serial speeds hamlib allows for the model,
+# fastest first (hamlib uses the fastest unless serial_speed is set)
+rig_speeds() {
+    local lo hi s
+    read -r lo hi < <("$RIGCTL_BIN" -m "$1" --dump-caps 2>/dev/null \
+        | sed -n 's/^Serial speed: *\([0-9]*\)\.\.\([0-9]*\) .*/\1 \2/p' | head -1)
+    [[ $lo =~ ^[0-9]+$ && $hi =~ ^[0-9]+$ ]] || return 0
+    for s in 115200 57600 38400 19200 9600 4800 2400 1200; do
+        ((s >= lo && s <= hi)) && echo "$s"
+    done
+}
+
+# set_speed SETCONF SPEED -> SETCONF with serial_speed=SPEED in place of any
+# speed it had
+set_speed() {
+    local c
+    c=$(tr ',' '\n' <<<"$1" | grep -v '^serial_speed=' | paste -sd,)
+    echo "serial_speed=$2${c:+,$c}"
+}
+
+# rig_speed_step MODEL -> the speed chosen, or nothing for hamlib's own (the
+# fastest). The radio's CAT/USB menu must be set to the same speed.
+rig_speed_step() {
+    local -a speeds labels
+    local s
+    mapfile -t speeds < <(rig_speeds "$1")
+    ((${#speeds[@]} > 1)) || return 0
+    for s in "${speeds[@]}"; do labels+=("$s baud"); done
+    labels[0]+=" (hamlib's choice for this radio)"
+    say "Serial speed: the radio's CAT (or USB/COM) menu must be set to the same speed."
+    say "If the radio misbehaves at the top speed, choose a slower one here and in the radio."
+    choose "Which speed?" 1 "${labels[@]}"
+    ((CHOICE > 1)) && echo "${speeds[CHOICE-1]}"
+}
+
+# scan_speeds PORT MODEL SETCONF -> the first speed the radio answers at
+scan_speeds() {
+    local s out
+    for s in $(rig_speeds "$2"); do
+        say "  trying $s baud..."
+        out=$(timeout 8 "$RIGCTL_BIN" -m "$2" -r "$1" --set-conf="$(set_speed "$3" "$s")" f 2>/dev/null)
+        [[ $out =~ ^[0-9]+$ ]] && { echo "$s"; return 0; }
+    done
+    return 1
+}
+
 rig_step() {
     heading "Rig control (CAT and PTT)"
     RIG_MODE=none; RIG_MODEL=""; RIG_MODEL_NAME=""; RIG_PORT=""; RIG_SETCONF=""
@@ -1935,21 +1981,34 @@ rig_step() {
         done
     fi
 
+    local speed
+    speed=$(rig_speed_step "$RIG_MODEL")
+
     say "\nMost radios need nothing more. Some older ones need extra hamlib options,"
     say "for example the TS-450S needs:  serial_handshake=None"
     ask "Extra --set-conf options (press Enter for none)" ""
     RIG_SETCONF=$(fix_setconf "$REPLY")
     [[ $RIG_SETCONF != "$REPLY" ]] && say "  (written as hamlib wants it: $RIG_SETCONF)"
+    # a speed typed here wins over the one chosen above
+    [[ -n $speed && $RIG_SETCONF != *serial_speed=* ]] \
+        && RIG_SETCONF=serial_speed=$speed${RIG_SETCONF:+,$RIG_SETCONF}
 
     say ""
     say "Make sure the radio is switched ON."
     pause "Press Enter to test the connection... "
     until rig_test "$RIG_PORT" "$RIG_MODEL" "$RIG_SETCONF"; do
-        confirm "(T)ry again, (K)eep these settings anyway, or (N)o rig control?" "[T/k/n]" "Tt" "Kk" "Nn"
+        confirm "(T)ry again, try each (S)peed, (K)eep these settings anyway, or (N)o rig control?" "[T/s/k/n]" "Tt" "Ss" "Kk" "Nn"
         CHOICE=$(($? + 1))
         case $CHOICE in
-            2) break ;;
-            3) RIG_MODE=none; return ;;
+            2) if speed=$(scan_speeds "$RIG_PORT" "$RIG_MODEL" "$RIG_SETCONF"); then
+                   RIG_SETCONF=$(set_speed "$RIG_SETCONF" "$speed")
+                   say "  The radio answered at $speed baud: set it at that speed."
+               else
+                   say "  No answer at any speed. Check the port, the cable and the radio's"
+                   say "  CAT (or USB/COM) settings."
+               fi ;;
+            3) break ;;
+            4) RIG_MODE=none; return ;;
         esac
     done
 
