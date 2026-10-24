@@ -999,8 +999,14 @@ if (( fastupdt == 1 )) && ! $_profile_loaded && [[ -f "$_profiles_file" ]] && [[
     # prompt, which defaults to it.
     echo -e "\nSaved profiles:"
     for (( _i=${#_profile_lines_display[@]}-1; _i>=0; _i-- )); do
-        printf "  %2d) %s\n" "$((_i+1))" "$(echo "${_profile_lines_display[$_i]%%|*}" | xargs)"
+        IFS='|' read -r _p_desc _p_prbranches _p_patches _p_cname <<< "${_profile_lines_display[$_i]}"
+        printf "  %2d) %s\n" "$((_i+1))" "$(echo "$_p_desc" | xargs)"
+        # what it builds, so two names for the same build show as such
+        _p_what=$(echo "$_p_prbranches" | xargs)
+        for _p in $_p_patches; do _p_what+="  + ${_p##*/}"; done
+        printf "        %s\n" "$_p_what"
     done
+    unset _p_desc _p_prbranches _p_patches _p_cname _p_what _p
     read -r -e -i 1 -p "Profile number to use (Enter for 1, N or blank for none): " _pnum
     if [[ "$_pnum" =~ ^[0-9]+$ ]] && (( _pnum >= 1 && _pnum <= ${#_profile_lines_display[@]} )); then
         IFS='|' read -r _p_desc _p_prbranches _p_patches _p_cname <<< "${_profile_lines_display[$((_pnum-1))]}"
