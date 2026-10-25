@@ -907,7 +907,7 @@ rt_check() {
 }
 
 preflight() {
-    heading "Checking your system"
+    heading "Checking all needed system components are present"
 
     # freedv-rade-build and a FreeDV build
     [[ -d $RUN_DIR/.git ]] || die "freedv-rade-build was not found in $RUN_DIR.\nPlease install FreeDV with freedv-rade-build first."
