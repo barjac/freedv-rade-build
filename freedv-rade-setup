@@ -1861,47 +1861,55 @@ rig_step() {
         return
     fi
 
-    # 1. rigctld on another computer
+    # 1. rigctld on another computer, optionally with this computer's own
+    # CAT cable (and rigctld) for when that one isn't answering
+    local fallback_host=""
     if yesno "Is rigctld already running on ANOTHER computer on your network?" n; then
         ask "Its address (host or host:port)" ""
         local host=$REPLY
         [[ $host == *:* ]] || host="$host:4532"
         rig_test "$host" 2 || yesno "Use it anyway?" n || return
         RIG_MODE=remote; RIG_HOST=$host
-        return
+        say "If the radio's CAT cable is sometimes plugged into this computer instead,"
+        say "FreeDV can start its own rigctld for it whenever $host isn't answering."
+        yesno "Use a CAT cable on this computer when $host isn't answering?" n || return
+        fallback_host=$host
+        say "\nNow the settings for the CAT cable on this computer."
     fi
 
-    # 2. rigctld already running here (e.g. started at boot)
-    local running tport boot_units
-    running=$(ps -o args= -C rigctld 2>/dev/null | head -1)
-    boot_units=$(boot_rigctld_units)
-    if [[ -n $running ]]; then
-        say "rigctld is already running on this computer:\n  $running"
-        tport=$(sed -n 's/.*-t *\([0-9]\+\).*/\1/p; s/.*--port[= ]\([0-9]\+\).*/\1/p' <<<"$running" | head -1)
-        tport=${tport:-4532}
-        if yesno "Use this rigctld for FreeDV?" y; then
-            rig_test "localhost:$tport" 2 || yesno "Use it anyway?" y || return
-            # With its settings known, FreeDV can start its own copy whenever
-            # this one isn't running (e.g. hung with the radio off, or stopped).
-            if adopt_rigctld_args "$running" && [[ $tport == 4532 ]]; then
-                RIG_MODE=ondemand
-                say "FreeDV will use this rigctld when it is running, and otherwise start"
-                say "its own with the same settings ($RIG_MODEL_NAME on $RIG_PORT) while FreeDV runs."
-            else
-                RIG_MODE=existing; RIG_HOST="localhost:$tport"
+    if [[ -z $fallback_host ]]; then
+        # 2. rigctld already running here (e.g. started at boot)
+        local running tport boot_units
+        running=$(ps -o args= -C rigctld 2>/dev/null | head -1)
+        boot_units=$(boot_rigctld_units)
+        if [[ -n $running ]]; then
+            say "rigctld is already running on this computer:\n  $running"
+            tport=$(sed -n 's/.*-t *\([0-9]\+\).*/\1/p; s/.*--port[= ]\([0-9]\+\).*/\1/p' <<<"$running" | head -1)
+            tport=${tport:-4532}
+            if yesno "Use this rigctld for FreeDV?" y; then
+                rig_test "localhost:$tport" 2 || yesno "Use it anyway?" y || return
+                # With its settings known, FreeDV can start its own copy whenever
+                # this one isn't running (e.g. hung with the radio off, or stopped).
+                if adopt_rigctld_args "$running" && [[ $tport == 4532 ]]; then
+                    RIG_MODE=ondemand
+                    say "FreeDV will use this rigctld when it is running, and otherwise start"
+                    say "its own with the same settings ($RIG_MODEL_NAME on $RIG_PORT) while FreeDV runs."
+                else
+                    RIG_MODE=existing; RIG_HOST="localhost:$tport"
+                fi
+                remove_old_rig_service
+                return
             fi
-            remove_old_rig_service
+            say "Only one program can use the radio's serial port, so stop that rigctld"
+            say "first, then run this step again."
             return
         fi
-        say "Only one program can use the radio's serial port, so stop that rigctld"
-        say "first, then run this step again."
-        return
+
+
+        say "FreeDV can control your radio (frequency and PTT) through hamlib's rigctld."
+        say "Answer No if you use VOX or the radio's own PTT."
+        yesno "Set up rigctld for your radio?" y || return
     fi
-
-
-    say "FreeDV can control your radio (frequency and PTT) through hamlib's rigctld."
-    say "Answer No if you use VOX or the radio's own PTT."
-    yesno "Set up rigctld for your radio?" y || return
 
     # Model
     local word
@@ -2008,9 +2016,23 @@ rig_step() {
                    say "  CAT (or USB/COM) settings."
                fi ;;
             3) break ;;
-            4) RIG_MODE=none; return ;;
+            4) if [[ -n $fallback_host ]]; then
+                   # still the other computer's rigctld, just no cable here
+                   RIG_MODEL=""; RIG_MODEL_NAME=""; RIG_PORT=""; RIG_SETCONF=""
+                   RIG_MODE=remote; RIG_HOST=$fallback_host
+               else
+                   RIG_MODE=none
+               fi
+               return ;;
         esac
     done
+
+    if [[ -n $fallback_host ]]; then
+        RIG_MODE=remote; RIG_HOST=$fallback_host; RIG_LISTEN=127.0.0.1
+        say "FreeDV will use rigctld at $RIG_HOST, or start its own for the cable on"
+        say "$(serial_label "$RIG_PORT") when that isn't answering."
+        return
+    fi
 
     if [[ -n $boot_units ]]; then
         # Another service already starts rigctld at boot (e.g. the distro's
@@ -2971,24 +2993,57 @@ restore_vols() {
 }
 
 STARTED_RIGCTLD=0
+start_local_rigctld() {
+    if [[ ! -x $RIGCTLD_BIN ]]; then
+        echo "WARNING: $RIGCTLD_BIN is missing"
+        return
+    fi
+    if pgrep -x rigctld >/dev/null; then
+        echo "rigctld is already running, leaving it as-is"
+        return
+    fi
+    echo "Starting rigctld"
+    "$RIGCTLD_BIN" -m "$RIG_MODEL" -r "$RIG_PORT" -T "$RIG_LISTEN" -t 4532 \
+        ${RIG_SETCONF:+--set-conf="$RIG_SETCONF"} 9>&- &
+    RIGCTLD_PID=$!
+    STARTED_RIGCTLD=1
+    sleep 1
+}
+
+# use_rig_host HOST -> FreeDV's rig control (and so the panadapter's) set to
+# rigctld at HOST, for a radio that can be on another computer's rigctld or
+# on this one's
+use_rig_host() {
+    local tmp
+    [[ -f $CONF ]] || return
+    tmp=$(mktemp "$CONF.XXXXXX") || return
+    awk -v new="$1" -v a="$RIG_HOST" -v b="localhost:4532" '
+        /^\[/ { hamlib = ($0 == "[Hamlib]") }
+        hamlib && /^(SerialPort|PttSerialPort)=/ {
+            k = substr($0, 1, index($0, "=")); v = substr($0, index($0, "=") + 1)
+            if (v == a || v == b) $0 = k new
+        }
+        { print }' "$CONF" > "$tmp" && mv "$tmp" "$CONF" || rm -f "$tmp"
+}
+
 start_rig() {
     case $RIG_MODE in
         ondemand)
-            if [[ ! -x $RIGCTLD_BIN ]]; then
-                echo "WARNING: $RIGCTLD_BIN is missing"
-                return
-            fi
-            if pgrep -x rigctld >/dev/null; then
-                echo "rigctld is already running, leaving it as-is"
-                return
-            fi
-            echo "Starting rigctld"
-            "$RIGCTLD_BIN" -m "$RIG_MODEL" -r "$RIG_PORT" -T "$RIG_LISTEN" -t 4532 \
-                ${RIG_SETCONF:+--set-conf="$RIG_SETCONF"} 9>&- &
-            RIGCTLD_PID=$!
-            STARTED_RIGCTLD=1
-            sleep 1 ;;
-        boot|existing|remote)
+            start_local_rigctld ;;
+        remote)
+            local out=""
+            [[ -x $RIGCTL_BIN ]] && out=$(timeout 5 "$RIGCTL_BIN" -m 2 -r "$RIG_HOST" f 2>/dev/null)
+            if [[ $out =~ ^[0-9]+$ ]]; then
+                [[ -n $RIG_PORT ]] && use_rig_host "$RIG_HOST"
+            elif [[ -n $RIG_PORT && -e $RIG_PORT ]]; then
+                echo "rigctld at $RIG_HOST is not answering: using the CAT cable on this computer"
+                start_local_rigctld
+                use_rig_host localhost:4532
+            else
+                [[ -x $RIGCTL_BIN ]] && echo "WARNING: rigctld at $RIG_HOST is not answering (radio off?)"
+                [[ -n $RIG_PORT ]] && use_rig_host "$RIG_HOST"
+            fi ;;
+        boot|existing)
             if [[ -x $RIGCTL_BIN ]] && ! timeout 5 "$RIGCTL_BIN" -m 2 -r "$RIG_HOST" f &>/dev/null; then
                 echo "WARNING: rigctld at $RIG_HOST is not answering (radio off?)"
             fi ;;
