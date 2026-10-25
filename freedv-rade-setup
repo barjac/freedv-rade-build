@@ -3072,6 +3072,9 @@ fi
 
 start_rig
 run_hook before-freedv
+# A hook can make nodes of its own (e.g. the panadapter's FDV_PAN), after
+# the restore above: give them their saved levels too
+restore_vols
 
 cd "$FREEDV_DIR/freedv-gui/build_linux" || exit 1
 
