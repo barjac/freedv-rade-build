@@ -1843,6 +1843,8 @@ scan_speeds() {
 
 rig_step() {
     heading "Rig control (CAT and PTT)"
+    # the model chosen before (a redo), offered again below
+    local prev_model=$RIG_MODEL prev_model_name=$RIG_MODEL_NAME
     RIG_MODE=none; RIG_MODEL=""; RIG_MODEL_NAME=""; RIG_PORT=""; RIG_SETCONF=""
     RIG_LISTEN=127.0.0.1; RIG_HOST=localhost:4532
 
@@ -1911,30 +1913,36 @@ rig_step() {
         yesno "Set up rigctld for your radio?" y || return
     fi
 
-    # Model
-    local word
+    # Model: the one chosen before, else a search (the radio's own name is
+    # offered as the search)
+    local word guess=$RADIO_LABEL
     local -a matches
-    while true; do
-        ask "Type part of your radio's model name (e.g. 7300, FT-991, TS-590)" ""
-        word=$REPLY
-        [[ -n $word ]] || continue
-        mapfile -t matches < <("$RIGCTL_BIN" -l 2>/dev/null | awk 'NR > 1' | grep -i -- "$word" | tr -s ' ' | sed 's/^ //')
-        if ((${#matches[@]} == 0)); then
-            say "No radio matches '$word'. Try a shorter part of the name."
-        elif ((${#matches[@]} > 30)); then
-            say "${#matches[@]} radios match '$word'. Please type more of the name."
-        else
-            break
-        fi
-    done
-    local -a items=()
-    local m
-    for m in "${matches[@]}"; do
-        items+=("$(awk '{ printf "%-6s", $1; for (i = 2; i <= NF - 3; i++) printf " %s", $i }' <<<"$m")")
-    done
-    choose "Which is your radio?" 1 "${items[@]}"
-    RIG_MODEL=$(awk '{print $1}' <<<"${matches[CHOICE-1]}")
-    RIG_MODEL_NAME=$(sed 's/^ *[0-9]* *//' <<<"${items[CHOICE-1]}")
+    if [[ -n $prev_model ]] && yesno "Radio model: ${prev_model_name:-model $prev_model} (hamlib $prev_model). Keep it?" y; then
+        RIG_MODEL=$prev_model; RIG_MODEL_NAME=$prev_model_name
+    else
+        while true; do
+            ask "Type part of your radio's model name (e.g. 7300, FT-991, TS-590)" "$guess"
+            word=$REPLY
+            [[ -n $word ]] || continue
+            mapfile -t matches < <("$RIGCTL_BIN" -l 2>/dev/null | awk 'NR > 1' | grep -i -- "$word" | tr -s ' ' | sed 's/^ //')
+            if ((${#matches[@]} == 0)); then
+                say "No radio matches '$word'. Try a shorter part of the name."
+                guess=""
+            elif ((${#matches[@]} > 30)); then
+                say "${#matches[@]} radios match '$word'. Please type more of the name."
+            else
+                break
+            fi
+        done
+        local -a items=()
+        local m
+        for m in "${matches[@]}"; do
+            items+=("$(awk '{ printf "%-6s", $1; for (i = 2; i <= NF - 3; i++) printf " %s", $i }' <<<"$m")")
+        done
+        choose "Which is your radio?" 1 "${items[@]}"
+        RIG_MODEL=$(awk '{print $1}' <<<"${matches[CHOICE-1]}")
+        RIG_MODEL_NAME=$(sed 's/^ *[0-9]* *//' <<<"${items[CHOICE-1]}")
+    fi
 
     # Port
     local -a ports siblings
