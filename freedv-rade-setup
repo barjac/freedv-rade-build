@@ -2036,9 +2036,15 @@ rig_step() {
     done
 
     if [[ -n $fallback_host ]]; then
-        RIG_MODE=remote; RIG_HOST=$fallback_host; RIG_LISTEN=127.0.0.1
+        RIG_MODE=remote; RIG_HOST=$fallback_host
         say "FreeDV will use rigctld at $RIG_HOST, or start its own for the cable on"
         say "$(serial_label "$RIG_PORT") when that isn't answering."
+        # e.g. a logging program on the other computer, which then needs this
+        # computer's address while the cable is here
+        if yesno "Allow other computers on your network to use this computer's rigctld then?" n; then
+            RIG_LISTEN=0.0.0.0
+            say "Note: if a firewall is active, TCP port 4532 must be opened for this."
+        fi
         return
     fi
 
