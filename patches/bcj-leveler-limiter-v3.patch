@@ -1,8 +1,8 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 31b01ff1..273fb9bf 100644
+index 3b13d539..0f9c22bd 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -941,6 +941,12 @@ foreach(scenario tuning tuned_away drawing waterfall_colours)
+@@ -946,6 +946,12 @@ foreach(scenario tuning tuned_away drawing waterfall_colours spectrum_averaging
      freedv_set_test_pass_criteria(gui_plots_${scenario})
  endforeach(scenario)
  
@@ -13,7 +13,7 @@ index 31b01ff1..273fb9bf 100644
 +endforeach(scenario)
 +
  # These use Hamlib's rigctld as the radio, and are skipped without it.
- foreach(scenario control frequency_only mode_display analog_sideband editing_frequency unreachable lost)
+ foreach(scenario control frequency_only mode_display analog_sideband editing_frequency unreachable serial_ptt missing_port lost)
      add_test(NAME gui_rig_control_${scenario}
 diff --git a/build_linux.sh b/build_linux.sh
 index 723771bd..5d72259e 100755
@@ -34,6 +34,30 @@ index 723771bd..5d72259e 100755
 -cmake ${CCACHE_ARGS} ${COVERAGE_ARGS} -DPGO_INSTRUMENT=${PGO_INSTRUMENT} -DPGO_USE_PROFILE=${PGO_USE_PROFILE} -DENABLE_LTO=${ENABLE_LTO} -DSTATIC_LIBGCC=${STATIC_LIBGCC} -DENABLE_UBSAN=${WITH_UBSAN} -DENABLE_TSAN=${WITH_TSAN} -DENABLE_RTSAN=${WITH_RTSAN} -DENABLE_ASAN=${WITH_ASAN} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DUSE_NATIVE_AUDIO=$USE_NATIVE_AUDIO -DUNITTEST=$UT_ENABLE ..
 +cmake ${CCACHE_ARGS} ${COVERAGE_ARGS} -DPGO_INSTRUMENT=${PGO_INSTRUMENT} -DPGO_USE_PROFILE=${PGO_USE_PROFILE} -DENABLE_LTO=${ENABLE_LTO} -DSTATIC_LIBGCC=${STATIC_LIBGCC} -DENABLE_UBSAN=${WITH_UBSAN} -DENABLE_TSAN=${WITH_TSAN} -DENABLE_RTSAN=${WITH_RTSAN} -DENABLE_ASAN=${WITH_ASAN} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DUSE_NATIVE_AUDIO=$USE_NATIVE_AUDIO -DUNITTEST=$UT_ENABLE -DENABLE_AUDIO_DIAG_LOGGING=${ENABLE_AUDIO_DIAG_LOGGING} ..
  make -j$(nproc)
+diff --git a/build_osx.sh b/build_osx.sh
+index 0f7b6f12..7ce4a8ce 100755
+--- a/build_osx.sh
++++ b/build_osx.sh
+@@ -19,6 +19,7 @@ export ENABLE_LTO=${ENABLE_LTO:-0}
+ export PGO_INSTRUMENT=${PGO_INSTRUMENT:-0}
+ export PGO_USE_PROFILE=${PGO_USE_PROFILE:-}
+ export USE_CCACHE=${USE_CCACHE:-0}
++export ENABLE_AUDIO_DIAG_LOGGING=${ENABLE_AUDIO_DIAG_LOGGING:-0}
+ 
+ # Prerequisite: build dylibbundler
+ if [ ! -d macdylibbundler ]; then
+@@ -50,9 +51,9 @@ else
+ fi
+ 
+ if [ $BUILD_DEPS == 1 ]; then 
+-    cmake ${CCACHE_ARGS} -DCMAKE_AR=/usr/bin/ar -DCMAKE_RANLIB=/usr/bin/ranlib -DPGO_INSTRUMENT=${PGO_INSTRUMENT} -DPGO_USE_PROFILE=${PGO_USE_PROFILE} -DENABLE_LTO=${ENABLE_LTO} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DENABLE_UBSAN=${WITH_UBSAN} -DENABLE_TSAN=${WITH_TSAN} -DENABLE_RTSAN=${WITH_RTSAN} -DENABLE_ASAN=${WITH_ASAN} -DUSE_NATIVE_AUDIO=$USE_NATIVE_AUDIO -DBUILD_OSX_UNIVERSAL=${UNIV_BUILD} -DUNITTEST=$UT_ENABLE -DBOOTSTRAP_WXWIDGETS=1 -DUSE_STATIC_SPEEXDSP=1 -DUSE_STATIC_PORTAUDIO=1 -DUSE_STATIC_SAMPLERATE=1 -DUSE_STATIC_SNDFILE=1 -DUSE_STATIC_LIBRESSL=1 -DMACOS_CODESIGN_IDENTITY=${CODESIGN_IDENTITY} ${CODESIGN_KEYCHAIN_PROFILE_ARG} ..
++    cmake ${CCACHE_ARGS} -DCMAKE_AR=/usr/bin/ar -DCMAKE_RANLIB=/usr/bin/ranlib -DPGO_INSTRUMENT=${PGO_INSTRUMENT} -DPGO_USE_PROFILE=${PGO_USE_PROFILE} -DENABLE_LTO=${ENABLE_LTO} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DENABLE_UBSAN=${WITH_UBSAN} -DENABLE_TSAN=${WITH_TSAN} -DENABLE_RTSAN=${WITH_RTSAN} -DENABLE_ASAN=${WITH_ASAN} -DUSE_NATIVE_AUDIO=$USE_NATIVE_AUDIO -DBUILD_OSX_UNIVERSAL=${UNIV_BUILD} -DUNITTEST=$UT_ENABLE -DENABLE_AUDIO_DIAG_LOGGING=${ENABLE_AUDIO_DIAG_LOGGING} -DBOOTSTRAP_WXWIDGETS=1 -DUSE_STATIC_SPEEXDSP=1 -DUSE_STATIC_PORTAUDIO=1 -DUSE_STATIC_SAMPLERATE=1 -DUSE_STATIC_SNDFILE=1 -DUSE_STATIC_LIBRESSL=1 -DMACOS_CODESIGN_IDENTITY=${CODESIGN_IDENTITY} ${CODESIGN_KEYCHAIN_PROFILE_ARG} ..
+ else
+-    cmake ${CCACHE_ARGS} -DCMAKE_AR=/usr/bin/ar -DCMAKE_RANLIB=/usr/bin/ranlib -DPGO_INSTRUMENT=${PGO_INSTRUMENT} -DPGO_USE_PROFILE=${PGO_USE_PROFILE} -DENABLE_LTO=${ENABLE_LTO} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DENABLE_UBSAN=${WITH_UBSAN} -DENABLE_TSAN=${WITH_TSAN} -DENABLE_RTSAN=${WITH_RTSAN} -DENABLE_ASAN=${WITH_ASAN} -DUSE_NATIVE_AUDIO=$USE_NATIVE_AUDIO -DBUILD_OSX_UNIVERSAL=${UNIV_BUILD} -DUNITTEST=$UT_ENABLE -DMACOS_CODESIGN_IDENTITY=${CODESIGN_IDENTITY} ${CODESIGN_KEYCHAIN_PROFILE_ARG} ..
++    cmake ${CCACHE_ARGS} -DCMAKE_AR=/usr/bin/ar -DCMAKE_RANLIB=/usr/bin/ranlib -DPGO_INSTRUMENT=${PGO_INSTRUMENT} -DPGO_USE_PROFILE=${PGO_USE_PROFILE} -DENABLE_LTO=${ENABLE_LTO} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DENABLE_UBSAN=${WITH_UBSAN} -DENABLE_TSAN=${WITH_TSAN} -DENABLE_RTSAN=${WITH_RTSAN} -DENABLE_ASAN=${WITH_ASAN} -DUSE_NATIVE_AUDIO=$USE_NATIVE_AUDIO -DBUILD_OSX_UNIVERSAL=${UNIV_BUILD} -DUNITTEST=$UT_ENABLE -DENABLE_AUDIO_DIAG_LOGGING=${ENABLE_AUDIO_DIAG_LOGGING} -DMACOS_CODESIGN_IDENTITY=${CODESIGN_IDENTITY} ${CODESIGN_KEYCHAIN_PROFILE_ARG} ..
+ fi
+ 
+ make -j$(sysctl -n hw.logicalcpu)
 diff --git a/src/config/FilterConfiguration.cpp b/src/config/FilterConfiguration.cpp
 index b3df987c..4680adfb 100644
 --- a/src/config/FilterConfiguration.cpp
@@ -485,7 +509,7 @@ index 8a7bed01..2f707e6e 100644
      bSizer30->Add(sbSizer_rnnoise, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 5);   
  
 diff --git a/src/main.cpp b/src/main.cpp
-index 345885f6..9a80c7d7 100644
+index 359bbe1e..99969488 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -129,6 +129,7 @@ float g_snr;
@@ -513,7 +537,7 @@ index 345885f6..9a80c7d7 100644
  // Soundcard config
  std::atomic<int>         g_nSoundCards;
  
-@@ -1437,6 +1444,11 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, wxT("FreeDV
+@@ -1471,6 +1478,11 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, wxT("FreeDV
      m_panelSNR = new PlotScalar(m_auiNbookCtrl, SNR_PLOT_SECONDS, DT, NO_SNR_VAL, MAX_SNR_VAL, SNR_PLOT_SECONDS / SNR_PLOT_SECOND_SEGMENTS, 5, "%.0f", 0, "", true, NO_SNR_VAL, false);
      m_auiNbookCtrl->AddPage(m_panelSNR, _("SNR"), false, wxNullBitmap);
  
@@ -525,7 +549,7 @@ index 345885f6..9a80c7d7 100644
      // Names for automated GUI testing.
      m_panelWaterfall->SetName("main.plotWaterfall");
      m_panelSpectrum->SetName("main.plotSpectrum");
-@@ -1444,6 +1456,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, wxT("FreeDV
+@@ -1478,6 +1490,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, wxT("FreeDV
      m_panelSpeechIn->SetName("main.plotFromMic");
      m_panelSpeechOut->SetName("main.plotFromDecoder");
      m_panelSNR->SetName("main.plotSNR");
@@ -533,7 +557,7 @@ index 345885f6..9a80c7d7 100644
  
      m_togBtnOnOff->Connect(wxEVT_UPDATE_UI, wxUpdateUIEventHandler(MainFrame::OnTogBtnOnOffUI), NULL, this);
      m_togBtnAnalog->Connect(wxEVT_UPDATE_UI, wxUpdateUIEventHandler(MainFrame::OnTogBtnAnalogClickUI), NULL, this);
-@@ -1458,6 +1471,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, wxT("FreeDV
+@@ -1492,6 +1505,7 @@ MainFrame::MainFrame(wxWindow *parent) : TopFrame(parent, wxID_ANY, wxT("FreeDV
      m_plotWaterfallTimer.SetOwner(this, ID_TIMER_WATERFALL);
      m_plotSpectrumTimer.SetOwner(this, ID_TIMER_SPECTRUM);
      m_plotSpeechInTimer.SetOwner(this, ID_TIMER_SPEECH_IN);
@@ -541,7 +565,7 @@ index 345885f6..9a80c7d7 100644
      m_plotSpeechOutTimer.SetOwner(this, ID_TIMER_SPEECH_OUT);
      m_plotDemodInTimer.SetOwner(this, ID_TIMER_DEMOD_IN);
      m_plotSNRTimer.SetOwner(this, ID_TIMER_SNR);
-@@ -1865,6 +1879,7 @@ MainFrame::~MainFrame()
+@@ -1919,6 +1933,7 @@ MainFrame::~MainFrame()
          m_plotWaterfallTimer.Stop();
          m_plotSpectrumTimer.Stop();
          m_plotSpeechInTimer.Stop();
@@ -549,7 +573,7 @@ index 345885f6..9a80c7d7 100644
          m_plotSpeechOutTimer.Stop();
          m_plotDemodInTimer.Stop();
          m_plotSNRTimer.Stop();
-@@ -1924,7 +1939,7 @@ int MainFrame::getIdealStationsHeardColumnLength_(int col)
+@@ -1978,7 +1993,7 @@ int MainFrame::getIdealStationsHeardColumnLength_(int col)
  //----------------------------------------------------------------
  void MainFrame::OnTimer(wxTimerEvent &evt)
  {
@@ -558,7 +582,7 @@ index 345885f6..9a80c7d7 100644
      short speechInPlotSamplesAfterAGC[WAVEFORM_PLOT_BUF];
      short speechOutPlotSamples[WAVEFORM_PLOT_BUF];
      short demodInPlotSamples[WAVEFORM_PLOT_BUF];
-@@ -1940,7 +1955,8 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -1994,7 +2009,8 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
      }
      
      // Most plots don't need TX/sync state.
@@ -568,7 +592,7 @@ index 345885f6..9a80c7d7 100644
      {
          txState = g_tx.load(std::memory_order_relaxed);
          halfDuplexState = g_half_duplex.load(std::memory_order_relaxed);
-@@ -1995,11 +2011,6 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2049,11 +2065,6 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
            }
            m_panelSpeechIn->add_new_short_samples(speechInPlotSamplesAfterAGC, WAVEFORM_PLOT_BUF, 32767);
            m_panelSpeechIn->refreshData();
@@ -580,7 +604,7 @@ index 345885f6..9a80c7d7 100644
        }
        else if (timerId == ID_TIMER_SPEECH_OUT)
        {
-@@ -2016,6 +2027,11 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2070,6 +2081,11 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
            m_panelDemodIn->add_new_short_samples(demodInPlotSamples, WAVEFORM_PLOT_BUF, 32767);
            m_panelDemodIn->refreshData();
        }
@@ -592,7 +616,7 @@ index 345885f6..9a80c7d7 100644
        else if (timerId == ID_TIMER_SNR)
        {
            // Only the SNR plot here: everything below goes by time passing
-@@ -2369,59 +2385,80 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
+@@ -2423,59 +2439,80 @@ void MainFrame::OnTimer(wxTimerEvent &evt)
          VoiceKeyerProcessEvent(VK_DT);
      }
      
@@ -711,7 +735,7 @@ index 345885f6..9a80c7d7 100644
      }
  }
  #endif
-@@ -2550,7 +2587,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2604,7 +2641,7 @@ void MainFrame::performFreeDVOn_()
          // Reset plot FIFOs
          g_plotDemodInFifo.reset();
          g_plotSpeechOutFifo.reset();
@@ -720,7 +744,7 @@ index 345885f6..9a80c7d7 100644
          g_plotSpeechInFifoAfterAGC.reset();
  
          m_txtCtrlCallSign->SetValue(wxT(""));
-@@ -2628,9 +2665,10 @@ void MainFrame::performFreeDVOn_()
+@@ -2682,9 +2719,10 @@ void MainFrame::performFreeDVOn_()
      memset(m_callsign, 0, sizeof(m_callsign));
  
      m_maxLevel = 0;
@@ -732,7 +756,7 @@ index 345885f6..9a80c7d7 100644
          
          if (wxGetApp().logger != nullptr)
          {
-@@ -2802,6 +2840,7 @@ void MainFrame::performFreeDVOn_()
+@@ -2856,6 +2894,7 @@ void MainFrame::performFreeDVOn_()
                      m_plotWaterfallTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
                      m_plotSpectrumTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
                      m_plotSpeechInTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
@@ -740,7 +764,7 @@ index 345885f6..9a80c7d7 100644
                      m_plotSpeechOutTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
                      m_plotDemodInTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
                      m_plotSNRTimer.Start(_REFRESH_TIMER_PERIOD, wxTIMER_CONTINUOUS);
-@@ -2853,6 +2892,7 @@ void MainFrame::performFreeDVOff_()
+@@ -2907,6 +2946,7 @@ void MainFrame::performFreeDVOff_()
          m_plotWaterfallTimer.Stop();
          m_plotSpectrumTimer.Stop();
          m_plotSpeechInTimer.Stop();
@@ -748,7 +772,7 @@ index 345885f6..9a80c7d7 100644
          m_plotSpeechOutTimer.Stop();
          m_plotDemodInTimer.Stop();
          m_plotSNRTimer.Stop();
-@@ -3095,6 +3135,12 @@ void MainFrame::stopRxStream()
+@@ -3149,6 +3189,12 @@ void MainFrame::stopRxStream()
              }
              
              m_txThread = nullptr;
@@ -761,7 +785,7 @@ index 345885f6..9a80c7d7 100644
          }
  
          if (m_rxThread)
-@@ -3174,6 +3220,29 @@ static TxRxThreadUiHooks MakeTxRxUiHooks()
+@@ -3228,6 +3274,29 @@ static TxRxThreadUiHooks MakeTxRxUiHooks()
          FREEDV_END_VERIFIED_SAFE
          return value;
      };
@@ -791,7 +815,7 @@ index 345885f6..9a80c7d7 100644
      return hooks;
  }
  
-@@ -4036,6 +4105,9 @@ void MainFrame::OnTxInAudioData_(IAudioDevice& dev, void* data, size_t size, voi
+@@ -4090,6 +4159,9 @@ void MainFrame::OnTxInAudioData_(IAudioDevice& dev, void* data, size_t size, voi
          {
              g_infifo2_full.fetch_add(1, std::memory_order_relaxed);
          }
@@ -802,7 +826,7 @@ index 345885f6..9a80c7d7 100644
  }
  
 diff --git a/src/main.h b/src/main.h
-index 3bcfc0b1..9d1943b0 100644
+index c83b041f..c0b11c4d 100644
 --- a/src/main.h
 +++ b/src/main.h
 @@ -116,6 +116,7 @@ enum {
@@ -840,10 +864,10 @@ index 3bcfc0b1..9d1943b0 100644
          // flags to indicate when new EQ filters need to be designed
  
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index 1d6b82e6..40427bc3 100644
+index 72479f24..266c8bf4 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
-@@ -1572,7 +1572,9 @@ void MainFrame::togglePTT(void) {
+@@ -1578,7 +1578,9 @@ void MainFrame::togglePTT(void) {
      // reset level gauge
  
      m_maxLevel = 0;
@@ -856,15 +880,16 @@ index 1d6b82e6..40427bc3 100644
      for (auto& obj : wxGetApp().m_reporters)
 diff --git a/src/pipeline/FifoWriteStep.h b/src/pipeline/FifoWriteStep.h
 new file mode 100644
-index 00000000..c30b01eb
+index 00000000..00e3a5cc
 --- /dev/null
 +++ b/src/pipeline/FifoWriteStep.h
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,72 @@
 +//=========================================================================
 +// Name:            FifoWriteStep.h
 +// Purpose:         Copies the audio passing through into a FIFO, for a
-+//                  display to read (e.g. the TX level meter). Use it inside
-+//                  a TapStep so the copy is made off the audio path.
++//                  display to read (e.g. the TX level meter), and passes it
++//                  on unchanged. GenericFIFO is real-time safe, so it can
++//                  sit directly in the audio path.
 +//
 +// Authors:         Claude Code (for Barry Jackson, G4MKT)
 +// License:
@@ -917,12 +942,12 @@ index 00000000..c30b01eb
 +    virtual int getInputSampleRate() const FREEDV_NONBLOCKING override { return sampleRate_; }
 +    virtual int getOutputSampleRate() const FREEDV_NONBLOCKING override { return sampleRate_; }
 +
-+    // Samples that don't fit (the display isn't reading) are dropped.
++    // Samples that don't fit (the display isn't reading) aren't copied.
 +    virtual short* execute(short* inputSamples, int numInputSamples, int* numOutputSamples) FREEDV_NONBLOCKING override
 +    {
 +        fifo_->write(inputSamples, numInputSamples);
-+        *numOutputSamples = 0;
-+        return nullptr;
++        *numOutputSamples = numInputSamples;
++        return inputSamples;
 +    }
 +
 +private:
@@ -932,7 +957,7 @@ index 00000000..c30b01eb
 +
 +#endif // AUDIO_PIPELINE__FIFO_WRITE_STEP_H
 diff --git a/src/pipeline/TxRxThread.cpp b/src/pipeline/TxRxThread.cpp
-index 63937f5e..9f75458b 100644
+index 0dbcee38..639a516e 100644
 --- a/src/pipeline/TxRxThread.cpp
 +++ b/src/pipeline/TxRxThread.cpp
 @@ -39,10 +39,6 @@ using namespace std::chrono_literals;
@@ -994,7 +1019,7 @@ index 63937f5e..9f75458b 100644
 +
 +        // While a file plays in place of the mic (e.g. the voice keyer), the
 +        // TX level meter shows the file's own level, before any processing.
-+        auto levelMeterVkTap = new TapStep(inputSampleRate_, new FifoWriteStep(inputSampleRate_, &g_levelMeterTxVkFifo));
++        auto levelMeterVkTap = new FifoWriteStep(inputSampleRate_, &g_levelMeterTxVkFifo);
 +        eitherOrPlayMicIn->appendPipelineStep(levelMeterVkTap);
          
          auto eitherOrPlayStep = new EitherOrStep(
@@ -1052,7 +1077,7 @@ index 63937f5e..9f75458b 100644
  
          // Resample for plot step (after AGC)
          auto resampleForPlotStepAfterAGC = new ResampleForPlotStep(&g_plotSpeechInFifoAfterAGC);
-@@ -635,6 +631,19 @@ void* TxRxThread::Entry() noexcept
+@@ -643,6 +639,19 @@ void* TxRxThread::Entry() noexcept
      waitStats_.report(m_tx, "wait");
  #endif // defined(ENABLE_PROCESSING_STATS)
  
@@ -1072,7 +1097,7 @@ index 63937f5e..9f75458b 100644
      // Force pipeline to delete itself when we're done with the thread.
      pipeline_ = nullptr;
      
-@@ -937,6 +946,12 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
+@@ -945,6 +954,12 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
              }
  
              auto outputSamples = pipeline_->execute(inputPtr, nsam_in_48, &nout);
@@ -1132,7 +1157,7 @@ index bf30de8f..8f56ded5 100644
      std::unique_ptr<short[]> pendingEooSamples_;
      int pendingEooCount_;
 diff --git a/src/pipeline/test/TxRxThreadTest.cpp b/src/pipeline/test/TxRxThreadTest.cpp
-index f52ae0b0..69d52eaa 100644
+index a9394a4e..6f59d58d 100644
 --- a/src/pipeline/test/TxRxThreadTest.cpp
 +++ b/src/pipeline/test/TxRxThreadTest.cpp
 @@ -82,6 +82,7 @@ std::atomic<int>    g_outfifo1_empty(0);
@@ -1181,7 +1206,7 @@ index f52ae0b0..69d52eaa 100644
      }
      return samples.empty() ? 0.0 : crossings / 2.0 * sampleRate / samples.size();
  }
-@@ -1819,9 +1835,10 @@ public:
+@@ -1874,9 +1890,10 @@ public:
  
      static bool automaticGainControlRaisesQuietMicrophone()
      {
@@ -1195,7 +1220,7 @@ index f52ae0b0..69d52eaa 100644
  
          resetGlobals();
          g_tx = true;
-@@ -1835,7 +1852,7 @@ public:
+@@ -1890,7 +1907,7 @@ public:
          double with = rms(lastSecondSentToRadio(quietSpeech));
  
          bool result = true;
@@ -1204,7 +1229,7 @@ index f52ae0b0..69d52eaa 100644
          if (with < without * 1.15)
          {
              std::cout << "[level sent with gain control was " << with << ", expected well above " << without << "] ";
-@@ -2660,7 +2677,8 @@ public:
+@@ -2715,7 +2732,8 @@ public:
          // nothing but the tone's own crossing of zero for its first
          // second's worth, no filled-in silence anywhere in it.
          int run = 0;
@@ -1214,7 +1239,7 @@ index f52ae0b0..69d52eaa 100644
          {
              run = (sent[i] == 0) ? run + 1 : 0;
              if (run == 2)
-@@ -2722,7 +2740,8 @@ public:
+@@ -2777,7 +2795,8 @@ public:
          size_t first = 0, last = sent.size();
          while (first < sent.size() && sent[first] == 0) first++;
          while (last > first && sent[last - 1] == 0) last--;
@@ -1634,7 +1659,7 @@ index 00000000..4f723118
 +if __name__ == "__main__":
 +    main()
 diff --git a/test/gui/test_main_window.py b/test/gui/test_main_window.py
-index 9a5966ea..cd79d41b 100644
+index 28bf9a45..09351288 100644
 --- a/test/gui/test_main_window.py
 +++ b/test/gui/test_main_window.py
 @@ -42,7 +42,7 @@ SPEAKER = device("FreeDVGuiTest_Computer_To_Speaker")
@@ -1647,7 +1672,7 @@ index 9a5966ea..cd79d41b 100644
  # File > Exit: on macOS, Quit FreeDV, in the menu named after it.
  EXIT_MENU_ITEM = "FreeDV/Quit FreeDV" if sys.platform == "darwin" else "File/Exit"
 diff --git a/test/gui/test_plots.py b/test/gui/test_plots.py
-index a04b690f..7f492583 100644
+index d3513832..08b31a96 100644
 --- a/test/gui/test_plots.py
 +++ b/test/gui/test_plots.py
 @@ -37,6 +37,7 @@ PLOTS = {
