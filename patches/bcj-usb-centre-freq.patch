@@ -532,10 +532,18 @@ index c83b041f..5b997636 100644
          void initializeFreeDVReporter_();
          void updateVoiceKeyerButtonLabel_();
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index 72479f24..a2ae8c6c 100644
+index 72479f24..4bd77968 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
-@@ -245,14 +245,13 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
+@@ -15,6 +15,7 @@
+ 
+ #include "git_version.h"
+ #include "build_date.h"
++#include <wx/tooltip.h>
+ #include "gui/dialogs/dlg_filter.h"
+ #include "gui/dialogs/dlg_options.h"
+ #include "gui/dialogs/dlg_setup_wizard.h"
+@@ -245,14 +246,13 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
          // Adjust frequency labels on main window
          wxListItem colInfo;
          m_lastReportedCallsignListView->GetColumn(1, colInfo);
@@ -551,7 +559,7 @@ index 72479f24..a2ae8c6c 100644
              colInfo.SetText(_("MHz"));
          }
          m_lastReportedCallsignListView->SetColumn(1, colInfo);
-@@ -422,6 +421,14 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+@@ -422,6 +422,14 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
  
          auto newFreq = wholeFreq * 100;
  
@@ -566,7 +574,7 @@ index 72479f24..a2ae8c6c 100644
          // Widest 60 meter allocation is 5.250-5.450 MHz per https://en.wikipedia.org/wiki/60-meter_band.
          bool is60MeterBand = newFreq >= 5250000 && newFreq <= 5450000;
  
-@@ -454,24 +461,24 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+@@ -454,24 +462,24 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
              !wxGetApp().appConfiguration.reportingConfiguration.manualFrequencyReporting))
          {
              // wxString::Format() doesn't respect locale but wxNumberFormatter should. Use the latter instead.
@@ -598,7 +606,7 @@ index 72479f24..a2ae8c6c 100644
              {
                  for (auto& ptr : wxGetApp().m_reporters)
                  {
-@@ -480,6 +487,7 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+@@ -480,6 +488,7 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
              }
              
              m_cboReportFrequency->SetValue(freqString);
@@ -606,7 +614,7 @@ index 72479f24..a2ae8c6c 100644
          }
          m_txtModeStatus->Refresh();
  
-@@ -507,11 +515,15 @@ void MainFrame::onRadioConnected_(IRigController*)
+@@ -507,11 +516,15 @@ void MainFrame::onRadioConnected_(IRigController*)
          firstFreqUpdateOnConnect_ = true;
  
          // Set frequency/mode to the one pre-selected by the user before start.
@@ -625,7 +633,7 @@ index 72479f24..a2ae8c6c 100644
          }
      }
  }
-@@ -1739,7 +1751,7 @@ HamlibRigController::Mode MainFrame::getCurrentMode_()
+@@ -1739,7 +1752,7 @@ HamlibRigController::Mode MainFrame::getCurrentMode_()
  //-------------------------------------------------------------------------
  void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
  {
@@ -634,7 +642,7 @@ index 72479f24..a2ae8c6c 100644
  
      if (g_analog.load(std::memory_order_relaxed) == 0) {
          g_analog.store(1, std::memory_order_relaxed);
-@@ -1756,6 +1768,8 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+@@ -1756,6 +1769,8 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
          m_togBtnAnalog->SetLabel(_("Switch to A&nalog"));
      }
  
@@ -643,7 +651,7 @@ index 72479f24..a2ae8c6c 100644
      // Report analog change to registered reporters
      for (auto& obj : wxGetApp().m_reporters)
      {
-@@ -1765,32 +1779,62 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+@@ -1765,32 +1780,62 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
          }
      }
      
@@ -725,7 +733,7 @@ index 72479f24..a2ae8c6c 100644
      }
  
      g_State.store(0, std::memory_order_release);
-@@ -2044,15 +2088,21 @@ void MainFrame::OnChangeReportFrequency( wxCommandEvent& )
+@@ -2044,15 +2089,21 @@ void MainFrame::OnChangeReportFrequency( wxCommandEvent& )
              wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0 && 
              (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges || wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqChangesOnly))
          {
@@ -750,7 +758,7 @@ index 72479f24..a2ae8c6c 100644
      if (m_reporterDialog != nullptr)
      {
          m_reporterDialog->refreshQSYButtonState();
-@@ -2111,6 +2161,52 @@ void MainFrame::OnCenterRx(wxCommandEvent&)
+@@ -2111,6 +2162,55 @@ void MainFrame::OnCenterRx(wxCommandEvent&)
      clickTune(FDMDV_FCENTRE);
  }
  
@@ -797,13 +805,16 @@ index 72479f24..a2ae8c6c 100644
 +        dialFreqString = wxNumberFormatter::ToString(dialFreq / 1000.0 / 1000.0, 4) + _("MHz");
 +    }
 +
-+    m_cboReportFrequency->SetToolTip(wxString::Format(_("%s SSB dial"), dialFreqString));
++    // A new wxToolTip each time: wxComboCtrl only passes its tooltip on to
++    // the text box and button inside it when the tooltip object is set, so
++    // changing the text of the existing one would leave theirs out of date.
++    m_cboReportFrequency->SetToolTip(new wxToolTip(wxString::Format(_("%s SSB dial"), dialFreqString)));
 +}
 +
  // The frequency typed or shown in the box as the predefined list shows it
  // (rounded to 100 Hz, as it's used), or empty if it isn't a frequency.
  wxString MainFrame::reportFrequencyListString_(wxString const& text)
-@@ -2138,14 +2234,14 @@ void MainFrame::addReportFrequencyToList_(wxString const& freq)
+@@ -2138,14 +2238,14 @@ void MainFrame::addReportFrequencyToList_(wxString const& freq)
      double value = 0;
      wxNumberFormatter::FromString(freq, &value);
  
@@ -820,7 +831,7 @@ index 72479f24..a2ae8c6c 100644
      wxGetApp().appConfiguration.save(pConfig);
  
      m_reportFrequencyList->Insert(freq, index);
-@@ -2161,7 +2257,7 @@ void MainFrame::OnReportFrequencyContextMenu(wxContextMenuEvent&)
+@@ -2161,7 +2261,7 @@ void MainFrame::OnReportFrequencyContextMenu(wxContextMenuEvent&)
      }
  
      wxString freq = reportFrequencyListString_(m_cboReportFrequency->GetValue());
@@ -829,7 +840,7 @@ index 72479f24..a2ae8c6c 100644
      bool listed = std::find(list.begin(), list.end(), freq) != list.end();
      wxString units = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz ? _("kHz") : _("MHz");
  
-@@ -2232,12 +2328,12 @@ void MainFrame::OnReportFrequencyItemDelete(int item)
+@@ -2232,12 +2332,12 @@ void MainFrame::OnReportFrequencyItemDelete(int item)
      }
  
      wxString freq = m_reportFrequencyList->GetString(item);
@@ -844,7 +855,7 @@ index 72479f24..a2ae8c6c 100644
          wxGetApp().appConfiguration.save(pConfig);
      }
  
-@@ -2265,23 +2361,16 @@ void MainFrame::updateReportingFreqList_()
+@@ -2265,23 +2365,16 @@ void MainFrame::updateReportingFreqList_()
      }
      m_reportFrequencyList->Clear();
  
