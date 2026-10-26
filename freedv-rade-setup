@@ -846,7 +846,7 @@ monitor.alsa.rules = [
     }
   }
   {
-    matches = [ { node.name = "~alsa_input.$stem.*" } ]
+    matches = [ { node.name = "~alsa_input[.]$stem[.].*" } ]
     actions = {
       update-props = {
         node.name = "$in_node"
@@ -855,7 +855,7 @@ monitor.alsa.rules = [
     }
   }
   {
-    matches = [ { node.name = "~alsa_output.$stem.*" } ]
+    matches = [ { node.name = "~alsa_output[.]$stem[.].*" } ]
     actions = {
       update-props = {
         node.name = "$out_node"
@@ -867,6 +867,26 @@ monitor.alsa.rules = [
 EOF
     fi
     say "Wrote $f"
+}
+
+# Rules written before 2026-10-26 matched their nodes with "~alsa_input.frs-NAME.*",
+# a regular expression in which '.' is any character: the "headset" rule's
+# pattern also matched headset2's nodes, so the second socket's card kept the
+# first one's names. Make the dots literal in any such rule (needs WirePlumber
+# restarted).
+fix_rule_patterns() {
+    local f changed=0
+    for f in "$WP_CONF_DIR"/60-freedv-rade-setup-*.conf; do
+        [[ -f $f ]] || continue
+        grep -qE '"~alsa_(input|output)\.frs-[A-Za-z0-9_-]+\.\*"' "$f" || continue
+        sed -i -E 's/"~alsa_(input|output)\.(frs-[A-Za-z0-9_-]+)\.\*"/"~alsa_\1[.]\2[.].*"/g' "$f"
+        log "Made the node patterns in $f exact"
+        changed=1
+    done
+    if ((changed)); then
+        ok "Sound card name rules updated (a headset2 card could take the headset names)"
+        restart_wireplumber
+    fi
 }
 
 ##################### system checks #####################
@@ -3420,6 +3440,7 @@ screen "(Full details of each step go to $LOGFILE)"
 
 RT_REBOOT=${FRS_RT_REBOOT:-0}
 preflight
+fix_rule_patterns
 ((CHECK_ONLY)) && { say "System checks finished."; rt_reboot_note; exit 0; }
 
 mkdir -p "$SETUP_ROOT"
