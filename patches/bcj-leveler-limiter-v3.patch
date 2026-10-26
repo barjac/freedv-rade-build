@@ -15,6 +15,18 @@ index 3b13d539..0f9c22bd 100644
  # These use Hamlib's rigctld as the radio, and are skipped without it.
  foreach(scenario control frequency_only mode_display analog_sideband editing_frequency unreachable serial_ptt missing_port lost)
      add_test(NAME gui_rig_control_${scenario}
+diff --git a/USER_MANUAL.md b/USER_MANUAL.md
+index 8d8cd966..78b34306 100644
+--- a/USER_MANUAL.md
++++ b/USER_MANUAL.md
+@@ -876,6 +876,7 @@ LDPC | Low Density Parity Check Codes - a family of powerful FEC codes
+     * Add infrastructure for translating FreeDV into other languages. (PR #1526)
+     * Hamlib: only allow selecting a PTT serial device when using RTS or DTR for PTT. (PR #1544)
+     * Improved ease of use when adjusting predefined frequencies. (PR #1570, #1581) - thanks @barjac!
++    * Improved Level metering and AGC for easier input level adjustment. (PR #1532) - thanks @barjac!
+ 2. Bugfixes:
+     * Fix silence being mixed into the first half second of each transmission, and holes in the signal at its start. (PR #1562)
+ 3. Build system:
 diff --git a/build_linux.sh b/build_linux.sh
 index 723771bd..5d72259e 100755
 --- a/build_linux.sh
@@ -453,7 +465,7 @@ index 00000000..9ee9e916
 +
 +#endif // __FREEDV_LEVEL_METER_LED__
 diff --git a/src/gui/controls/plot_scalar.cpp b/src/gui/controls/plot_scalar.cpp
-index fdf26b5e..6261eaae 100644
+index fdf26b5e..9b17039e 100644
 --- a/src/gui/controls/plot_scalar.cpp
 +++ b/src/gui/controls/plot_scalar.cpp
 @@ -179,6 +179,7 @@ PlotScalar::PlotScalar(wxWindow* parent,
@@ -473,6 +485,36 @@ index fdf26b5e..6261eaae 100644
      if (!DRAW_DIRECTLY && !useSurface)
      {
          plotAreaDC_->SetPen(pen);
+@@ -496,19 +497,19 @@ void PlotScalar::draw(wxGraphicsContext* ctx, bool repaintDataOnly)
+ 
+         x = index_to_px * i;
+ 
+-        // put inside plot window
++        // put inside plot window. The first sample too: when the plot has
++        // more pixels than samples, the pixels before the second sample would
++        // otherwise keep INT_MAX/INT_MIN, a point far outside the plot that
++        // stopped the whole trace being drawn on macOS.
+ 
+-        if (i)
++        for (int x2 = x; x2 <= std::ceil(index_to_px * (i + 1)) && x2 < plotWidth; x2++)
+         {
+-            for (int x2 = x; x2 <= std::ceil(index_to_px * (i + 1)) && x2 < plotWidth; x2++)
+-            {
+-                auto item = &lineMap_[x2];
+-                item->y1 = std::min(item->y1, y);
++            auto item = &lineMap_[x2];
++            item->y1 = std::min(item->y1, y);
+ 
+-                if (!halfPlot_)
+-                {
+-                    item->y2 = std::max(item->y2, y);
+-                }
++            if (!halfPlot_)
++            {
++                item->y2 = std::max(item->y2, y);
+             }
+         }
+     }
 diff --git a/src/gui/controls/plot_scalar.h b/src/gui/controls/plot_scalar.h
 index 85d8fad3..32698670 100644
 --- a/src/gui/controls/plot_scalar.h
