@@ -370,10 +370,10 @@ index 9934bc9a..dd198a89 100644
              freqLabels_.push_back({
                  wxString(buf),
 diff --git a/src/gui/dialogs/dlg_options.cpp b/src/gui/dialogs/dlg_options.cpp
-index 8d3edd07..0608b6dc 100644
+index debdc71b..750feb0b 100644
 --- a/src/gui/dialogs/dlg_options.cpp
 +++ b/src/gui/dialogs/dlg_options.cpp
-@@ -1485,7 +1485,7 @@ void OptionsDlg::ExchangeData(int inout, bool storePersistent)
+@@ -1490,7 +1490,7 @@ void OptionsDlg::ExchangeData(int inout, bool storePersistent)
          m_freedvReporterMsgForegroundColor->SetColour(msgForegroundColor);
  
          // Populate reporting frequency list.
@@ -382,7 +382,7 @@ index 8d3edd07..0608b6dc 100644
          {
              m_freqList->Append(item);
          }
-@@ -1696,7 +1696,7 @@ void OptionsDlg::ExchangeData(int inout, bool storePersistent)
+@@ -1702,7 +1702,7 @@ void OptionsDlg::ExchangeData(int inout, bool storePersistent)
          {
              tmpList.push_back(m_freqList->GetString(index));
          }
@@ -472,7 +472,7 @@ index 19586606..643464ab 100644
  #endif // FREQUENCY_OPS_H
 \ No newline at end of file
 diff --git a/src/main.cpp b/src/main.cpp
-index 359bbe1e..61cca65b 100644
+index 0c1ed23c..af9be4d0 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -65,6 +65,7 @@
@@ -483,7 +483,7 @@ index 359bbe1e..61cca65b 100644
  #include "gui/util/WindowPositionRestore.h"
  #include "gui/util/TabLayoutSerializer.h"
  
-@@ -1155,14 +1156,13 @@ void MainFrame::loadConfiguration_()
+@@ -1162,14 +1163,13 @@ void MainFrame::loadConfiguration_()
      // Adjust frequency entry labels
      wxListItem colInfo;
      m_lastReportedCallsignListView->GetColumn(1, colInfo);
@@ -499,17 +499,20 @@ index 359bbe1e..61cca65b 100644
          colInfo.SetText(_("MHz"));
      }
      m_lastReportedCallsignListView->SetColumn(1, colInfo);
-@@ -2760,11 +2760,15 @@ void MainFrame::performFreeDVOn_()
+@@ -2804,14 +2804,18 @@ void MainFrame::performFreeDVOn_()
                      (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges || wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqChangesOnly) &&
-                     wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0)
+                     (!saveRestoreFrequency || wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0))
                  {
--                    wxGetApp().rigFrequencyController->setFrequency(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
--        
 +                    // The offset depends only on g_analog (real analog voice
 +                    // mode), not on the hamlibUseAnalogModes label preference.
 +                    auto mode = getCurrentMode_();
-+                    wxGetApp().rigFrequencyController->setFrequency(
-+                        DisplayToDialFreq(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency, mode, g_analog.load(std::memory_order_relaxed) != 0));
+                     if (saveRestoreFrequency)
+                     {
+-                        wxGetApp().rigFrequencyController->setFrequency(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
++                        wxGetApp().rigFrequencyController->setFrequency(
++                            DisplayToDialFreq(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency, mode, g_analog.load(std::memory_order_relaxed) != 0));
+                     }
+-        
 +
                      if (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges)
                      {
@@ -519,10 +522,10 @@ index 359bbe1e..61cca65b 100644
                  }
                      
 diff --git a/src/main.h b/src/main.h
-index c83b041f..5b997636 100644
+index c0b11c4d..17ae3e8a 100644
 --- a/src/main.h
 +++ b/src/main.h
-@@ -659,6 +659,8 @@ class MainFrame : public TopFrame
+@@ -663,6 +663,8 @@ class MainFrame : public TopFrame
          void updateReportingFreqList_();
          wxString reportFrequencyListString_(wxString const& text);
          void addReportFrequencyToList_(wxString const& freq);
@@ -532,7 +535,7 @@ index c83b041f..5b997636 100644
          void initializeFreeDVReporter_();
          void updateVoiceKeyerButtonLabel_();
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index 72479f24..4bd77968 100644
+index 23f18086..ff7c765b 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
 @@ -15,6 +15,7 @@
@@ -543,7 +546,7 @@ index 72479f24..4bd77968 100644
  #include "gui/dialogs/dlg_filter.h"
  #include "gui/dialogs/dlg_options.h"
  #include "gui/dialogs/dlg_setup_wizard.h"
-@@ -245,14 +246,13 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
+@@ -270,14 +271,13 @@ void MainFrame::OnToolsOptions(wxCommandEvent& event)
          // Adjust frequency labels on main window
          wxListItem colInfo;
          m_lastReportedCallsignListView->GetColumn(1, colInfo);
@@ -559,7 +562,7 @@ index 72479f24..4bd77968 100644
              colInfo.SetText(_("MHz"));
          }
          m_lastReportedCallsignListView->SetColumn(1, colInfo);
-@@ -422,6 +422,14 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+@@ -447,6 +447,14 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
  
          auto newFreq = wholeFreq * 100;
  
@@ -574,7 +577,7 @@ index 72479f24..4bd77968 100644
          // Widest 60 meter allocation is 5.250-5.450 MHz per https://en.wikipedia.org/wiki/60-meter_band.
          bool is60MeterBand = newFreq >= 5250000 && newFreq <= 5450000;
  
-@@ -454,24 +462,24 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+@@ -479,24 +487,24 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
              !wxGetApp().appConfiguration.reportingConfiguration.manualFrequencyReporting))
          {
              // wxString::Format() doesn't respect locale but wxNumberFormatter should. Use the latter instead.
@@ -606,7 +609,7 @@ index 72479f24..4bd77968 100644
              {
                  for (auto& ptr : wxGetApp().m_reporters)
                  {
-@@ -480,6 +488,7 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
+@@ -505,6 +513,7 @@ void MainFrame::onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq,
              }
              
              m_cboReportFrequency->SetValue(freqString);
@@ -614,17 +617,25 @@ index 72479f24..4bd77968 100644
          }
          m_txtModeStatus->Refresh();
  
-@@ -507,11 +516,15 @@ void MainFrame::onRadioConnected_(IRigController*)
-         firstFreqUpdateOnConnect_ = true;
- 
-         // Set frequency/mode to the one pre-selected by the user before start.
--        wxGetApp().rigFrequencyController->setFrequency(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
--        
-+        // The offset depends only on g_analog (real analog voice mode), not
-+        // on the hamlibUseAnalogModes label preference.
+@@ -530,6 +539,7 @@ void MainFrame::onRadioConnected_(IRigController*)
+         (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges || wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqChangesOnly) &&
+         (!saveRestoreFrequency || wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0))
+     {
 +        auto mode = getCurrentMode_();
-+        wxGetApp().rigFrequencyController->setFrequency(
-+            DisplayToDialFreq(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency, mode, g_analog.load(std::memory_order_relaxed) != 0));
+         if (saveRestoreFrequency)
+         {
+             // Suppress the frequency update message that will occur immediately after
+@@ -537,12 +547,15 @@ void MainFrame::onRadioConnected_(IRigController*)
+             firstFreqUpdateOnConnect_ = true;
+ 
+             // Set frequency/mode to the one pre-selected by the user before start.
+-            wxGetApp().rigFrequencyController->setFrequency(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
++            // The offset depends only on g_analog (real analog voice mode), not
++            // on the hamlibUseAnalogModes label preference.
++            wxGetApp().rigFrequencyController->setFrequency(
++                DisplayToDialFreq(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency, mode, g_analog.load(std::memory_order_relaxed) != 0));
+         }
+-        
 +
          if (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges)
          {
@@ -633,7 +644,7 @@ index 72479f24..4bd77968 100644
          }
      }
  }
-@@ -1739,7 +1752,7 @@ HamlibRigController::Mode MainFrame::getCurrentMode_()
+@@ -1768,7 +1781,7 @@ HamlibRigController::Mode MainFrame::getCurrentMode_()
  //-------------------------------------------------------------------------
  void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
  {
@@ -642,7 +653,7 @@ index 72479f24..4bd77968 100644
  
      if (g_analog.load(std::memory_order_relaxed) == 0) {
          g_analog.store(1, std::memory_order_relaxed);
-@@ -1756,6 +1769,8 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+@@ -1785,6 +1798,8 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
          m_togBtnAnalog->SetLabel(_("Switch to A&nalog"));
      }
  
@@ -651,7 +662,7 @@ index 72479f24..4bd77968 100644
      // Report analog change to registered reporters
      for (auto& obj : wxGetApp().m_reporters)
      {
-@@ -1765,32 +1780,62 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+@@ -1794,32 +1809,62 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
          }
      }
      
@@ -733,7 +744,7 @@ index 72479f24..4bd77968 100644
      }
  
      g_State.store(0, std::memory_order_release);
-@@ -2044,15 +2089,21 @@ void MainFrame::OnChangeReportFrequency( wxCommandEvent& )
+@@ -2073,15 +2118,21 @@ void MainFrame::OnChangeReportFrequency( wxCommandEvent& )
              wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0 && 
              (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges || wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqChangesOnly))
          {
@@ -758,7 +769,7 @@ index 72479f24..4bd77968 100644
      if (m_reporterDialog != nullptr)
      {
          m_reporterDialog->refreshQSYButtonState();
-@@ -2111,6 +2162,55 @@ void MainFrame::OnCenterRx(wxCommandEvent&)
+@@ -2140,6 +2191,55 @@ void MainFrame::OnCenterRx(wxCommandEvent&)
      clickTune(FDMDV_FCENTRE);
  }
  
@@ -814,7 +825,7 @@ index 72479f24..4bd77968 100644
  // The frequency typed or shown in the box as the predefined list shows it
  // (rounded to 100 Hz, as it's used), or empty if it isn't a frequency.
  wxString MainFrame::reportFrequencyListString_(wxString const& text)
-@@ -2138,14 +2238,14 @@ void MainFrame::addReportFrequencyToList_(wxString const& freq)
+@@ -2167,14 +2267,14 @@ void MainFrame::addReportFrequencyToList_(wxString const& freq)
      double value = 0;
      wxNumberFormatter::FromString(freq, &value);
  
@@ -831,7 +842,7 @@ index 72479f24..4bd77968 100644
      wxGetApp().appConfiguration.save(pConfig);
  
      m_reportFrequencyList->Insert(freq, index);
-@@ -2161,7 +2261,7 @@ void MainFrame::OnReportFrequencyContextMenu(wxContextMenuEvent&)
+@@ -2190,7 +2290,7 @@ void MainFrame::OnReportFrequencyContextMenu(wxContextMenuEvent&)
      }
  
      wxString freq = reportFrequencyListString_(m_cboReportFrequency->GetValue());
@@ -840,7 +851,7 @@ index 72479f24..4bd77968 100644
      bool listed = std::find(list.begin(), list.end(), freq) != list.end();
      wxString units = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz ? _("kHz") : _("MHz");
  
-@@ -2232,12 +2332,12 @@ void MainFrame::OnReportFrequencyItemDelete(int item)
+@@ -2261,12 +2361,12 @@ void MainFrame::OnReportFrequencyItemDelete(int item)
      }
  
      wxString freq = m_reportFrequencyList->GetString(item);
@@ -855,7 +866,7 @@ index 72479f24..4bd77968 100644
          wxGetApp().appConfiguration.save(pConfig);
      }
  
-@@ -2265,23 +2365,16 @@ void MainFrame::updateReportingFreqList_()
+@@ -2294,23 +2394,16 @@ void MainFrame::updateReportingFreqList_()
      }
      m_reportFrequencyList->Clear();
  
@@ -884,10 +895,10 @@ index 72479f24..4bd77968 100644
  
  void MainFrame::OnResetMicSpkrLevel(wxMouseEvent&)
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index a6bf7bd7..3a749189 100644
+index 3c3f330a..8ee09302 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
-@@ -817,7 +817,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
+@@ -792,7 +792,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
      rightSizer->Add(micSpeakerLevelSizer, 0, static_cast<int>(wxALL) | static_cast<int>(wxEXPAND), 2);
      
      // Frequency text field (PSK Reporter)
