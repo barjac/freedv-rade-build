@@ -1,5 +1,18 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index a71d68fcf..0c3f2ef49 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -915,7 +915,7 @@ if(LINUX)
+     freedv_set_test_pass_criteria(gui_reporter_dark_appearance)
+ endif(LINUX)
+ 
+-foreach(scenario buttons audio audio_tests radio ptt_test rig_control frequency_list frequency_list_from_main_window reporting voice_keyer display modem_and_debugging invalid_numbers out_of_range_config ptt_key_names auto_start while_running opened_while_running)
++foreach(scenario buttons audio audio_tests radio ptt_test rig_control frequency_list frequency_list_migration frequency_list_from_main_window reporting voice_keyer display modem_and_debugging invalid_numbers out_of_range_config ptt_key_names auto_start while_running opened_while_running)
+     add_test(NAME gui_settings_${scenario}
+              COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/test/gui/test_settings.py ${scenario})
+     set_tests_properties(gui_settings_${scenario} PROPERTIES LABELS gui SKIP_RETURN_CODE 77)
 diff --git a/src/config/ReportingConfiguration.cpp b/src/config/ReportingConfiguration.cpp
-index ee5a14b4..d512c897 100644
+index ee5a14b49..d512c8976 100644
 --- a/src/config/ReportingConfiguration.cpp
 +++ b/src/config/ReportingConfiguration.cpp
 @@ -73,6 +73,10 @@ ReportingConfiguration::ReportingConfiguration()
@@ -312,7 +325,7 @@ index ee5a14b4..d512c897 100644
  
      save_(config, freedvReporterTxRowBackgroundColor);
 diff --git a/src/config/ReportingConfiguration.h b/src/config/ReportingConfiguration.h
-index 963ea5e1..a70a1c16 100644
+index 963ea5e16..a70a1c166 100644
 --- a/src/config/ReportingConfiguration.h
 +++ b/src/config/ReportingConfiguration.h
 @@ -76,6 +76,7 @@ public:
@@ -336,7 +349,7 @@ index 963ea5e1..a70a1c16 100644
  
  #endif // REPORTING_CONFIGURATION_H
 diff --git a/src/gui/controls/plot_spectrum.cpp b/src/gui/controls/plot_spectrum.cpp
-index 2f73b195..3c05f733 100644
+index 2f73b195f..3c05f7333 100644
 --- a/src/gui/controls/plot_spectrum.cpp
 +++ b/src/gui/controls/plot_spectrum.cpp
 @@ -289,9 +289,11 @@ void PlotSpectrum::drawGraticuleLabels_(wxGraphicsContext* ctx)
@@ -362,7 +375,7 @@ index 2f73b195..3c05f733 100644
              ctx->DrawText(buf, x - text_w/2, (PLOT_BORDER + bottomOffset_ - YBOTTOM_TEXT_OFFSET * 2 - text_h) / 2);
          }
 diff --git a/src/gui/controls/plot_waterfall.cpp b/src/gui/controls/plot_waterfall.cpp
-index 1fc66e87..e125f909 100644
+index 1fc66e879..e125f909b 100644
 --- a/src/gui/controls/plot_waterfall.cpp
 +++ b/src/gui/controls/plot_waterfall.cpp
 @@ -341,8 +341,11 @@ void PlotWaterfall::rebuildGraticuleLabels_()
@@ -388,7 +401,7 @@ index 1fc66e87..e125f909 100644
              freqLabels_.push_back({
                  wxString(buf),
 diff --git a/src/gui/dialogs/dlg_options.cpp b/src/gui/dialogs/dlg_options.cpp
-index ba2081d4..5e122889 100644
+index 1ec6894a4..009f486a5 100644
 --- a/src/gui/dialogs/dlg_options.cpp
 +++ b/src/gui/dialogs/dlg_options.cpp
 @@ -1521,7 +1521,7 @@ void OptionsDlg::ExchangeData(int inout, bool storePersistent)
@@ -410,10 +423,10 @@ index ba2081d4..5e122889 100644
          editedConfig_.enableSpaceBarForPTT = m_ckboxEnableSpacebarForPTT->GetValue();
          editedConfig_.pttKeyCode = m_selectedPTTKeyCode;
 diff --git a/src/gui/dialogs/freedv_reporter.cpp b/src/gui/dialogs/freedv_reporter.cpp
-index c96fc223..61e6a0e3 100644
+index e294cd6a7..90ad8210a 100644
 --- a/src/gui/dialogs/freedv_reporter.cpp
 +++ b/src/gui/dialogs/freedv_reporter.cpp
-@@ -1734,18 +1734,23 @@ void FreeDVReporterDialog::OnItemDoubleClick(wxDataViewEvent& event)
+@@ -1718,18 +1718,23 @@ void FreeDVReporterDialog::OnItemDoubleClick(wxDataViewEvent& event)
              // main window then picks the mode: see MainFrame::getCurrentMode_()).
              wxGetApp().followSideband(frequency, sideband);
  
@@ -447,7 +460,7 @@ index c96fc223..61e6a0e3 100644
          DeselectItem();
      }
 diff --git a/src/gui/util/FrequencyOps.h b/src/gui/util/FrequencyOps.h
-index 53fbfb43..b925a0bb 100644
+index 53fbfb430..b925a0bb0 100644
 --- a/src/gui/util/FrequencyOps.h
 +++ b/src/gui/util/FrequencyOps.h
 @@ -55,6 +55,38 @@ inline HamlibRigController::Mode GetModeForFrequency(uint64_t frequency, bool us
@@ -490,18 +503,18 @@ index 53fbfb43..b925a0bb 100644
  inline bool IsLowerSidebandMode(HamlibRigController::Mode mode)
  {
 diff --git a/src/main.cpp b/src/main.cpp
-index 0120cc3f..68e85b3b 100644
+index 85fb493c5..5beb6dcea 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
-@@ -66,6 +66,7 @@
+@@ -81,6 +81,7 @@ static void waitWhileTestAgentHoldsOnOff_()
  #include "gui/dialogs/dlg_setup_wizard.h"
  #include "gui/dialogs/dlg_filter.h"
  #include "gui/dialogs/freedv_reporter.h"
 +#include "gui/util/FrequencyOps.h"
+ #include "gui/util/WindowPlacement.h"
  #include "gui/util/WindowPositionRestore.h"
  #include "gui/util/TabLayoutSerializer.h"
- 
-@@ -1190,14 +1191,13 @@ void MainFrame::loadConfiguration_()
+@@ -1262,14 +1263,13 @@ void MainFrame::loadConfiguration_()
      // Adjust frequency entry labels
      wxListItem colInfo;
      m_lastReportedCallsignListView->GetColumn(1, colInfo);
@@ -517,7 +530,7 @@ index 0120cc3f..68e85b3b 100644
          colInfo.SetText(_("MHz"));
      }
      m_lastReportedCallsignListView->SetColumn(1, colInfo);
-@@ -4714,12 +4714,17 @@ void MainFrame::onQsyRequestUIThread_(QsyRequestArgs* args)
+@@ -4786,12 +4786,17 @@ void MainFrame::onQsyRequestUIThread_(QsyRequestArgs* args)
          m_cboReportFrequency->SetValue(freqString);
  
          // ...if the frequency changes. If FreeDV's already there, it may
@@ -538,7 +551,7 @@ index 0120cc3f..68e85b3b 100644
      }
  }
 diff --git a/src/main.h b/src/main.h
-index 151d1119..d5d62596 100644
+index 186199343..f970e74d3 100644
 --- a/src/main.h
 +++ b/src/main.h
 @@ -267,6 +267,25 @@ class MainApp : public wxApp
@@ -567,7 +580,7 @@ index 151d1119..d5d62596 100644
          
          bool                loadConfig();
          bool                saveConfig();
-@@ -765,6 +784,8 @@ class MainFrame : public TopFrame
+@@ -762,6 +781,8 @@ class MainFrame : public TopFrame
          static wxString reportFrequencyString_(uint64_t hz);
          wxString reportFrequencyListString_(wxString const& text);
          void addReportFrequencyToList_(wxString const& freq);
@@ -577,7 +590,7 @@ index 151d1119..d5d62596 100644
          void initializeFreeDVReporter_();
          void updateVoiceKeyerButtonLabel_();
 diff --git a/src/ongui.cpp b/src/ongui.cpp
-index cd277ba3..b617964e 100644
+index 1b05412f6..50e8512b8 100644
 --- a/src/ongui.cpp
 +++ b/src/ongui.cpp
 @@ -15,6 +15,7 @@
@@ -744,7 +757,7 @@ index cd277ba3..b617964e 100644
      // Report analog change to registered reporters
      for (auto& obj : wxGetApp().m_reporters)
      {
-@@ -1904,36 +1933,73 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
+@@ -1904,45 +1933,86 @@ void MainFrame::OnTogBtnAnalogClick (wxCommandEvent& event)
          }
      }
      
@@ -773,7 +786,26 @@ index cd277ba3..b617964e 100644
 +        auto& reportingFreq = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency;
 +        bool hamlibUseAnalogModes = wxGetApp().appConfiguration.rigControlConfiguration.hamlibUseAnalogModes;
 +        auto followedSideband = wxGetApp().followedSidebandAt(reportingFreq);
-+
+ 
+-        // The shift is for going between sidebands: digital is usually on
+-        // USB, but on a station's own sideband after going to it (and then
+-        // stays on it in analog too).
+-        constexpr int LSB_USB_FREQ_SHIFT_HZ = 3000;
+-        if (IsLowerSidebandMode(currentMode) && !IsLowerSidebandMode(oldMode) && g_analog)
+-        {
+-            // If analog is enabled, we should add +3 kHz to the frequency to 
+-            // ensure we're still listening to the same passband that we were
+-            // previously prior to the analog switch.
+-            wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency = 
+-                wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency + LSB_USB_FREQ_SHIFT_HZ;
+-            rigController->setFrequency(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
+-        }
+-        else if (IsLowerSidebandMode(oldMode) && !IsLowerSidebandMode(currentMode) && !g_analog)
+-        {
+-            // Revert previous mode shift.
+-            wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency = 
+-                wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency - LSB_USB_FREQ_SHIFT_HZ;
+-            rigController->setFrequency(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
 +        // hamlibUseAnalogModes is only a USB/LSB-vs-DIGU/DIGL label
 +        // preference for GetModeForSideband -- the centre-frequency offset
 +        // itself depends only on whether we were/are actually in analog
@@ -787,44 +819,43 @@ index cd277ba3..b617964e 100644
 +        newDialFreq = DisplayToDialFreq(spot, newMode, false);
 +        dialFreqChanged = newDialFreq != dialFreq;
 +
++        auto oldReportingFreq = reportingFreq.get();
 +        reportingFreq = DialToDisplayFreq(newDialFreq, newMode, g_analog.load(std::memory_order_relaxed) != 0);
  
--        // The shift is for going between sidebands: digital is usually on
--        // USB, but on a station's own sideband after going to it (and then
--        // stays on it in analog too).
--        constexpr int LSB_USB_FREQ_SHIFT_HZ = 3000;
--        if (IsLowerSidebandMode(currentMode) && !IsLowerSidebandMode(oldMode) && g_analog)
+-            // Report analog change to registered reporters
++        // Report the new centre frequency (as #1654 does for the dial).
++        if (reportingFreq.get() != oldReportingFreq)
++        {
+             for (auto& obj : wxGetApp().m_reporters)
+             {
+                 if (obj != wxGetApp().m_sharedReporterObject || !m_reporterHidden->GetValue())
+                 {
+-                    obj->freqChange(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
++                    obj->freqChange(reportingFreq.get());
+                 }
+             }
+         }
+ 
+-        rigController->setMode(currentMode);
 +        // The displayed frequency moves when the centre offset does (it's 0
 +        // in analog): keep following the station's sideband there.
 +        if (followedSideband != IReporter::Sideband::UNKNOWN)
-         {
--            // If analog is enabled, we should add +3 kHz to the frequency to 
--            // ensure we're still listening to the same passband that we were
--            // previously prior to the analog switch.
--            wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency = 
--                wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency + LSB_USB_FREQ_SHIFT_HZ;
--            rigController->setFrequency(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
++        {
 +            wxGetApp().followSideband(reportingFreq, followedSideband);
-         }
--        else if (IsLowerSidebandMode(oldMode) && !IsLowerSidebandMode(currentMode) && !g_analog)
++        }
 +
 +        wxString freqString;
 +        if (wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz)
-         {
--            // Revert previous mode shift.
--            wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency = 
--                wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency - LSB_USB_FREQ_SHIFT_HZ;
--            rigController->setFrequency(wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency);
++        {
 +            freqString = wxNumberFormatter::ToString(reportingFreq / 1000.0, 1);
-         }
++        }
 +        else
 +        {
 +            freqString = wxNumberFormatter::ToString(reportingFreq / 1000.0 / 1000.0, 4);
 +        }
 +        m_cboReportFrequency->SetValue(freqString);
 +    }
- 
--        rigController->setMode(currentMode);
++
 +    auto rigController = snapshotRigFrequencyController();
 +    if (rigController != nullptr && 
 +        wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0 &&
@@ -841,7 +872,7 @@ index cd277ba3..b617964e 100644
      }
  
      g_State.store(0, std::memory_order_release);
-@@ -2164,15 +2230,27 @@ void MainFrame::OnChangeReportFrequency( wxCommandEvent& )
+@@ -2173,15 +2243,27 @@ void MainFrame::OnChangeReportFrequency( wxCommandEvent& )
              wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency > 0 && 
              (wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqModeChanges || wxGetApp().appConfiguration.rigControlConfiguration.hamlibEnableFreqChangesOnly))
          {
@@ -872,7 +903,7 @@ index cd277ba3..b617964e 100644
      if (m_reporterDialog != nullptr)
      {
          m_reporterDialog->refreshQSYButtonState();
-@@ -2233,6 +2311,55 @@ void MainFrame::OnCenterRx(wxCommandEvent&)
+@@ -2242,6 +2324,55 @@ void MainFrame::OnCenterRx(wxCommandEvent&)
      clickTune(FDMDV_FCENTRE);
  }
  
@@ -928,7 +959,7 @@ index cd277ba3..b617964e 100644
  // The frequency typed or shown in the box as the predefined list shows it
  // (rounded to 100 Hz, as it's used), or empty if it isn't a frequency.
  wxString MainFrame::reportFrequencyString_(uint64_t hz)
-@@ -2260,14 +2387,14 @@ void MainFrame::addReportFrequencyToList_(wxString const& freq)
+@@ -2269,14 +2400,14 @@ void MainFrame::addReportFrequencyToList_(wxString const& freq)
      double value = 0;
      wxNumberFormatter::FromString(freq, &value);
  
@@ -945,7 +976,7 @@ index cd277ba3..b617964e 100644
      wxGetApp().appConfiguration.save(pConfig);
  
      m_reportFrequencyList->Insert(freq, index);
-@@ -2283,7 +2410,7 @@ void MainFrame::OnReportFrequencyContextMenu(wxContextMenuEvent&)
+@@ -2292,7 +2423,7 @@ void MainFrame::OnReportFrequencyContextMenu(wxContextMenuEvent&)
      }
  
      wxString freq = reportFrequencyListString_(m_cboReportFrequency->GetValue());
@@ -954,7 +985,7 @@ index cd277ba3..b617964e 100644
      bool listed = std::find(list.begin(), list.end(), freq) != list.end();
      wxString units = wxGetApp().appConfiguration.reportingConfiguration.reportingFrequencyAsKhz ? _("kHz") : _("MHz");
  
-@@ -2354,12 +2481,12 @@ void MainFrame::OnReportFrequencyItemDelete(int item)
+@@ -2369,12 +2500,12 @@ void MainFrame::OnReportFrequencyItemDelete(int item)
      }
  
      wxString freq = m_reportFrequencyList->GetString(item);
@@ -969,7 +1000,7 @@ index cd277ba3..b617964e 100644
          wxGetApp().appConfiguration.save(pConfig);
      }
  
-@@ -2387,23 +2514,16 @@ void MainFrame::updateReportingFreqList_()
+@@ -2402,23 +2533,16 @@ void MainFrame::updateReportingFreqList_()
      }
      m_reportFrequencyList->Clear();
  
@@ -998,7 +1029,7 @@ index cd277ba3..b617964e 100644
  
  void MainFrame::OnResetMicSpkrLevel(wxMouseEvent&)
 diff --git a/src/topFrame.cpp b/src/topFrame.cpp
-index 9453869e..bedfbd39 100644
+index 9453869ea..bedfbd397 100644
 --- a/src/topFrame.cpp
 +++ b/src/topFrame.cpp
 @@ -794,7 +794,7 @@ TopFrame::TopFrame(wxWindow* parent, wxWindowID id, const wxString& title, const
@@ -1011,10 +1042,10 @@ index 9453869e..bedfbd39 100644
      wxBoxSizer* reportFrequencySizer = new wxStaticBoxSizer(m_freqBox, wxHORIZONTAL);
      
 diff --git a/test/gui/test_reporter.py b/test/gui/test_reporter.py
-index 87aa609c..e1b9c5b3 100644
+index e612e9905..5fab1b561 100644
 --- a/test/gui/test_reporter.py
 +++ b/test/gui/test_reporter.py
-@@ -2626,31 +2626,35 @@ def test_sideband():
+@@ -2846,31 +2846,35 @@ def test_sideband():
      mode, following the radio."""
      with ReporterServer() as server:
          probe = server.station("K1ABC", "FN42")
@@ -1063,7 +1094,7 @@ index 87aa609c..e1b9c5b3 100644
  
                  # Still sorted by the frequency itself.
                  app.click_column(LIST, FREQUENCY)
-@@ -2665,18 +2669,21 @@ def test_sideband():
+@@ -2885,18 +2889,21 @@ def test_sideband():
                                 description="FreeDV to connect to the radio")
                  viewer.wait_for_event("freq_change", CALLSIGN_OF_FREEDV,
                                        where=lambda data: data.get("sideband") == "USB", timeout=20)
@@ -1088,7 +1119,7 @@ index 87aa609c..e1b9c5b3 100644
                  radio.command("M AM 6000")
                  viewer.wait_for_event("freq_change", CALLSIGN_OF_FREEDV,
                                        where=lambda data: data.get("sideband") == "", timeout=20)
-@@ -2694,23 +2701,28 @@ def test_sideband_follow():
+@@ -2914,23 +2921,28 @@ def test_sideband_follow():
      sideband as well as its frequency (in the radio's data mode, as for
      digital anywhere); asking a station to QSY tells it which sideband to
      come to."""
@@ -1121,7 +1152,7 @@ index 87aa609c..e1b9c5b3 100644
                  open_reporter(app)
                  start_modem(app)
                  app.wait_until(lambda: app.get("main.textModeStatus")["label"] != "unk",
-@@ -2731,7 +2743,7 @@ def test_sideband_follow():
+@@ -2951,7 +2963,7 @@ def test_sideband_follow():
                  # Double-clicking: the station's sideband, in data mode.
                  app.activate_row(LIST, (CALLSIGN, "VK5DGR"))
                  wait_for_radio(7177000, "PKTLSB", "Radio after double-clicking VK5DGR (LSB)")
@@ -1130,7 +1161,7 @@ index 87aa609c..e1b9c5b3 100644
                  app.wait_until(lambda: app.get("main.textModeStatus")["label"] == "LSB-D", timeout=15,
                                 description="the mode shown to be LSB-D")
                  # ...and it stays there: FreeDV doesn't put it back.
-@@ -2742,13 +2754,13 @@ def test_sideband_follow():
+@@ -2962,13 +2974,13 @@ def test_sideband_follow():
                  app.select_row(LIST, (CALLSIGN, "K1ABC"))
                  app.click("reporter.btnSendQSY")
                  request = k1abc.wait_for_event("qsy_request")
@@ -1146,7 +1177,7 @@ index 87aa609c..e1b9c5b3 100644
  
                  # A station that hasn't said: the sideband usual for digital.
                  app.activate_row(LIST, (CALLSIGN, "W6XYZ"))
-@@ -2761,7 +2773,7 @@ def test_sideband_follow():
+@@ -2981,7 +2993,7 @@ def test_sideband_follow():
                  check_equal([box["message"].replace(",", "") for box in app.message_boxes(clear=True)],
                              ["VK5DGR has requested that you QSY to 14.2500 MHz LSB. "
                               "Would you like to change to that frequency now?"], "Messages displayed")
@@ -1155,7 +1186,7 @@ index 87aa609c..e1b9c5b3 100644
                  wait_for_reported(14250000, "LSB")
  
                  def accept_qsy(station, frequency, sideband):
-@@ -2771,30 +2783,30 @@ def test_sideband_follow():
+@@ -2991,30 +3003,30 @@ def test_sideband_follow():
                      app.message_boxes(clear=True)
  
                  # Asked to stay on the same frequency, on the other sideband,
@@ -1193,7 +1224,7 @@ index 87aa609c..e1b9c5b3 100644
  
                  # So is leaving by turning the radio's dial. (Asked there
                  # while the same frequency's typed in shorter, with the box
-@@ -2803,13 +2815,14 @@ def test_sideband_follow():
+@@ -3023,13 +3035,14 @@ def test_sideband_follow():
                  app.focus("main.cboReportFrequency")
                  app.set_value("main.cboReportFrequency", "14.25")
                  accept_qsy(vk5dgr, 14250000, "LSB")
@@ -1211,8 +1242,58 @@ index 87aa609c..e1b9c5b3 100644
  
                  stop_modem(app)
                  quit_and_check_log(app, with_hamlib=True)
+@@ -3078,7 +3091,7 @@ def test_sideband_manual():
+ def test_sideband_analog():
+     """Switching to analog, and back, on a band where that means changing
+     sideband, with a radio FreeDV can retune: FreeDV isn't listed while it's in
+-    analog, and coming back tells the server the frequency the radio's actually
++    analog, and coming back tells the server the centre frequency it's actually
+     on once the 3 kHz shift is undone, rather than leaving it on where FreeDV
+     was before going in."""
+     with ReporterServer() as server:
+@@ -3088,7 +3101,7 @@ def test_sideband_analog():
+         try:
+             radio.set_frequency(7177000)
+             settings = radio_settings(server, radio)
+-            settings["/Reporting/Frequency"] = 7177000
++            settings["/Reporting/Frequency"] = 7178500
+             with audio_devices(), freedvtest.start(settings=settings) as app:
+                 open_reporter(app)
+                 start_modem(app)
+@@ -3096,8 +3109,9 @@ def test_sideband_analog():
+                                description="FreeDV to put the radio on its digital mode")
+                 digital = radio.mode()
+                 viewer.wait_for_event("freq_change", CALLSIGN_OF_FREEDV,
+-                                      where=lambda data: data["freq"] == 7177000, timeout=20)
++                                      where=lambda data: data["freq"] == 7178500, timeout=20)
+ 
++                # (Centre 7.1785 is dial 7.1770 on USB.)
+                 # 40m: analog is on the lower sideband, so the radio goes 3 kHz
+                 # up to stay on the stretch of the band it was hearing. FreeDV
+                 # isn't listed while in analog, so what it does there (including
+@@ -3115,16 +3129,17 @@ def test_sideband_analog():
+ 
+                 # Back to digital: the shift's undone, and coming back on view
+                 # tells the server where the radio actually is rather than
+-                # leaving it on where FreeDV was before going to analog.
++                # leaving it on where FreeDV was before going to analog
++                # (dial 7.1570 on USB, centre 7.1585).
+                 app.click("main.btnAnalog")
+                 app.wait_until(lambda: radio.mode() == digital and radio.frequency() == 7157000, timeout=20,
+                                description="the radio back on %s at 7.1570" % digital)
+                 app.wait_until(lambda: CALLSIGN_OF_FREEDV in viewer.callsigns(), timeout=20,
+                                description="FreeDV to be listed again")
+                 viewer.wait_for_event("freq_change", CALLSIGN_OF_FREEDV,
+-                                      where=lambda data: data["freq"] == 7157000, timeout=20)
++                                      where=lambda data: data["freq"] == 7158500, timeout=20)
+                 wait_for_cell(app, CALLSIGN_OF_FREEDV, FREQUENCY,
+-                              lambda text: text.replace(",", "").split(" ")[0] == "7.1570")
++                              lambda text: text.replace(",", "").split(" ")[0] == "7.1585")
+ 
+                 stop_modem(app)
+                 quit_and_check_log(app, with_hamlib=True)
 diff --git a/test/gui/test_rig_control.py b/test/gui/test_rig_control.py
-index f7ad97c6..56785866 100644
+index f7ad97c61..567858660 100644
 --- a/test/gui/test_rig_control.py
 +++ b/test/gui/test_rig_control.py
 @@ -35,6 +35,26 @@ from test_main_window import (CALLSIGN, MICROPHONE, RADIO_RX, RADIO_TX, audio_de
@@ -1588,10 +1669,18 @@ index f7ad97c6..56785866 100644
              # Transmitting keys the new radio and not the old.
              app.click("main.btnPTT")
 diff --git a/test/gui/test_settings.py b/test/gui/test_settings.py
-index 1284cc34..69faf8d4 100644
+index 7635e8196..bd2d58971 100644
 --- a/test/gui/test_settings.py
 +++ b/test/gui/test_settings.py
-@@ -814,10 +814,10 @@ def test_frequency_list():
+@@ -14,6 +14,7 @@ import contextlib
+ import glob
+ import os
+ import shutil
++import tempfile
+ import sys
+ import tempfile
+ import time
+@@ -906,10 +907,10 @@ def test_frequency_list():
          for button, expected in zip(buttons, [add, remove]):
              check_equal(app.get(name(button))["enabled"], expected, button + " enabled")
  
@@ -1604,7 +1693,7 @@ index 1284cc34..69faf8d4 100644
          check_equal(label(app, "labelEnterFreq"), "Enter frequency (MHz):", "Frequency entry label")
          check_values(app, {"txtCtrlNewFrequency": ""})
          check_buttons(app, False, False)
-@@ -825,17 +825,17 @@ def test_frequency_list():
+@@ -917,17 +918,17 @@ def test_frequency_list():
          # on offer but nothing else.
          set_value(app, "ckboxFrequencyEntryAsKHz", True)
          press_apply(app)
@@ -1625,7 +1714,7 @@ index 1284cc34..69faf8d4 100644
          # Something that isn't a frequency can't be added.
          for text in ["abc", "0", "-5"]:
              set_value(app, "txtCtrlNewFrequency", text)
-@@ -845,52 +845,52 @@ def test_frequency_list():
+@@ -937,13 +938,13 @@ def test_frequency_list():
          set_value(app, "txtCtrlNewFrequency", "10.136")
          check_buttons(app, True, False)
          app.click(name("freqListAdd"))
@@ -1635,6 +1724,25 @@ index 1284cc34..69faf8d4 100644
  
          # ...including at the end.
          set_value(app, "txtCtrlNewFrequency", "28.33")
+         app.click(name("freqListAdd"))
+-        check_equal(frequencies(app), ["3.6250", "7.1770", "10.1360", "14.2360", "28.3300"],
++        check_equal(frequencies(app), ["3.6235", "7.1755", "10.1360", "14.2375", "28.3300"],
+                     "Frequencies listed")
+ 
+         # What's already listed is found by its value, not by the text shown:
+@@ -954,54 +955,54 @@ def test_frequency_list():
+             set_value(app, "txtCtrlNewFrequency", text)
+             check_buttons(app, False, True)
+         app.click(name("freqListRemove"))
+-        check_equal(frequencies(app), ["3.6250", "7.1770", "14.2360", "28.3300"],
++        check_equal(frequencies(app), ["3.6235", "7.1755", "14.2375", "28.3300"],
+                     "Frequencies listed with 10.1360 removed")
+         check_values(app, {"txtCtrlNewFrequency": ""})
+         # One that only comes close is a different frequency.
+-        set_value(app, "txtCtrlNewFrequency", "14.2361")
++        set_value(app, "txtCtrlNewFrequency", "14.2376")
+         check_buttons(app, True, False)
+         set_value(app, "txtCtrlNewFrequency", "10.136")
          app.click(name("freqListAdd"))
 -        check_equal(frequencies(app), ["3.6250", "7.1770", "10.1360", "14.2360", "28.3300"],
 +        check_equal(frequencies(app), ["3.6235", "7.1755", "10.1360", "14.2375", "28.3300"],
@@ -1692,7 +1800,7 @@ index 1284cc34..69faf8d4 100644
                      "Frequencies offered in the main window")
  
          # And back again, along with what's been typed in so far.
-@@ -904,7 +904,7 @@ def test_frequency_list():
+@@ -1015,19 +1016,19 @@ def test_frequency_list():
          set_value(app, "txtCtrlNewFrequency", "")
          press_ok(app)
          check_equal([item["label"] for item in app.get("main.lbReportFrequencies")["items"]],
@@ -1701,7 +1809,82 @@ index 1284cc34..69faf8d4 100644
                      "Frequencies offered in the main window")
  
          quit_and_check_log(app)
-@@ -930,17 +930,17 @@ def test_frequency_list_from_main_window():
+ 
+     # What's read as the window is first built: the units of the frequency
+     # list, and which waterfall colours were chosen.
+-    with freedvtest.start(settings={"/Reporting/FrequencyList": "3.625000,14.236000",
++    with freedvtest.start(settings={"/Reporting/FrequencyListCentred": "3.623500,14.237500",
+                                     "/Reporting/FrequencyAsKHz": True,
+                                     "/Waterfall/Color": 2}) as app:
+         open_settings(app, "Rig Control")
+         check_equal(label(app, "labelEnterFreq"), "Enter frequency (kHz):", "Frequency entry label")
+-        check_equal(frequencies(app), ["3625.0", "14236.0"], "Frequencies listed")
++        check_equal(frequencies(app), ["3623.5", "14237.5"], "Frequencies listed")
+         go_to_tab(app, "Display")
+         check_values(app, {"waterfallColorScheme1": False, "waterfallColorScheme2": False,
+                            "waterfallColorScheme3": True})
+@@ -1035,6 +1036,60 @@ def test_frequency_list():
+         quit_and_check_log(app)
+ 
+ 
++def test_frequency_list_migration():
++    """The first run of a build with centre frequencies makes the list it
++    shows from the old dial-frequency list, which stays as it was for older
++    builds to use."""
++    # The centred list FreeDV starts with (ReportingConfiguration.cpp).
++    centred_defaults = ["1.8685", "3.6235", "3.6415", "3.6915", "3.6955", "3.8015", "5.4050", "5.3700",
++                        "7.1755", "7.1955", "14.2375", "14.2415", "18.1195", "21.3145", "24.9345",
++                        "28.3315", "28.7215", "10489.6415"]
++    # Defaults (3.625 and 7.177 on LSB below 10MHz, 14.236 on USB) and two
++    # frequencies of the user's own: 7.180 below 10MHz, 14.250 above it.
++    old_list = "3.625000,7.177000,7.180000,14.236000,14.250000"
++
++    def frequencies(app):
++        return [item["label"].replace(",", "") for item in app.get(name("freqList"))["items"]]
++
++    def offered(app):
++        return [item["label"].replace(",", "") for item in app.get("main.lbReportFrequencies")["items"]]
++
++    def check_list(listed, expected, description):
++        check_equal(len(listed), len(set(listed)), description + ": no frequency listed twice")
++        check_equal(sorted(listed, key=float), sorted(expected, key=float), description)
++
++    with tempfile.TemporaryDirectory(prefix="freedvtest-migration-") as folder:
++        config = os.path.join(folder, "freedv.conf")
++        freedvtest.write_config(config, {"/Reporting/FrequencyList": old_list})
++
++        # The defaults are listed once each; the user's own come over as
++        # centre frequencies, 1.5kHz below the old LSB dial frequency and
++        # 1.5kHz above the USB one.
++        migrated = centred_defaults + ["7.1785", "14.2515"]
++        with freedvtest.start(config=config) as app:
++            check_list(offered(app), migrated, "Frequencies offered in the main window")
++            open_settings(app, "Rig Control")
++            check_list(frequencies(app), migrated, "Frequencies listed")
++
++            # A change made to the new list...
++            set_value(app, "freqList", "14.2515")
++            app.click(name("freqListRemove"))
++            press_ok(app)
++            quit_and_check_log(app)
++        settings = freedvtest.read_config(config)
++        check_equal(settings.get("/Reporting/FrequencyList"), old_list, "Old frequency list saved")
++
++        # ...is kept: the list isn't made again from the old one.
++        changed = centred_defaults + ["7.1785"]
++        with freedvtest.start(config=config) as app:
++            open_settings(app, "Rig Control")
++            check_list(frequencies(app), changed, "Frequencies listed next time")
++            press_cancel(app)
++            quit_and_check_log(app)
++        settings = freedvtest.read_config(config)
++        check_equal(settings.get("/Reporting/FrequencyList"), old_list, "Old frequency list saved next time")
++
++
+ def test_frequency_list_from_main_window():
+     """The predefined frequencies can be added to and deleted from the main
+     window's frequency box."""
+@@ -1055,17 +1110,17 @@ def test_frequency_list_from_main_window():
      def list_shown(app):
          return app.get("main.lbReportFrequencies")["shown"]
  
@@ -1723,7 +1906,7 @@ index 1284cc34..69faf8d4 100644
  
          # ...but only once.
          items = app.context_menu("main.cboReportFrequency")
-@@ -962,18 +962,18 @@ def test_frequency_list_from_main_window():
+@@ -1087,18 +1142,18 @@ def test_frequency_list_from_main_window():
          # opens again for the next.
          app.combo_popup("main.cboReportFrequency", True)
          app.wait_until(lambda: list_shown(app), description="the frequencies to be listed")
@@ -1747,7 +1930,7 @@ index 1284cc34..69faf8d4 100644
          app.key("main.lbReportFrequencies", "Down")
          check_equal(app.get("main.lbReportFrequencies")["selection"], 1, "Highlight moved down")
          app.key("main.lbReportFrequencies", "Down")
-@@ -989,7 +989,7 @@ def test_frequency_list_from_main_window():
+@@ -1114,7 +1169,7 @@ def test_frequency_list_from_main_window():
          app.key("main.lbReportFrequencies", "Home")
          check_equal(app.get("main.lbReportFrequencies")["selection"], 0, "Highlight at the top")
          app.key("main.lbReportFrequencies", NUMPAD_ENTER)
@@ -1756,7 +1939,7 @@ index 1284cc34..69faf8d4 100644
          check(not list_shown(app), "The list closed on Enter")
  
          # Reopening the list: it highlights the frequency the box already
-@@ -1014,12 +1014,12 @@ def test_frequency_list_from_main_window():
+@@ -1139,12 +1194,12 @@ def test_frequency_list_from_main_window():
          # The changes are kept, as Tools > Options shows.
          open_settings(app, "Rig Control")
          check_equal([item["label"] for item in app.get(name("freqList"))["items"]],
@@ -1771,7 +1954,7 @@ index 1284cc34..69faf8d4 100644
          check_equal(offered(app), ["10.1360"], "The last frequency")
          app.wait_until(lambda: list_shown(app), description="the list to open again")
          app.context_menu("main.lbReportFrequencies", item=0, choose="Delete 10.1360MHz from list")
-@@ -1052,7 +1052,7 @@ def test_frequency_list_from_main_window():
+@@ -1177,7 +1232,7 @@ def test_frequency_list_from_main_window():
  
      # In kHz mode, the box and the list show the list's frequencies in kHz,
      # to one decimal place, and the box is read as kHz too.
@@ -1780,3 +1963,11 @@ index 1284cc34..69faf8d4 100644
                  "/Reporting/Frequency": "14200000"}
      with freedvtest.start(settings=settings) as app:
          check_equal(offered(app), ["3600.0", "14200.0"], "Frequencies offered in kHz")
+@@ -1845,6 +1900,7 @@ SCENARIOS = {
+     "ptt_test": test_ptt_test,
+     "rig_control": test_rig_control,
+     "frequency_list": test_frequency_list,
++    "frequency_list_migration": test_frequency_list_migration,
+     "frequency_list_from_main_window": test_frequency_list_from_main_window,
+     "reporting": test_reporting,
+     "voice_keyer": test_voice_keyer,
